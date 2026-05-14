@@ -18,6 +18,11 @@ export type StepDataSourceAvailabilityMutation = {
   updateItems: (items: Record<string, any>[]) => Record<string, any>[];
 };
 
+export const shouldApplyStepDataSourceAvailabilityOptimisticMutation = (args: {
+  patchTouchesUtilisation: boolean;
+  hasValidationErrors: boolean;
+}): boolean => args.patchTouchesUtilisation && !args.hasValidationErrors;
+
 /**
  * Owner: guided step data-source availability cache mutation.
  * Builds the optimistic cache updater after a local utilisation edit.
@@ -94,7 +99,8 @@ export const buildStepDataSourceAvailabilityOptimisticMutationAction = (args: {
           [sourceRemainingFieldId]: nextRemainingQuantity,
           __ckServerCurrentRecordUtilisedQuantity: localCurrentRecordUtilisedQuantity,
           __ckCurrentRecordUtilisedQuantity: localCurrentRecordUtilisedQuantity,
-          __ckFreeQuantity: nextRemainingQuantity
+          __ckFreeQuantity: nextRemainingQuantity,
+          __ckFreeQuantityAuthoritative: false
         };
       })
   };

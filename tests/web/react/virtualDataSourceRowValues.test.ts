@@ -130,4 +130,99 @@ describe('virtual data source row value helpers', () => {
     expect(values.freeQuantity).toBe(4);
     expect(values.maxQuantity).toBe(10);
   });
+
+  test('keeps max at available stock for a new selected draft above availability', () => {
+    const values = buildVirtualDataSourceRowValuesAction({
+      config: {
+        rowKeyFieldId: 'LEFTOVER_ID',
+        selectedFieldId: 'selected',
+        quantityFieldId: 'quantity',
+        availability: {
+          sourceQuantityFieldId: 'remaining',
+          targetQuantityFieldId: 'freeQuantity',
+          targetMaxQuantityFieldId: 'maxQuantity'
+        }
+      },
+      sourceRow: {
+        LEFTOVER_ID: 'leftover-1',
+        remaining: 1,
+        __ckServerCurrentRecordUtilisedQuantity: 0
+      },
+      draftValues: {
+        selected: true,
+        quantity: '20'
+      },
+      parentRowId: 'parent-1',
+      resolveCurrentUtilisationStateForSource: () => ({ totalUtilisedQuantity: 20, currentRowQuantity: 20 }),
+      resolveCommittedUtilisationStateForSource: () => ({ totalUtilisedQuantity: 0, currentRowQuantity: 0 })
+    });
+
+    expect(values.freeQuantity).toBe(0);
+    expect(values.maxQuantity).toBe(1);
+  });
+
+  test('keeps authoritative max from server availability and current active utilisation, not draft text', () => {
+    const values = buildVirtualDataSourceRowValuesAction({
+      config: {
+        rowKeyFieldId: 'LEFTOVER_ID',
+        selectedFieldId: 'selected',
+        quantityFieldId: 'quantity',
+        availability: {
+          sourceQuantityFieldId: 'remaining',
+          targetQuantityFieldId: 'freeQuantity',
+          targetMaxQuantityFieldId: 'maxQuantity'
+        }
+      },
+      sourceRow: {
+        LEFTOVER_ID: 'leftover-1',
+        remaining: 0,
+        __ckFreeQuantity: 0,
+        __ckFreeQuantityAuthoritative: true,
+        __ckCurrentUtilisationQuantity: 0,
+        __ckServerCurrentRecordUtilisedQuantity: 0
+      },
+      draftValues: {
+        selected: true,
+        quantity: '20'
+      },
+      parentRowId: 'parent-1',
+      resolveCurrentUtilisationStateForSource: () => ({ totalUtilisedQuantity: 20, currentRowQuantity: 20 }),
+      resolveCommittedUtilisationStateForSource: () => ({ totalUtilisedQuantity: 0, currentRowQuantity: 0 })
+    });
+
+    expect(values.freeQuantity).toBe(0);
+    expect(values.maxQuantity).toBe(0);
+  });
+
+  test('uses authoritative conflict availability after a rejected row is deselected', () => {
+    const values = buildVirtualDataSourceRowValuesAction({
+      config: {
+        rowKeyFieldId: 'LEFTOVER_ID',
+        selectedFieldId: 'selected',
+        quantityFieldId: 'quantity',
+        availability: {
+          sourceQuantityFieldId: 'remaining',
+          targetQuantityFieldId: 'freeQuantity',
+          targetMaxQuantityFieldId: 'maxQuantity'
+        }
+      },
+      sourceRow: {
+        LEFTOVER_ID: 'leftover-1',
+        remaining: 0,
+        __ckFreeQuantity: 4,
+        __ckFreeQuantityAuthoritative: true,
+        __ckServerCurrentRecordUtilisedQuantity: 10
+      },
+      draftValues: {
+        selected: false,
+        quantity: null
+      },
+      parentRowId: 'parent-1',
+      resolveCurrentUtilisationStateForSource: () => ({ totalUtilisedQuantity: 0, currentRowQuantity: 0 }),
+      resolveCommittedUtilisationStateForSource: () => ({ totalUtilisedQuantity: 10, currentRowQuantity: 10 })
+    });
+
+    expect(values.freeQuantity).toBe(4);
+    expect(values.maxQuantity).toBe(4);
+  });
 });

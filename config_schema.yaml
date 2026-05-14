@@ -3083,6 +3083,9 @@ components:
             Optional allow-list for **record-like** data sources that include a status column.
 
             When set, only rows whose `statusFieldId` value matches one of these strings (case-insensitive) are returned.
+            For utilisation-backed source-first selectors, include terminal statuses such as `used` when the current
+            record must still be able to display and release a row that it fully consumed; keep other unavailable rows
+            hidden with `sourceRows.includeWhen`.
         limit:
           type: integer
           description: Optional max rows to read (default 50; hard cap 200).
@@ -6558,7 +6561,8 @@ components:
 
         Intended use:
         - explain that another user or record already utilised part of the shared leftover
-        - offer a clear choice to use the remaining available quantity or cancel the attempted change
+        - for immediate row writes, offer a clear choice to use the remaining available quantity or cancel the attempted change
+        - for guided `commitMode: "step"` conflicts, show a one-action acknowledgement, return to the originating step, apply the fresh availability snapshot, and deselect rejected rows so dependent quantities recalculate
 
         Supported placeholders in `message`:
         - `{itemLabel}`

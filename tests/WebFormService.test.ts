@@ -3602,6 +3602,92 @@ describe('WebFormService', () => {
     ]);
   });
 
+  test('applyBankUtilisationPlan conflict availability reports current active usage, not the rejected request', () => {
+    const { bankFormKey, utilisationFormKey } = setupBankUtilisationForms();
+    const bank = service.saveSubmissionWithId({
+      formKey: bankFormKey,
+      language: 'EN',
+      LEFTOVER_ID: 'LE-PLAN-CONFLICT',
+      LEFTOVER_STATUS: 'available',
+      LEFTOVER_KIND: 'Entire dish',
+      LEFTOVER_PORTIONS: 10,
+    } as any);
+    expect(bank.success).toBe(true);
+
+    const currentRecordUsage = service.upsertBankUtilisation({
+      resourceFormKey: bankFormKey,
+      resourceRecordId: (bank.meta?.id || '').toString(),
+      resourceItemId: 'LE-PLAN-CONFLICT',
+      resourceKind: 'Entire dish',
+      quantity: 7,
+      sourceFormKey: 'Config: Meal Production',
+      sourceRecordId: 'REC-PLAN-CONFLICT-1',
+      sourceParentGroupId: 'MP_MEALS_REQUEST',
+      sourceParentRowId: 'ROW-1',
+      sourceOutputGroupId: 'MP_TYPE_LI',
+      sourceOutputRowId: 'OUT-1',
+      sourceOutputKeyFieldId: 'LEFTOVER_ID',
+      utilisationFormKey
+    });
+    expect(currentRecordUsage.success).toBe(true);
+
+    const otherRecordUsage = service.upsertBankUtilisation({
+      resourceFormKey: bankFormKey,
+      resourceRecordId: (bank.meta?.id || '').toString(),
+      resourceItemId: 'LE-PLAN-CONFLICT',
+      resourceKind: 'Entire dish',
+      quantity: 3,
+      sourceFormKey: 'Config: Meal Production',
+      sourceRecordId: 'REC-PLAN-CONFLICT-OTHER',
+      sourceParentGroupId: 'MP_MEALS_REQUEST',
+      sourceParentRowId: 'ROW-OTHER',
+      sourceOutputGroupId: 'MP_TYPE_LI',
+      sourceOutputRowId: 'OUT-OTHER',
+      sourceOutputKeyFieldId: 'LEFTOVER_ID',
+      utilisationFormKey
+    });
+    expect(otherRecordUsage.success).toBe(true);
+
+    const result = service.applyBankUtilisationPlan({
+      sourceFormKey: 'Config: Meal Production',
+      sourceRecordId: 'REC-PLAN-CONFLICT-1',
+      utilisationFormKey,
+      managedScopes: [
+        {
+          sourceParentGroupId: 'MP_MEALS_REQUEST',
+          sourceParentRowId: 'ROW-1',
+          sourceOutputGroupId: 'MP_TYPE_LI'
+        }
+      ],
+      utilisations: [
+        {
+          resourceFormKey: bankFormKey,
+          resourceRecordId: (bank.meta?.id || '').toString(),
+          resourceItemId: 'LE-PLAN-CONFLICT',
+          resourceKind: 'Entire dish',
+          quantity: 8,
+          sourceParentGroupId: 'MP_MEALS_REQUEST',
+          sourceParentRowId: 'ROW-1',
+          sourceOutputGroupId: 'MP_TYPE_LI',
+          sourceOutputRowId: 'OUT-1',
+          sourceOutputKeyFieldId: 'LEFTOVER_ID',
+          allowedStatuses: ['available']
+        }
+      ]
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.conflict).toBe(true);
+    expect(result.availability).toEqual([
+      expect.objectContaining({
+        resourceItemId: 'LE-PLAN-CONFLICT',
+        freeQuantity: 0,
+        currentUtilisationQuantity: 7,
+        currentRecordUtilisedQuantity: 7
+      })
+    ]);
+  });
+
   test('triggerFollowupAction CLOSE_RECORD leaves active utilisations unchanged', () => {
     const { bankFormKey, utilisationFormKey } = setupBankUtilisationForms();
     const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
@@ -4314,6 +4400,90 @@ describe('WebFormService', () => {
 
     const updatedBank = service.fetchSubmissionById(bankFormKey, (bank.meta?.id || '').toString());
     expect((updatedBank?.values as any)?.LEFTOVER_PORTIONS).toBe(5);
+  });
+
+  test('saveSubmissionWithId rejects embedded utilisation conflicts before saving the source draft', () => {
+    const { bankFormKey, utilisationFormKey } = setupBankUtilisationForms();
+    const source = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-EMBEDDED-CONFLICT',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+    expect(source.success).toBe(true);
+
+    const bank = service.saveSubmissionWithId({
+      formKey: bankFormKey,
+      language: 'EN',
+      LEFTOVER_ID: 'LE-EMBEDDED-CONFLICT',
+      LEFTOVER_STATUS: 'available',
+      LEFTOVER_KIND: 'Entire dish',
+      LEFTOVER_PORTIONS: 2
+    } as any);
+    expect(bank.success).toBe(true);
+
+    const rejected = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-EMBEDDED-CONFLICT',
+      Q1: 'Bob',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress',
+      __ckMutationPlan: {
+        utilisationPlan: {
+          sourceFormKey: 'Config: Delivery',
+          sourceRecordId: 'REC-EMBEDDED-CONFLICT',
+          utilisationFormKey,
+          managedScopes: [
+            {
+              sourceParentGroupId: 'MP_MEALS_REQUEST',
+              sourceParentRowId: 'ROW-EMBEDDED-CONFLICT',
+              sourceOutputGroupId: 'MP_TYPE_LI'
+            }
+          ],
+          utilisations: [
+            {
+              resourceFormKey: bankFormKey,
+              resourceRecordId: (bank.meta?.id || '').toString(),
+              resourceItemId: 'LE-EMBEDDED-CONFLICT',
+              resourceKind: 'Entire dish',
+              quantity: 3,
+              sourceParentGroupId: 'MP_MEALS_REQUEST',
+              sourceParentRowId: 'ROW-EMBEDDED-CONFLICT',
+              sourceOutputGroupId: 'MP_TYPE_LI',
+              sourceOutputRowId: 'MP_TYPE_LI_EMBEDDED_CONFLICT',
+              sourceOutputKeyFieldId: 'LEFTOVER_ID',
+              allowedStatuses: ['available']
+            }
+          ],
+          refreshMode: 'revisionOnly'
+        }
+      }
+    } as any);
+
+    expect(rejected.success).toBe(false);
+    expect((rejected as any).utilisationResult).toEqual(
+      expect.objectContaining({
+        success: false,
+        conflict: true
+      })
+    );
+    expect((rejected.meta as any)?.sourceSaved).toBe(false);
+
+    const unchangedSource = service.fetchSubmissionById('Config: Delivery', 'REC-EMBEDDED-CONFLICT');
+    expect((unchangedSource?.values as any)?.Q1).toBe('Alice');
+    const unchangedBank = service.fetchSubmissionById(bankFormKey, (bank.meta?.id || '').toString());
+    expect((unchangedBank?.values as any)?.LEFTOVER_PORTIONS).toBe(2);
+    const utilisationRows = service.fetchSubmissions(utilisationFormKey, undefined, 20).items;
+    expect(utilisationRows).toHaveLength(0);
   });
 
   test('updateRecord (draft) can re-open a Closed record when __ckAllowClosedUpdate is set', () => {

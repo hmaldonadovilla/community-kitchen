@@ -33,7 +33,8 @@ describe('bank availability snapshots', () => {
         __ckCurrentRecordUtilisedQuantity: 0,
         __ckServerCurrentRecordUtilisedQuantity: 0,
         __ckCurrentUtilisationQuantity: 0,
-        __ckFreeQuantity: 500
+        __ckFreeQuantity: 500,
+        __ckFreeQuantityAuthoritative: true
       })
     );
   });
@@ -47,7 +48,8 @@ describe('bank availability snapshots', () => {
       __ckCurrentRecordUtilisedQuantity: 0,
       __ckServerCurrentRecordUtilisedQuantity: 0,
       __ckCurrentUtilisationQuantity: 0,
-      __ckFreeQuantity: 500
+      __ckFreeQuantity: 500,
+      __ckFreeQuantityAuthoritative: true
     };
 
     const next = applyBankAvailabilitySnapshotToRow(sourceRow, {

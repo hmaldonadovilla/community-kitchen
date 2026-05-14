@@ -68,6 +68,7 @@ type StepManagedUtilisationConfig = {
   resourceKindFieldId: string;
   resourceUnitFieldId: string;
   allowedStatuses?: string[];
+  conflictDialog?: any;
 };
 
 export type GuidedUtilisationManagedRowRemovalImpact = {
@@ -199,12 +200,36 @@ const collectStepManagedUtilisationConfigs = (args: {
           resourceRecordIdFieldId,
           resourceKindFieldId,
           resourceUnitFieldId,
-          allowedStatuses: Array.isArray(utilisationConfig.allowedStatuses) ? utilisationConfig.allowedStatuses : undefined
+          allowedStatuses: Array.isArray(utilisationConfig.allowedStatuses) ? utilisationConfig.allowedStatuses : undefined,
+          conflictDialog:
+            utilisationConfig.conflictDialog && typeof utilisationConfig.conflictDialog === 'object'
+              ? utilisationConfig.conflictDialog
+              : undefined
         });
       });
     });
   });
   return configs;
+};
+
+export const resolveStepUtilisationConflictDialogConfig = (args: {
+  definition: WebFormDefinition;
+  stepId: string;
+  resourceFormKey?: string | null;
+}): any | null => {
+  const configs = collectStepManagedUtilisationConfigs({
+    definition: args.definition,
+    stepId: args.stepId,
+    mode: 'step'
+  });
+  const resourceFormKey = normalizeStepId(args.resourceFormKey);
+  const match =
+    configs.find(config => {
+      if (!config.conflictDialog) return false;
+      if (resourceFormKey && normalizeStepId(config.resourceFormKey) !== resourceFormKey) return false;
+      return true;
+    }) || configs.find(config => config.conflictDialog);
+  return match?.conflictDialog || null;
 };
 
 const rowHasManagedUtilisationSelection = (row: any, config: StepManagedUtilisationConfig): boolean => {

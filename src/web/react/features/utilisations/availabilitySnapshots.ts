@@ -59,6 +59,7 @@ export const applyBankAvailabilitySnapshotToRow = (
   setWhenChanged(next, '__ckServerCurrentRecordUtilisedQuantity', availability.currentRecordUtilisedQuantity, changedRef);
   setWhenChanged(next, '__ckCurrentUtilisationQuantity', availability.currentUtilisationQuantity, changedRef);
   setWhenChanged(next, '__ckFreeQuantity', availability.freeQuantity, changedRef);
+  setWhenChanged(next, '__ckFreeQuantityAuthoritative', true, changedRef);
 
   return changedRef.changed ? next : row;
 };

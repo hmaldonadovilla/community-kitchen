@@ -6,7 +6,8 @@ import {
   cloneLineItemStateSnapshot,
   detectGuidedUtilisationManagedRowRemovals,
   mergeGuidedUtilisationLineItemsFromSnapshot,
-  resolveGuidedUtilisationManagedRowRemovalDetectionScope
+  resolveGuidedUtilisationManagedRowRemovalDetectionScope,
+  resolveStepUtilisationConflictDialogConfig
 } from '../../../src/web/react/features/utilisations/stepUtilisationPlan';
 
 describe('buildStepBankUtilisationPlan', () => {
@@ -861,5 +862,57 @@ describe('buildStepBankUtilisationPlan', () => {
         }
       }
     ]);
+  });
+});
+
+describe('resolveStepUtilisationConflictDialogConfig', () => {
+  test('returns the configured conflict dialog for the guided step resource form', () => {
+    const definition: any = {
+      steps: {
+        mode: 'guided',
+        items: [
+          {
+            id: 'leftoverForm',
+            include: [
+              {
+                kind: 'lineGroup',
+                id: 'MP_MEALS_REQUEST',
+                dataSourceRows: [
+                  {
+                    outputGroupId: 'MP_TYPE_LI',
+                    outputKeyFieldId: 'LEFTOVER_ID',
+                    quantityFieldId: 'LEFTOVER_USE_QTY',
+                    dataSource: { formKey: 'Config: Leftover Bank' },
+                    utilisation: {
+                      enabled: true,
+                      commitMode: 'step',
+                      conflictDialog: {
+                        title: { en: '' },
+                        message: { en: 'Availability changed.' },
+                        confirmLabel: { en: 'OK' },
+                        showCancel: false
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    };
+
+    expect(
+      resolveStepUtilisationConflictDialogConfig({
+        definition,
+        stepId: 'leftoverForm',
+        resourceFormKey: 'Config: Leftover Bank'
+      })
+    ).toEqual(
+      expect.objectContaining({
+        message: { en: 'Availability changed.' },
+        showCancel: false
+      })
+    );
   });
 });

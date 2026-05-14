@@ -82,6 +82,28 @@ describe('virtual row context helpers', () => {
     ).toBe('');
   });
 
+  test('validates virtual numeric fields against the resolved max field', () => {
+    const messages = validateVirtualFieldRulesAction({
+      field: {
+        id: 'quantity',
+        validationRules: [
+          {
+            when: { fieldId: 'selected', equals: true },
+            then: { fieldId: 'quantity', maxFieldId: 'availableQuantity' },
+            message: { en: 'Enter no more than {MAX_AVAILABLE}.' }
+          }
+        ]
+      },
+      rowValues: { selected: true, quantity: '6', availableQuantity: 5 },
+      parentValues: {},
+      language: 'EN',
+      lineItems: {},
+      resolveTopValue: () => undefined
+    });
+
+    expect(messages).toEqual(['Enter no more than 5.']);
+  });
+
   test('detects conditional integer-only virtual numeric fields', () => {
     const field = {
       id: 'quantity',

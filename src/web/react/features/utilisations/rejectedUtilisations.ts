@@ -1,5 +1,6 @@
 import type { BankAvailabilitySnapshot, BankUtilisationPlanRequest } from '../../../../types';
 import type { GuidedStepRejectedUtilisationDetail } from './liveSyncEvents';
+import { resolveUtilisationSourceItemKey } from './sourceFields';
 
 const normalizeIdValue = (value: unknown): string =>
   value === undefined || value === null ? '' : `${value}`.trim();
@@ -62,4 +63,36 @@ export const buildRejectedStepUtilisationEntries = (args: {
   });
 
   return results;
+};
+
+/**
+ * Owner: rejected guided utilisation rollback.
+ * Resolves the source row used to remove a rejected source-first selection.
+ * Falls back to the conflict payload so rollback does not depend on stale or
+ * filtered data-source cache contents.
+ */
+export const resolveRejectedStepUtilisationSourceRow = (args: {
+  config: any;
+  entry: GuidedStepRejectedUtilisationDetail;
+  cachedItems?: Record<string, any>[] | null;
+}): Record<string, any> | null => {
+  const resourceRecordId = normalizeIdValue(args.entry?.resourceRecordId);
+  const resourceItemId = normalizeIdValue(args.entry?.resourceItemId);
+  if (!resourceRecordId || !resourceItemId) return null;
+
+  const cachedItems = Array.isArray(args.cachedItems) ? args.cachedItems : [];
+  const cachedMatch =
+    cachedItems.find(item => {
+      if (!item || typeof item !== 'object') return false;
+      if (normalizeIdValue(item.id) !== resourceRecordId) return false;
+      return resolveUtilisationSourceItemKey(args.config, item) === resourceItemId;
+    }) || null;
+  if (cachedMatch) return cachedMatch;
+
+  const keyFieldId = normalizeIdValue(args.config?.rowKeyFieldId);
+  if (!keyFieldId) return null;
+  return {
+    id: resourceRecordId,
+    [keyFieldId]: resourceItemId
+  };
 };

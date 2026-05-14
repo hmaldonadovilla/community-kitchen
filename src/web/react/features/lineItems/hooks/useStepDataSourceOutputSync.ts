@@ -26,7 +26,10 @@ import {
 } from '../../../components/form/utilisationSyncPolicy';
 import { applyStepDataSourceDraftUpdateAction } from '../domain/stepDataSourceDrafts';
 import { applyStepDataSourceExclusiveSelectionRemovalAction } from '../domain/stepDataSourceExclusiveSelection';
-import { buildStepDataSourceAvailabilityOptimisticMutationAction } from '../domain/stepDataSourceAvailability';
+import {
+  buildStepDataSourceAvailabilityOptimisticMutationAction,
+  shouldApplyStepDataSourceAvailabilityOptimisticMutation
+} from '../domain/stepDataSourceAvailability';
 import {
   applyStepDataSourceMatchedOutputRuleAction
 } from '../domain/stepDataSourceRows';
@@ -523,7 +526,12 @@ export const useStepDataSourceOutputSync = ({
         return;
       }
 
-      if (patchTouchesUtilisation) {
+      if (
+        shouldApplyStepDataSourceAvailabilityOptimisticMutation({
+          patchTouchesUtilisation,
+          hasValidationErrors
+        })
+      ) {
         updateStepDataSourceAvailabilityOptimistically(args.config, {
           sourceRow: args.sourceRow,
           sourceKey,

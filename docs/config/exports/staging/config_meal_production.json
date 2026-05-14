@@ -1059,7 +1059,8 @@
                     "prefetchOnHome": true,
                     "statusFieldId": "LEFTOVER_STATUS",
                     "statusAllowList": [
-                      "available"
+                      "available",
+                      "used"
                     ],
                     "projection": [
                       "id",
@@ -1185,18 +1186,18 @@
                     "debounceMs": 300,
                     "conflictDialog": {
                       "title": {
-                        "en": "Availability changed"
+                        "en": ""
                       },
                       "message": {
-                        "en": "{itemLabel} was updated by another user. {availableWithUnit} are available now. Do you want to use the available amount or cancel this change?"
+                        "en": "Leftover availability changed before you completed your selection. Your selected quantity is no longer available. Please adjust your selections before continuing"
                       },
                       "confirmLabel": {
-                        "en": "Use available amount"
+                        "en": "OK"
                       },
                       "cancelLabel": {
-                        "en": "Cancel action"
+                        "en": "Cancel"
                       },
-                      "showCancel": true,
+                      "showCancel": false,
                       "showCloseButton": false,
                       "dismissOnBackdrop": false,
                       "primaryAction": "confirm"
@@ -11727,7 +11728,8 @@
                     "prefetchOnHome": true,
                     "statusFieldId": "LEFTOVER_STATUS",
                     "statusAllowList": [
-                      "available"
+                      "available",
+                      "used"
                     ],
                     "projection": [
                       "id",
@@ -11850,7 +11852,25 @@
                     "allowedStatuses": [
                       "available"
                     ],
-                    "debounceMs": 300
+                    "debounceMs": 300,
+                    "conflictDialog": {
+                      "title": {
+                        "en": ""
+                      },
+                      "message": {
+                        "en": "Leftover availability changed before you completed your selection. Your selected quantity is no longer available. Please adjust your selections before continuing"
+                      },
+                      "confirmLabel": {
+                        "en": "OK"
+                      },
+                      "cancelLabel": {
+                        "en": "Cancel"
+                      },
+                      "showCancel": false,
+                      "showCloseButton": false,
+                      "dismissOnBackdrop": false,
+                      "primaryAction": "confirm"
+                    }
                   },
                   "outputRules": [
                     {
