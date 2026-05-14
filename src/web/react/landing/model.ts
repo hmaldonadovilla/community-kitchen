@@ -91,6 +91,26 @@ const normalizeOptionalText = (value: any): string | undefined => {
   return raw || undefined;
 };
 
+const resolveAlphabeticalLandingTitle = (item: LandingAppItem): string =>
+  normalizeOptionalText(item?.displayTitle) ||
+  normalizeOptionalText(item?.title) ||
+  normalizeOptionalText(item?.formKey) ||
+  '';
+
+export const sortLandingAppItemsAlphabetically = (items: LandingAppItem[]): LandingAppItem[] =>
+  (Array.isArray(items) ? [...items] : []).sort((left, right) => {
+    const byTitle = resolveAlphabeticalLandingTitle(left).localeCompare(
+      resolveAlphabeticalLandingTitle(right),
+      undefined,
+      {
+        numeric: true,
+        sensitivity: 'base'
+      }
+    );
+    if (byTitle !== 0) return byTitle;
+    return (left?.formKey || '').toString().localeCompare((right?.formKey || '').toString());
+  });
+
 export const isTruthyParam = (raw: any): boolean => {
   if (raw === undefined || raw === null) return false;
   const token = raw.toString().trim().toLowerCase();
