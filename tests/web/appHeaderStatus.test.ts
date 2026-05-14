@@ -67,6 +67,14 @@ describe('AppHeaderStatus', () => {
       shouldRenderAppHeaderSaveNotice({
         view: 'form',
         autoSaveEnabled: true,
+        draftSavePhase: 'dirty',
+        isClosedRecord: false
+      })
+    ).toBe(false);
+    expect(
+      shouldRenderAppHeaderSaveNotice({
+        view: 'form',
+        autoSaveEnabled: true,
         draftSavePhase: 'idle',
         isClosedRecord: false
       })

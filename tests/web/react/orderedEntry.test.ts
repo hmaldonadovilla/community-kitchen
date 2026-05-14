@@ -373,7 +373,7 @@ describe('ordered entry blocking', () => {
       MP_MEALS_REQUEST: [{ id: 'row1', values: { MEAL_TYPE: 'Vegetarian', ORD_QTY: -1 } }]
     };
     const errors = {
-      MP_MEALS_REQUEST: 'Enter an integer ≥ 0 in all fields to record ordered portions.',
+      MP_MEALS_REQUEST: 'At least one field must be greater than 0',
       MP_MEALS_REQUEST__ORD_QTY__row1: 'Ordered portions must be 0 or more'
     };
     const block = findOrderedEntryBlock({

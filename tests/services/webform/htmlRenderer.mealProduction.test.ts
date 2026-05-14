@@ -78,7 +78,7 @@ const questions: QuestionConfig[] = [
   } as any,
   { id: 'MP_ID', type: 'TEXT', qEn: 'Meal Production ID', required: false, status: 'Active', options: [], optionsFr: [], optionsNl: [] } as any,
   { id: 'ING_EVD', type: 'FILE_UPLOAD', qEn: 'Evidence', required: false, status: 'Active', options: [], optionsFr: [], optionsNl: [] } as any,
-  { id: 'MP_COOK_TEMP', type: 'CHECKBOX', qEn: 'All pots ≥63°C: Confirm', required: false, status: 'Active', options: [], optionsFr: [], optionsNl: [] } as any,
+  { id: 'MP_COOK_TEMP', type: 'CHECKBOX', qEn: 'All pots ≥63°C', required: false, status: 'Active', options: [], optionsFr: [], optionsNl: [] } as any,
   { id: 'TEMP_EVD', type: 'FILE_UPLOAD', qEn: 'Food safety photo', required: false, status: 'Active', options: [], optionsFr: [], optionsNl: [] } as any,
   mealProductionGroup
 ];

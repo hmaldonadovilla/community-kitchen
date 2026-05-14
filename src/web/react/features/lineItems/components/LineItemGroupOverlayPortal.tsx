@@ -239,7 +239,7 @@ export const LineItemGroupOverlayPortal: React.FC<LineItemGroupOverlayPortalProp
     const overlaySessionSaveLabel = resolveLocalizedString(
       lineItemGroupOverlay.overlaySession?.saveLabel,
       language,
-      tSystem('common.saveChanges', language, 'Save changes')
+      tSystem('common.saveChanges', language, 'Save')
     );
     const overlaySessionCancelLabel = resolveLocalizedString(
       lineItemGroupOverlay.overlaySession?.cancelLabel,
@@ -1115,7 +1115,7 @@ export const LineItemGroupOverlayPortal: React.FC<LineItemGroupOverlayPortalProp
                               disabled={dedupOverlayActionsDisabled}
                               onClick={handleDetailSave}
                             >
-                              {tSystem('common.saveChanges', language, 'Save changes')}
+                              {tSystem('common.saveChanges', language, 'Save')}
                             </button>
                             <button type="button" style={buttonStyles.secondary} onClick={handleDetailCancel}>
                               {tSystem('common.cancel', language, 'Cancel')}

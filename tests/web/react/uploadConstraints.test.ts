@@ -88,6 +88,6 @@ describe('applyUploadConstraints', () => {
     expect(result.errorMessage).toBeUndefined();
     expect(result.warningKind).toBe('someRejected');
     expect(result.warningMessage).toContain('1 photo added.');
-    expect(result.warningMessage).toContain('notes.txt is not an allowed photo type.');
+    expect(result.warningMessage).toContain('notes.txt is not an allowed photo type. Allowed file types: image files.');
   });
 });

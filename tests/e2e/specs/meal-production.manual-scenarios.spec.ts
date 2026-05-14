@@ -279,7 +279,7 @@ test.describe('Meal Production manual script scenarios', () => {
       });
       await advanceToFoodSafetyAfterDraftSave(frame);
       await expect(frame.getByText('Confirm that all pots reached at least 63°C')).toBeVisible({ timeout: 15_000 });
-      await checkAllVisibleBoxes(frame, 'All pots ≥63°C: Confirm');
+      await checkAllVisibleBoxes(frame, 'All pots ≥63°C');
       await uploadVisibleFiles(frame, ['pot-photo-1.svg', 'pot-photo-2.svg', 'pot-photo-1.svg']);
       await waitForSaved(frame);
       if (!(await frame.getByRole('button', { name: 'Create report' }).isVisible().catch(() => false))) {

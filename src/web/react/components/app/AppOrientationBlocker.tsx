@@ -17,7 +17,7 @@ export const AppOrientationBlocker: React.FC<{
         {tSystem('app.rotatePortraitTitle', language, 'Rotate your device')}
       </div>
       <div className="ck-orientation-blocker__body">
-        {tSystem('app.rotatePortraitBody', language, 'This form works best in portrait mode. Please rotate back.')}
+        {tSystem('app.rotatePortraitBody', language, 'Best in portrait mode. Rotate back to continue')}
       </div>
     </div>
   </div>

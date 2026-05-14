@@ -2423,7 +2423,7 @@ const ListView: React.FC<ListViewProps> = ({
       <div className="list-toolbar">
         <label className="ck-list-search-label" htmlFor={searchInputId}>
           {dateSearchEnabled
-            ? tSystem('list.searchByDate', language, 'Search by date')
+            ? tSystem('list.searchByDate', language, 'Search')
             : tSystem('list.searchByText', language, 'Search')}
         </label>
 

@@ -302,7 +302,7 @@ export const SubgroupOverlayPortal: React.FC<SubgroupOverlayPortalProps> = ({
     const overlaySessionSaveLabel = resolveLocalizedString(
       subgroupOverlay.overlaySession?.saveLabel,
       language,
-      tSystem('common.saveChanges', language, 'Save changes')
+      tSystem('common.saveChanges', language, 'Save')
     );
     const overlaySessionCancelLabel = resolveLocalizedString(
       subgroupOverlay.overlaySession?.cancelLabel,
@@ -1673,7 +1673,7 @@ export const SubgroupOverlayPortal: React.FC<SubgroupOverlayPortalProps> = ({
                             disabled={dedupOverlayActionsDisabled}
                             onClick={handleDetailSave}
                           >
-                            {tSystem('common.saveChanges', language, 'Save changes')}
+                            {tSystem('common.saveChanges', language, 'Save')}
                           </button>
                           {!overlayDetailCanView ? (
                             <button type="button" style={buttonStyles.secondary} onClick={handleDetailCancel}>

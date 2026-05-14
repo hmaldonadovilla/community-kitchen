@@ -14,6 +14,7 @@ export const shouldRenderAppHeaderSaveNotice = (args: {
   if (args.isClosedRecord) return false;
   if (!args.autoSaveEnabled) return false;
   if (args.draftSavePhase === 'idle') return false;
+  if (args.draftSavePhase === 'dirty') return false;
   return args.view === 'form' || args.draftSavePhase === 'saving';
 };
 
@@ -48,7 +49,6 @@ export const AppHeaderStatus: React.FC<{
     const byPhase: Partial<Record<HeaderDraftSavePhase, { key: string; fallback: string; tone: string }>> = {
       saving: { key: 'draft.savingShort', fallback: 'Saving…', tone: 'saving' },
       saved: { key: 'draft.savedShort', fallback: 'Saved', tone: 'saved' },
-      dirty: { key: 'draft.dirtyShort', fallback: 'Unsaved changes', tone: 'muted' },
       paused: { key: 'draft.pausedShort', fallback: 'Autosave paused', tone: 'paused' },
       error: { key: 'draft.saveFailedShort', fallback: 'Save failed', tone: 'error' }
     };

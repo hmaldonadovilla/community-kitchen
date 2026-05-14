@@ -885,9 +885,6 @@
         "en": "Please complete the highlighted fields."
       }
     },
-    "submissionConfirmationMessage": {
-      "en": "This report confirms {MP_SERVICE} for {MP_DISTRIBUTOR} has been produced by {MP_COOK_NAME} on {MP_PREP_DATE}, in accordance with the Meal Production procedure and hygiene rules."
-    },
     "submissionConfirmationTitle": {
       "en": "Please confirm"
     },
@@ -961,7 +958,7 @@
             "en": "Order"
           },
           "helpText": {
-            "en": "To create a meal production record, you must select a customer, a service, and a production date.\nUntil all three are selected, no record is created and no production data can be entered."
+            "en": "Customer, date, and service must be selected to create a meal production record."
           },
           "navigation": {
             "forwardGate": "whenValid",
@@ -1020,7 +1017,7 @@
               },
               "fields": [],
               "helperText": {
-                "en": "Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary by entering a value between 1 and the maximum number of portions available.\nMulti-ingredient leftovers: adjust portions, then select reheat or combine.\nSingle-ingredient leftovers: combine with today's dish."
+                "en": "Skip this page if not using leftovers.\nTick the box to use leftovers and adjust quantity if needed.\nFor multi-ingredient leftovers, select Combine or Reheat.\nSingle-ingredient leftovers are combined by default.\nTo remove leftovers, adjust quantity or untick the box.\nClick Next and stay on this screen to save your selection otherwise changes may be lost."
               },
               "rows": {
                 "includeWhen": {
@@ -1721,12 +1718,6 @@
                           },
                           {
                             "fieldId": "LEFTOVER_UNIT"
-                          },
-                          {
-                            "type": "text",
-                            "text": {
-                              "en": " available"
-                            }
                           }
                         ]
                       },
@@ -1881,9 +1872,6 @@
                             "closeButtonLabel": {
                               "en": "Back"
                             },
-                            "emptyMessage": {
-                              "en": "No ingredients are available for this leftover item."
-                            },
                             "contextHeaderFieldId": "LEFTOVER_RECIPE",
                             "sourceFieldId": "LEFTOVER_ID",
                             "lookupField": "LEFTOVER_ID",
@@ -2022,10 +2010,7 @@
                       },
                       "rowActions": {
                         "viewPlacement": "end",
-                        "editPlacement": "hidden",
-                        "viewLabel": {
-                          "en": "View ingredients"
-                        }
+                        "editPlacement": "hidden"
                       }
                     },
                     "tableColumns": [
@@ -2083,7 +2068,7 @@
         },
         {
           "helpText": {
-            "en": "Remember to reheat and/or combine leftovers according to selection. Cook only the stated To cook number and using only the ingredients as stated in the corresponding recipe. Follow the Instructions for cooking and portioning."
+            "en": "Review and update recipe ingredients for today’s dish based on ingredient availability and selected leftovers.\nReduce recipe ingredients if you combine leftovers.\nCook only the stated “To cook” portions using listed ingredients and quantities.\nUpload ingredient receipt photos before cooking.\nReheat or combine leftovers as selected.\nFollow cooking and portioning instructions."
           },
           "id": "deliveryForm",
           "excludeWhen": {
@@ -3112,7 +3097,7 @@
                         "type": "openOverlay",
                         "groupId": "MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
                         "overlayContextHeader": {
-                          "en": "Deselect any ingredient that should not be part of this leftover."
+                          "en": "Deselect any ingredient not included in this leftover and click save."
                         },
                         "groupOverride": {
                           "ui": {
@@ -3165,7 +3150,7 @@
                 "en": "Multi-ingredient leftovers"
               },
               "helperText": {
-                "en": "Leave empty if no leftover.\nAdjust the quantity if necessary by entering a value between 1 and the maximum number of portions available.\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +3 months). Leave unticked for refrigerated storage."
+                "en": "Leave empty if there are no leftovers, then click Complete.\nTo record multi-ingredient leftovers, enter a value > 0. Rename if needed and deselect ingredients not included.\nTick ❄️ if freezing (expiry: +3 months). Leave unticked for refrigerated storage (expiry: 3 days).\nTo record single-ingredient leftovers, follow instructions at the bottom of the page otherwise click Complete to generate the Leftover ID."
               },
               "groupOverride": {
                 "totals": []
@@ -3178,7 +3163,7 @@
                 "en": "Single-ingredient leftovers"
               },
               "helperText": {
-                "en": "To add single-ingredient leftovers (e.g. rice, bulgur, couscous, chickpeas), search and select the ingredient, then enter the quantity and unit."
+                "en": "To add single-ingredient leftovers (e.g. rice, bulgur, couscous, chickpeas), search and select the ingredient, then enter the quantity and unit.\nTick ❄️ if freezing.  Leave unticked for refrigerated storage.\nClick Complete to generate the Leftover ID."
               }
             }
           ],
@@ -5009,41 +4994,12 @@
           ],
           "expandGate": "collapsedFieldsValid",
           "defaultCollapsed": true,
-          "rowDisclaimer": {
-            "cases": [
-              {
-                "text": {
-                  "en": "Update ordered portions if required"
-                },
-                "when": {
-                  "all": [
-                    {
-                      "fieldId": "__ckSelectionEffectId",
-                      "equals": "leftover"
-                    },
-                    {
-                      "not": {
-                        "fieldId": "__ckStep",
-                        "equals": [
-                          "foodSafety",
-                          "portioning"
-                        ]
-                      }
-                    }
-                  ]
-                }
-              }
-            ]
-          },
           "showItemPill": false,
           "addButtonPlacement": "hidden",
           "allowRemoveAutoRows": false,
           "saveDisabledRows": true
         },
         "maxRows": 200,
-        "addButtonLabel": {
-          "en": "Add meals"
-        },
         "anchorFieldId": "MEAL_TYPE",
         "addMode": "auto",
         "totals": [
@@ -6391,7 +6347,7 @@
             }
           },
           "message": {
-            "en": "Enter an integer ≥ 0 in all fields to record ordered portions."
+            "en": "At least one field must be greater than 0"
           }
         }
       ]
@@ -6564,7 +6520,7 @@
     {
       "id": "MP_COOK_TEMP",
       "type": "CHECKBOX",
-      "qEn": "All pots ≥63°C: Confirm",
+      "qEn": "All pots ≥63°C",
       "required": true,
       "pair": "core_temp",
       "requiredMessage": {
@@ -8542,41 +8498,12 @@
             ],
             "expandGate": "collapsedFieldsValid",
             "defaultCollapsed": true,
-            "rowDisclaimer": {
-              "cases": [
-                {
-                  "text": {
-                    "en": "Update ordered portions if required"
-                  },
-                  "when": {
-                    "all": [
-                      {
-                        "fieldId": "__ckSelectionEffectId",
-                        "equals": "leftover"
-                      },
-                      {
-                        "not": {
-                          "fieldId": "__ckStep",
-                          "equals": [
-                            "foodSafety",
-                            "portioning"
-                          ]
-                        }
-                      }
-                    ]
-                  }
-                }
-              ]
-            },
             "showItemPill": false,
             "addButtonPlacement": "hidden",
             "allowRemoveAutoRows": false,
             "saveDisabledRows": true
           },
           "maxRows": 200,
-          "addButtonLabel": {
-            "en": "Add meals"
-          },
           "anchorFieldId": "MEAL_TYPE",
           "addMode": "auto",
           "totals": [
@@ -9891,7 +9818,7 @@
               }
             },
             "message": {
-              "en": "Enter an integer ≥ 0 in all fields to record ordered portions."
+              "en": "At least one field must be greater than 0"
             }
           }
         ]
@@ -10064,7 +9991,7 @@
       {
         "id": "MP_COOK_TEMP",
         "type": "CHECKBOX",
-        "qEn": "All pots ≥63°C: Confirm",
+        "qEn": "All pots ≥63°C",
         "required": true,
         "pair": "core_temp",
         "requiredMessage": {
@@ -11630,7 +11557,7 @@
             "en": "Order"
           },
           "helpText": {
-            "en": "To create a meal production record, you must select a customer, a service, and a production date.\nUntil all three are selected, no record is created and no production data can be entered."
+            "en": "Customer, date, and service must be selected to create a meal production record."
           },
           "navigation": {
             "forwardGate": "whenValid",
@@ -11689,7 +11616,7 @@
               },
               "fields": [],
               "helperText": {
-                "en": "Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary by entering a value between 1 and the maximum number of portions available.\nMulti-ingredient leftovers: adjust portions, then select reheat or combine.\nSingle-ingredient leftovers: combine with today's dish."
+                "en": "Skip this page if not using leftovers.\nTick the box to use leftovers and adjust quantity if needed.\nFor multi-ingredient leftovers, select Combine or Reheat.\nSingle-ingredient leftovers are combined by default.\nTo remove leftovers, adjust quantity or untick the box.\nClick Next and stay on this screen to save your selection otherwise changes may be lost."
               },
               "rows": {
                 "includeWhen": {
@@ -12390,12 +12317,6 @@
                           },
                           {
                             "fieldId": "LEFTOVER_UNIT"
-                          },
-                          {
-                            "type": "text",
-                            "text": {
-                              "en": " available"
-                            }
                           }
                         ]
                       },
@@ -12550,9 +12471,6 @@
                             "closeButtonLabel": {
                               "en": "Back"
                             },
-                            "emptyMessage": {
-                              "en": "No ingredients are available for this leftover item."
-                            },
                             "contextHeaderFieldId": "LEFTOVER_RECIPE",
                             "sourceFieldId": "LEFTOVER_ID",
                             "lookupField": "LEFTOVER_ID",
@@ -12691,10 +12609,7 @@
                       },
                       "rowActions": {
                         "viewPlacement": "end",
-                        "editPlacement": "hidden",
-                        "viewLabel": {
-                          "en": "View ingredients"
-                        }
+                        "editPlacement": "hidden"
                       }
                     },
                     "tableColumns": [
@@ -12752,7 +12667,7 @@
         },
         {
           "helpText": {
-            "en": "Remember to reheat and/or combine leftovers according to selection. Cook only the stated To cook number and using only the ingredients as stated in the corresponding recipe. Follow the Instructions for cooking and portioning."
+            "en": "Review and update recipe ingredients for today’s dish based on ingredient availability and selected leftovers.\nReduce recipe ingredients if you combine leftovers.\nCook only the stated “To cook” portions using listed ingredients and quantities.\nUpload ingredient receipt photos before cooking.\nReheat or combine leftovers as selected.\nFollow cooking and portioning instructions."
           },
           "id": "deliveryForm",
           "excludeWhen": {
@@ -13781,7 +13696,7 @@
                         "type": "openOverlay",
                         "groupId": "MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
                         "overlayContextHeader": {
-                          "en": "Deselect any ingredient that should not be part of this leftover."
+                          "en": "Deselect any ingredient not included in this leftover and click save."
                         },
                         "groupOverride": {
                           "ui": {
@@ -13834,7 +13749,7 @@
                 "en": "Multi-ingredient leftovers"
               },
               "helperText": {
-                "en": "Leave empty if no leftover.\nAdjust the quantity if necessary by entering a value between 1 and the maximum number of portions available.\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +3 months). Leave unticked for refrigerated storage."
+                "en": "Leave empty if there are no leftovers, then click Complete.\nTo record multi-ingredient leftovers, enter a value > 0. Rename if needed and deselect ingredients not included.\nTick ❄️ if freezing (expiry: +3 months). Leave unticked for refrigerated storage (expiry: 3 days).\nTo record single-ingredient leftovers, follow instructions at the bottom of the page otherwise click Complete to generate the Leftover ID."
               },
               "groupOverride": {
                 "totals": []
@@ -13847,7 +13762,7 @@
                 "en": "Single-ingredient leftovers"
               },
               "helperText": {
-                "en": "To add single-ingredient leftovers (e.g. rice, bulgur, couscous, chickpeas), search and select the ingredient, then enter the quantity and unit."
+                "en": "To add single-ingredient leftovers (e.g. rice, bulgur, couscous, chickpeas), search and select the ingredient, then enter the quantity and unit.\nTick ❄️ if freezing.  Leave unticked for refrigerated storage.\nClick Complete to generate the Leftover ID."
               }
             }
           ],
@@ -13882,9 +13797,6 @@
       "showBackButton": true
     },
     "portraitOnly": true,
-    "submissionConfirmationMessage": {
-      "en": "This report confirms {MP_SERVICE} for {MP_DISTRIBUTOR} has been produced by {MP_COOK_NAME} on {MP_PREP_DATE}, in accordance with the Meal Production procedure and hygiene rules."
-    },
     "submissionConfirmationTitle": {
       "en": "Please confirm"
     },

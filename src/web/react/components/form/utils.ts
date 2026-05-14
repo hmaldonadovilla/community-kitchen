@@ -372,6 +372,11 @@ export const applyUploadConstraints = (
   const next = [...existing];
   const errors: Array<{ kind: 'fileType' | 'maxFileSizeMb' | 'maxFiles'; message: string }> = [];
   let acceptedCount = 0;
+  const allowedTypeDisplayParts = [
+    ...allowedExtensions.map(e => (e.startsWith('.') ? e : `.${e}`)),
+    ...allowedMimeTypes.map(type => (type.endsWith('/*') ? `${type.slice(0, -2)} files` : type))
+  ];
+  const allowedTypesDisplay = allowedTypeDisplayParts.length ? allowedTypeDisplayParts.join(', ') : 'configured file types';
 
   const resolveUploadError = (args: {
     custom?: any;
@@ -420,17 +425,17 @@ export const applyUploadConstraints = (
   incoming.forEach(file => {
     const ext = (file.name.split('.').pop() || '').toLowerCase();
     if (!isAllowedType(file)) {
-      const allowedDisplay = allowedExtensions.map(e => (e.startsWith('.') ? e : `.${e}`));
       errors.push({
         kind: 'fileType',
         message: resolveUploadError({
           custom: uploadConfig?.errorMessages?.fileType,
           systemKey: 'files.error.fileType',
-          fallback: '{name} is not an allowed photo type.',
+          fallback: '{name} is not an allowed photo type. Allowed file types: {allowedTypes}.',
           vars: {
             name: file.name,
             ext: ext || '',
-            exts: allowedDisplay.join(', '),
+            exts: allowedTypeDisplayParts.join(', '),
+            allowedTypes: allowedTypesDisplay,
             type: (file.type || '').toString(),
             types: allowedMimeTypes.join(', ')
           }

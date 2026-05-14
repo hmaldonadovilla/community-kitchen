@@ -64,7 +64,7 @@ describe('syncGuidedStepUtilisationDraft Cloud Run service', () => {
 
     draftSave.resolve({
       success: true,
-      message: 'Draft saved.',
+      message: 'Saved',
       meta: { id: 'meal-1', dataVersion: 12 },
       utilisationResult: {
         success: true,

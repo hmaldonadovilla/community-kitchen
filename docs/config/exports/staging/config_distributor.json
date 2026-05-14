@@ -2,7 +2,7 @@
   "formKey": "Config: Distributor",
   "generatedAt": "2026-04-07T11:30:18.608Z",
   "form": {
-    "title": "Distributors",
+    "title": "Customers",
     "configSheet": "Config: Distributor",
     "destinationTab": "Distributor Data",
     "description": "Capture info about distributors",
@@ -143,10 +143,10 @@
         "navigateTo": "form",
         "confirm": {
           "title": {
-            "en": "Please confirm"
+            "en": ""
           },
           "message": {
-            "en": "This distributor will stop appearing in the Meal Production form. Do you want to proceed?"
+            "en": "Deactivate Customer?\nThis customer will no longer appear in Meal Production. Do you want to proceed?\n[No, go back] or [Yes, deactivate customer]"
           },
           "confirmLabel": {
             "en": "Yes"
@@ -163,7 +163,7 @@
   ],
   "dedupRules": [],
   "definition": {
-    "title": "Distributors",
+    "title": "Customers",
     "description": "Capture info about distributors",
     "destinationTab": "Distributor Data",
     "languages": [
@@ -284,10 +284,10 @@
           "navigateTo": "form",
           "confirm": {
             "title": {
-              "en": "Please confirm"
+              "en": ""
             },
             "message": {
-              "en": "This distributor will stop appearing in the Meal Production form. Do you want to proceed?"
+              "en": "Deactivate Customer?\nThis customer will no longer appear in Meal Production. Do you want to proceed?\n[No, go back] or [Yes, deactivate customer]"
             },
             "confirmLabel": {
               "en": "Yes"

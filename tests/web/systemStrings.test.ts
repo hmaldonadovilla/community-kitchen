@@ -8,8 +8,12 @@ describe('systemStrings', () => {
   });
 
   test('tSystem formats templates', () => {
-    const rendered = tSystem('draft.saveFailed', 'FR', 'Draft save failed: {message}', { message: 'Boom' });
-    expect(rendered).toContain('Boom');
+    const rendered = tSystem('files.error.fileType', 'FR', '{name} is not an allowed photo type. Allowed file types: {allowedTypes}.', {
+      name: 'notes.txt',
+      allowedTypes: 'image files'
+    });
+    expect(rendered).toContain('notes.txt');
+    expect(rendered).toContain('image files');
   });
 
   test('blocking upload fallback copy is generic', () => {

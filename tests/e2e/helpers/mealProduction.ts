@@ -153,10 +153,9 @@ export async function waitForSaved(frame: Frame): Promise<void> {
     .poll(
       async () => {
         const bodyText = await frame.locator('body').innerText().catch(() => '');
-        const hasUnsaved = bodyText.includes('Unsaved changes');
         const hasSaving = bodyText.includes('Saving…') || bodyText.includes('Saving...');
         const hasSaved = bodyText.includes('Saved');
-        return hasSaved && !hasUnsaved && !hasSaving;
+        return hasSaved && !hasSaving;
       },
       {
         timeout: 30_000,

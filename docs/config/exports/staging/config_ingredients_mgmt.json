@@ -608,7 +608,7 @@
       "matchMode": "caseInsensitive",
       "onConflict": "reject",
       "message": {
-        "en": "An ingredient with the same name already exists."
+        "en": "Duplicate ingredient\nAn ingredient with this name already exists. Change the name or cancel the creation."
       }
     }
   ],

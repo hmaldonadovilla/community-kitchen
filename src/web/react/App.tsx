@@ -7153,7 +7153,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
               globalThis.clearTimeout(autoSaveTimerRef.current);
               autoSaveTimerRef.current = null;
             }
-            // Hide stale "Draft saved" banner while dedup is blocking.
+            // Hide stale saved banner while dedup is blocking.
             setDraftSave({ phase: 'idle' });
             setDedupConflict(conflictObj);
             logEvent('dedup.conflict', {

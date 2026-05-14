@@ -43,7 +43,7 @@
       "en": "Rotate your device"
     },
     "rotatePortraitBody": {
-      "en": "This form works best in portrait mode. Please rotate back."
+      "en": "Best in portrait mode. Rotate back to continue"
     },
     "topActions": {
       "en": "Actions"
@@ -61,38 +61,17 @@
     }
   },
   "draft": {
-    "saving": {
-      "en": "Saving draft…"
-    },
     "savingShort": {
       "en": "Saving…"
-    },
-    "saved": {
-      "en": "Draft saved."
     },
     "savedShort": {
       "en": "Saved"
     },
-    "dirty": {
-      "en": "Draft has unsaved changes."
-    },
-    "dirtyShort": {
-      "en": "Unsaved changes"
-    },
-    "paused": {
-      "en": "Draft autosave paused."
-    },
     "pausedShort": {
       "en": "Autosave paused"
     },
-    "saveFailed": {
-      "en": "Draft save failed: {message}"
-    },
     "saveFailedShort": {
       "en": "Save failed"
-    },
-    "unknownError": {
-      "en": "Unknown error"
     }
   },
   "autosaveNotice": {
@@ -350,7 +329,7 @@
       "en": "Cancel"
     },
     "saveChanges": {
-      "en": "Save changes"
+      "en": "Save"
     },
     "selectAll": {
       "en": "Select all"
@@ -430,7 +409,7 @@
       "en": "🔍"
     },
     "searchByDate": {
-      "en": "🔍 by date"
+      "en": "Search"
     },
     "search": {
       "en": "Search"
@@ -657,9 +636,6 @@
     "maxSizeEach": {
       "en": "≤ {mb} MB each"
     },
-    "allowed": {
-      "en": "Allowed: {exts}"
-    },
     "remainingOne": {
       "en": "You can add 1 more photo."
     },
@@ -691,10 +667,7 @@
         "en": "{name} exceeds {mb} MB."
       },
       "fileType": {
-        "en": "{name} is not an allowed photo type."
-      },
-      "compressFailed": {
-        "en": "Could not resize {name}. Adding original."
+        "en": "{name} is not an allowed photo type. Allowed file types: {allowedTypes}."
       }
     },
     "emptyHint": {

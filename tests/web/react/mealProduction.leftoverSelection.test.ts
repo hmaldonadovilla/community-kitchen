@@ -32,10 +32,10 @@ describe('meal production leftover selection config', () => {
     expect(target?.dataSourceRows).toHaveLength(1);
     expect(formTarget?.dataSourceRows).toHaveLength(1);
     expect(target?.helperText?.en).toBe(
-      "Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary by entering a value between 1 and the maximum number of portions available.\nMulti-ingredient leftovers: adjust portions, then select reheat or combine.\nSingle-ingredient leftovers: combine with today's dish."
+      'Skip this page if not using leftovers.\nTick the box to use leftovers and adjust quantity if needed.\nFor multi-ingredient leftovers, select Combine or Reheat.\nSingle-ingredient leftovers are combined by default.\nTo remove leftovers, adjust quantity or untick the box.\nClick Next and stay on this screen to save your selection otherwise changes may be lost.'
     );
     expect(formTarget?.helperText?.en).toBe(
-      "Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary by entering a value between 1 and the maximum number of portions available.\nMulti-ingredient leftovers: adjust portions, then select reheat or combine.\nSingle-ingredient leftovers: combine with today's dish."
+      'Skip this page if not using leftovers.\nTick the box to use leftovers and adjust quantity if needed.\nFor multi-ingredient leftovers, select Combine or Reheat.\nSingle-ingredient leftovers are combined by default.\nTo remove leftovers, adjust quantity or untick the box.\nClick Next and stay on this screen to save your selection otherwise changes may be lost.'
     );
     expect(target?.dataSourceBootstrap).toEqual({
       waitForGuidedUtilisationSync: true,
@@ -592,7 +592,7 @@ describe('meal production leftover selection config', () => {
 
     expect(target?.label?.en).toBe('Multi-ingredient leftovers');
     expect(target?.helperText?.en).toBe(
-      'Leave empty if no leftover.\nAdjust the quantity if necessary by entering a value between 1 and the maximum number of portions available.\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +3 months). Leave unticked for refrigerated storage.'
+      'Leave empty if there are no leftovers, then click Complete.\nTo record multi-ingredient leftovers, enter a value > 0. Rename if needed and deselect ingredients not included.\nTick ❄️ if freezing (expiry: +3 months). Leave unticked for refrigerated storage (expiry: 3 days).\nTo record single-ingredient leftovers, follow instructions at the bottom of the page otherwise click Complete to generate the Leftover ID.'
     );
     expect((target?.fields || []).map((entry: any) => (typeof entry === 'string' ? entry : entry?.id))).toEqual(
       expect.arrayContaining([
@@ -768,7 +768,7 @@ describe('meal production leftover selection config', () => {
                 type: 'openOverlay',
                 groupId: 'MP_LEFTOVER_INGREDIENTS_CAPTURE_LI',
                 overlayContextHeader: expect.objectContaining({
-                  en: 'Deselect any ingredient that should not be part of this leftover.'
+                  en: 'Deselect any ingredient not included in this leftover and click save.'
                 }),
                 groupOverride: expect.objectContaining({
                   ui: expect.objectContaining({
@@ -834,7 +834,7 @@ describe('meal production leftover selection config', () => {
 
     expect(target?.label?.en).toBe('Single-ingredient leftovers');
     expect(target?.helperText?.en).toBe(
-      'To add single-ingredient leftovers (e.g. rice, bulgur, couscous, chickpeas), search and select the ingredient, then enter the quantity and unit.'
+      'To add single-ingredient leftovers (e.g. rice, bulgur, couscous, chickpeas), search and select the ingredient, then enter the quantity and unit.\nTick ❄️ if freezing.  Leave unticked for refrigerated storage.\nClick Complete to generate the Leftover ID.'
     );
     expect(question?.qEn).toBe('Single-ingredient leftovers');
     expect(question?.ui?.hideLabel).toBe(true);

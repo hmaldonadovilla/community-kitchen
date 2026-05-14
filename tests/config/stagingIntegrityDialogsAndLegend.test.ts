@@ -412,7 +412,7 @@ describe('staging integrity dialogs and list legend config', () => {
         : [];
       const leftoverBankRows = leftoverDataSourceRows.find((entry: any) => entry?.id === 'leftoverBankRows');
       expect(leftoverBankMeals?.helperText?.en).toBe(
-        "Tick the box to indicate that leftover will be used.\nAdjust the quantity if necessary by entering a value between 1 and the maximum number of portions available.\nMulti-ingredient leftovers: adjust portions, then select reheat or combine.\nSingle-ingredient leftovers: combine with today's dish."
+        'Skip this page if not using leftovers.\nTick the box to use leftovers and adjust quantity if needed.\nFor multi-ingredient leftovers, select Combine or Reheat.\nSingle-ingredient leftovers are combined by default.\nTo remove leftovers, adjust quantity or untick the box.\nClick Next and stay on this screen to save your selection otherwise changes may be lost.'
       );
       expect(leftoverBankRows?.presentation).toBe('sourceFirstAllocations');
       expect(leftoverBankRows?.presentationWhen).toEqual({
@@ -721,7 +721,7 @@ describe('staging integrity dialogs and list legend config', () => {
       const leftoversMeals = leftoversInclude.find((entry: any) => entry?.kind === 'lineGroup' && entry?.id === 'MP_MEALS_REQUEST');
       expect(leftoversMeals?.label?.en).toBe('Multi-ingredient leftovers');
       expect(leftoversMeals?.helperText?.en).toBe(
-        'Leave empty if no leftover.\nAdjust the quantity if necessary by entering a value between 1 and the maximum number of portions available.\nYou can rename the dish and remove ingredients.\n❄️ = to be frozen (expiry: +3 months). Leave unticked for refrigerated storage.'
+        'Leave empty if there are no leftovers, then click Complete.\nTo record multi-ingredient leftovers, enter a value > 0. Rename if needed and deselect ingredients not included.\nTick ❄️ if freezing (expiry: +3 months). Leave unticked for refrigerated storage (expiry: 3 days).\nTo record single-ingredient leftovers, follow instructions at the bottom of the page otherwise click Complete to generate the Leftover ID.'
       );
       expect(leftoversMeals?.groupOverride).toEqual(
         expect.objectContaining({

@@ -78,7 +78,7 @@ Expected result:
 ### 4. Food safety
 
 - For `Standard`:
-  - check `All pots ≥63°C: Confirm`
+  - check `All pots ≥63°C`
   - upload one photo using `docs/images/checks.png`
 - Wait for `1/10` and `Added`
 - Click `Next`
