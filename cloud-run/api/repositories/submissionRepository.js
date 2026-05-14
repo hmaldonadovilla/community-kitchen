@@ -7,6 +7,8 @@ const MAX_LIST_ROWS = 200;
 const MAX_PAGE_SIZE = 50;
 const MAX_SORTED_PAGE_SIZE = 200;
 
+const toText = value => (value === undefined || value === null ? '' : value.toString().trim());
+
 const encodePageToken = offset => Buffer.from(String(Math.max(0, Number(offset) || 0)), 'utf8').toString('base64');
 
 const decodePageToken = token => {
@@ -289,6 +291,7 @@ class GoogleSheetsSubmissionRepository {
     this.fileRepository = options.fileRepository || null;
     this.sheetCache = options.sheetCache || null;
     this.timing = options.timing || null;
+    this.autoIncrementState = new Map();
   }
 
   createRequestScope(options = {}) {
@@ -746,11 +749,113 @@ class GoogleSheetsSubmissionRepository {
     return undefined;
   }
 
+  writePayloadValue(formObject, fieldId, value) {
+    const key = (fieldId || '').toString().trim();
+    if (!formObject || typeof formObject !== 'object' || !key) return;
+    if (formObject.values && typeof formObject.values === 'object') {
+      formObject.values[key] = value;
+    }
+    formObject[key] = value;
+  }
+
   readLineItemPayloadValue(formObject, fieldId) {
     const jsonKey = `${fieldId}_json`;
     const jsonValue = this.readPayloadValue(formObject, jsonKey);
     if (jsonValue !== undefined) return jsonValue;
     return this.readPayloadValue(formObject, fieldId);
+  }
+
+  resolveAutoIncrementPrefix(config, formObject) {
+    const fallbackPrefix = config && config.prefix !== undefined && config.prefix !== null ? config.prefix.toString() : '';
+    const prefixByValue = config && config.prefixByValue;
+    if (!prefixByValue || !prefixByValue.fieldId || !prefixByValue.map || !formObject) {
+      return { prefix: fallbackPrefix };
+    }
+    const rawValue = this.readPayloadValue(formObject, prefixByValue.fieldId);
+    const normalizedValue = toText(rawValue);
+    const mappedPrefix =
+      (normalizedValue && Object.prototype.hasOwnProperty.call(prefixByValue.map, normalizedValue)
+        ? prefixByValue.map[normalizedValue]
+        : undefined) ?? prefixByValue.defaultPrefix;
+    if (mappedPrefix === undefined || mappedPrefix === null || mappedPrefix.toString() === '') {
+      return { prefix: fallbackPrefix };
+    }
+    return { prefix: mappedPrefix.toString(), propertyKeySuffix: mappedPrefix.toString() };
+  }
+
+  autoIncrementStateKey(sheet, question, config, resolvedPrefix) {
+    const formKey = (sheet.form && sheet.form.configSheet) || sheet.formKey || '';
+    const base = toText(config && config.propertyKey) || `${formKey}::${question.id}`;
+    const suffix = toText(resolvedPrefix && resolvedPrefix.propertyKeySuffix);
+    return suffix ? `${base}::${suffix}` : base;
+  }
+
+  autoIncrementPadLength(config) {
+    const raw = config && config.padLength;
+    if (raw === undefined || raw === null) return 6;
+    const number = Number(raw);
+    return Math.max(0, Math.min(20, Number.isFinite(number) ? number : 6));
+  }
+
+  autoIncrementNumberFromValue(value, prefix) {
+    const raw = toText(value);
+    if (!raw) return 0;
+    const normalizedPrefix = prefix === undefined || prefix === null ? '' : prefix.toString();
+    if (normalizedPrefix && !raw.startsWith(normalizedPrefix)) return 0;
+    const suffix = normalizedPrefix ? raw.slice(normalizedPrefix.length) : raw;
+    if (!/^\d+$/.test(suffix)) return 0;
+    const parsed = Number(suffix);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  }
+
+  maxAutoIncrementNumber(sheet, question, prefix) {
+    const colIdx = sheet.columns.fields[question.id];
+    if (colIdx === undefined) return 0;
+    return (sheet.dataRows || []).reduce((max, row) => {
+      const parsed = this.autoIncrementNumberFromValue(this.value(row || [], colIdx), prefix);
+      return parsed > max ? parsed : max;
+    }, 0);
+  }
+
+  generateAutoIncrementValue(sheet, question, formObject) {
+    const config = question && question.autoIncrement;
+    if (!config) return '';
+    const resolvedPrefix = this.resolveAutoIncrementPrefix(config, formObject);
+    const stateKey = this.autoIncrementStateKey(sheet, question, config, resolvedPrefix);
+    const current = Math.max(
+      Number(this.autoIncrementState.get(stateKey)) || 0,
+      this.maxAutoIncrementNumber(sheet, question, resolvedPrefix.prefix)
+    );
+    const next = current + 1;
+    const padLength = this.autoIncrementPadLength(config);
+    const formatted = `${resolvedPrefix.prefix || ''}${padLength > 0 ? next.toString().padStart(padLength, '0') : next.toString()}`;
+    this.autoIncrementState.set(stateKey, next);
+    return formatted;
+  }
+
+  applyAutoIncrementFields(sheet, formObject, existingRow) {
+    const autoIncrementValues = {};
+    (sheet.questions || [])
+      .filter(question => question && question.type === 'TEXT' && question.autoIncrement)
+      .forEach(question => {
+        const currentValue = this.readPayloadValue(formObject, question.id);
+        if (!toText(currentValue)) {
+          const existingValue = (() => {
+            if (!existingRow) return '';
+            const colIdx = sheet.columns.fields[question.id];
+            if (colIdx === undefined) return '';
+            return toText(this.value(existingRow, colIdx));
+          })();
+          this.writePayloadValue(
+            formObject,
+            question.id,
+            existingValue || this.generateAutoIncrementValue(sheet, question, formObject)
+          );
+        }
+        const resolved = toText(this.readPayloadValue(formObject, question.id));
+        if (resolved) autoIncrementValues[question.id] = resolved;
+      });
+    return autoIncrementValues;
   }
 
   fallbackSaveFileUrls(value) {
@@ -1222,6 +1327,7 @@ class GoogleSheetsSubmissionRepository {
       const nextRow = existingRow ? existingRow.slice() : new Array(sheet.headers.length).fill('');
       while (nextRow.length < sheet.headers.length) nextRow.push('');
 
+      const autoIncrementValues = this.applyAutoIncrementFields(sheet, payload, existingRow);
       const candidateValues = await this.buildCandidateValuesForSave(payload, sheet.questions, {
         spreadsheetId: sheet.spreadsheetId
       });
@@ -1308,6 +1414,9 @@ class GoogleSheetsSubmissionRepository {
         rowNumber: destinationRowNumber,
         operation: existingRow ? 'update' : 'create'
       };
+      if (Object.keys(autoIncrementValues).length) {
+        meta.autoIncrementValues = autoIncrementValues;
+      }
       metaById[recordId] = meta;
 
       const dedupSignatures = {};
@@ -1442,6 +1551,7 @@ class GoogleSheetsSubmissionRepository {
     const nextRow = existingRow ? existingRow.slice() : new Array(sheet.headers.length).fill('');
     while (nextRow.length < sheet.headers.length) nextRow.push('');
 
+    const autoIncrementValues = this.applyAutoIncrementFields(sheet, payload, existingRow);
     const candidateValues = await this.buildCandidateValuesForSave(payload, sheet.questions, {
       spreadsheetId: sheet.spreadsheetId
     });
@@ -1548,6 +1658,9 @@ class GoogleSheetsSubmissionRepository {
       rowNumber: destinationRowNumber,
       operation: existingRow ? 'update' : 'create'
     };
+    if (Object.keys(autoIncrementValues).length) {
+      meta.autoIncrementValues = autoIncrementValues;
+    }
     try {
       const dedupSignatures = {};
       recordIndexDedupRules(dedupRules).forEach(rule => {

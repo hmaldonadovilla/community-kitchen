@@ -86,11 +86,22 @@ if [[ -z "$FIREBASE_PROJECT_ID" || -z "$FIREBASE_HOSTING_SITE_ID" || -z "$CK_WEB
   exit 1
 fi
 
-if ! run_firebase projects:list --json >/dev/null 2>&1; then
-  echo "[deploy-firebase-hosting] Firebase CLI is not authenticated."
-  echo "[deploy-firebase-hosting] Run: ${FIREBASE_BIN} ${FIREBASE_PACKAGE} login"
+AUTH_CHECK_OUTPUT="$(mktemp)"
+if ! run_firebase projects:list --json >"$AUTH_CHECK_OUTPUT" 2>&1; then
+  if grep -qi "credentials are no longer valid\\|reauth" "$AUTH_CHECK_OUTPUT"; then
+    echo "[deploy-firebase-hosting] Firebase CLI credentials are expired or invalid."
+    echo "[deploy-firebase-hosting] Run: ${FIREBASE_BIN} ${FIREBASE_PACKAGE} login --reauth"
+  else
+    echo "[deploy-firebase-hosting] Firebase CLI could not list projects for the current account."
+    echo "[deploy-firebase-hosting] Run: ${FIREBASE_BIN} ${FIREBASE_PACKAGE} login --reauth"
+    echo "[deploy-firebase-hosting] Plain login can still report 'Already logged in' when the refresh token needs reauthorization."
+    echo "[deploy-firebase-hosting] Firebase CLI output:"
+    sed 's/^/[deploy-firebase-hosting]   /' "$AUTH_CHECK_OUTPUT"
+  fi
+  rm -f "$AUTH_CHECK_OUTPUT"
   exit 1
 fi
+rm -f "$AUTH_CHECK_OUTPUT"
 
 echo "[deploy-firebase-hosting] Building external React assets for ${CK_WEB_ASSET_BASE_URL}."
 npm run build:web:react
