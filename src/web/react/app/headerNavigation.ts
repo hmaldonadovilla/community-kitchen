@@ -1,3 +1,6 @@
+import type { LangCode } from '../../types';
+import { tSystem } from '../../systemStrings';
+
 export const isTruthyParam = (raw: any): boolean => {
   if (raw === undefined || raw === null) return false;
   const token = raw.toString().trim().toLowerCase();
@@ -99,6 +102,15 @@ export const buildAnalyticsUrl = (serviceUrl: string, adminEnabled: boolean): st
   if (adminEnabled) params.admin = 'true';
   return buildUrl(serviceUrl, params);
 };
+
+export const resolveHomeNavigationWaitDialog = (language: LangCode): { title: string; message: string } => ({
+  title: '',
+  message: tSystem(
+    'navigation.waitHome',
+    language,
+    'Please wait while we open the Community Kitchen Home page. This may take a few seconds.'
+  )
+});
 
 export const navigateToTopLevel = (targetUrl: string): void => {
   const resolved = (targetUrl || '').toString().trim();

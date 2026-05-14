@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { ANALYTICS_PAGE_CONFIG } from '../../../config/analyticsPage';
 import { LANDING_PAGE_CONFIG } from '../../../config/landingPage';
 import type { LandingIllustrationKey } from '../../../config/landingPageTypes';
+import { appendAppOpeningNavigationParam } from '../../navigationIntent';
 import { fetchFormCatalogApi, FormCatalogItem } from '../api';
 import { buildAnalyticsUrl, resolveServiceUrl } from '../app/headerNavigation';
 import { BlockingOverlay } from '../features/overlays/BlockingOverlay';
@@ -669,9 +670,9 @@ const openLandingItem = (
   pendingTitle: string,
   pendingMessage: string
 ): void => {
-  const targetUrl = (item.targetUrl || '').toString().trim();
+  const targetUrl = appendAppOpeningNavigationParam((item.targetUrl || '').toString().trim());
   if (!targetUrl) return;
-  logEvent('catalog.navigate', { formKey: item.formKey, targetUrl });
+  logEvent('catalog.navigate', { formKey: item.formKey, targetUrl, navigationIntent: 'open-app' });
   setPendingNavigation({
     targetUrl,
     title: pendingTitle,
@@ -686,7 +687,7 @@ const LandingActionCard: React.FC<{
   actionLabel: string;
   onOpen: (item: LandingAppItem) => void;
 }> = ({ item, variant, actionLabel, onOpen }) => {
-  const targetUrl = (item.targetUrl || '').toString().trim();
+  const targetUrl = appendAppOpeningNavigationParam((item.targetUrl || '').toString().trim());
   const actionTone = 'primary';
   const isAdmin = variant === 'admin';
 

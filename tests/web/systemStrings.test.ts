@@ -18,6 +18,13 @@ describe('systemStrings', () => {
     expect(tSystem('navigation.waitPhotos', 'EN', '')).toContain('files');
   });
 
+  test('navigation wait messages distinguish app opening from returning home', () => {
+    expect(tSystem('navigation.waitForms', 'EN', '')).toBe('Please wait while we open the app. This may take a few seconds.');
+    expect(tSystem('navigation.waitHome', 'EN', '')).toBe(
+      'Please wait while we open the Community Kitchen Home page. This may take a few seconds.'
+    );
+  });
+
   test('optional system strings preserve explicitly blank values', () => {
     expect(tSystemOptional('navigation.waitSavingTitle', 'EN', 'Saving…')).toBe('');
     expect(tSystem('navigation.waitSaving', 'EN', '')).toBe('Do not leave this page while your changes are being saved');

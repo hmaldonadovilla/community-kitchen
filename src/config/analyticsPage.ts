@@ -19,8 +19,8 @@ const DEFAULT_ANALYTICS_PAGE_CONFIG: AnalyticsPageConfig = {
     loadingLabel: 'Loading reports...',
     emptyLabel: 'No reports are available.',
     backToLandingLabel: '← Apps',
-    pendingNavigationTitle: 'Please wait',
-    pendingNavigationMessage: 'Opening forms...'
+    pendingNavigationTitle: '',
+    pendingNavigationMessage: 'Please wait while we open the Community Kitchen Home page. This may take a few seconds.'
   },
   landingTile: {
     title: 'Reports',

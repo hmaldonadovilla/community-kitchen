@@ -42,6 +42,7 @@ describe('embed-form-configs env helpers', () => {
     const raw = fs.readFileSync(path.join(__dirname, '..', 'src', 'config', 'bundledLandingPageConfig.ts'), 'utf8');
     expect(raw).toContain('"heroTitle": "Welcome to the Community Kitchen"');
     expect(raw).toContain('"adminSectionNote": ""');
+    expect(raw).toContain('"pendingNavigationMessage": "Please wait while we open the app. This may take a few seconds."');
     expect(raw).toContain('"logoUrl": "https://lh3.googleusercontent.com/d/11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K=w256"');
     expect(raw).toContain('"imageUrl": "https://lh3.googleusercontent.com/d/15Zz26t7dFw52_ahCGMeZlmx4OwNGh2ax=w512"');
     expect(raw).not.toContain('"imageUrl": "data:image/');
@@ -59,7 +60,9 @@ describe('embed-form-configs env helpers', () => {
     expect(raw).toContain('"imageUrl": "https://lh3.googleusercontent.com/d/1_wGMM5C-vCiU4lImejfLb2Uz0BOL9PND=w512"');
     expect(raw).toContain('"sections": []');
     expect(raw).toContain('"pendingNavigationTitle": ""');
-    expect(raw).toContain('"pendingNavigationMessage": "Opening forms..."');
+    expect(raw).toContain(
+      '"pendingNavigationMessage": "Please wait while we open the Community Kitchen Home page. This may take a few seconds."'
+    );
     expect(raw).not.toContain('"imageUrl": "data:image/');
   });
 });

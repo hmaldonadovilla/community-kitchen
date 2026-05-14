@@ -720,6 +720,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
 
       Admin aliases are accepted (`?admin-true` or `?admin=1|true|yes|on`) and links are propagated with canonical `admin=true`.
       Landing-page settings are export-owned in `docs/config/exports/<env>/landing_page.json`; update that file when the launcher needs its own header logo source (`appHeader.logoFormKey` or `appHeader.logoUrl`), hero copy, section labels, app grouping/renames, or per-card art (`apps[].imagePath`).
+      Keep `copy.pendingNavigationMessage` aligned with the single app-opening wait message. Landing-page app links add `ckNav=open-app` to the target URL so the destination shell does not show a second wait instruction while booting.
       Central analytics dashboard settings are export-owned in `docs/config/exports/<env>/analytics_page.json`; update that file when the dashboard card copy/art, header logo source, or widget composition should change.
 
     - Want to replace the default keyword search with **search by date**? Set `listView.search`:

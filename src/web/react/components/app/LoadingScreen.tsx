@@ -3,6 +3,7 @@ import React from 'react';
 export interface LoadingScreenProps {
   showSlowMessage: boolean;
   allowRetry: boolean;
+  suppressWaitCopy?: boolean;
   onRetry?: () => void;
   errorMessage?: string | null;
 }
@@ -40,6 +41,7 @@ const retryButtonStyle: React.CSSProperties = {
 export const LoadingScreen: React.FC<LoadingScreenProps> = ({
   showSlowMessage,
   allowRetry,
+  suppressWaitCopy,
   onRetry,
   errorMessage
 }) => {
@@ -47,8 +49,8 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({
     <div className="page">
       <main className="card form-card">
         <h1>Loading…</h1>
-        <p>Please keep this page open. This may take a few seconds.</p>
-        {showSlowMessage ? (
+        {!suppressWaitCopy ? <p>Please keep this page open. This may take a few seconds.</p> : null}
+        {showSlowMessage && !suppressWaitCopy ? (
           <p className="muted" data-boot-copy="slow" style={hintStyle}>
             Still loading… your connection may be slow. Don’t close the page.
           </p>

@@ -41,6 +41,20 @@ describe('WebFormTemplate', () => {
     expect(html).toContain('window.__CK_SERVICE_URL__ = "https://script.google.com/macros/s/example-deployment/exec"');
   });
 
+  test('suppresses the second boot wait copy for app-opening navigation from the landing page', () => {
+    const html = buildWebFormHtml(null, 'Config: Test', null, 'meal-production', { ckNav: 'open-app' });
+
+    expect(html).toContain('<h1>Loading…</h1>');
+    expect(html).not.toContain('Please keep this page open. This may take a few seconds.');
+    expect(html).toContain('"ckNav":"open-app"');
+  });
+
+  test('keeps the normal boot wait copy for direct app loads', () => {
+    const html = buildWebFormHtml(null, 'Config: Test', null, 'meal-production');
+
+    expect(html).toContain('Please keep this page open. This may take a few seconds.');
+  });
+
   test('uses the public Apps Script path for the React bundle when the service URL is domain-scoped', () => {
     (globalThis as any).ScriptApp = {
       getService: () => ({

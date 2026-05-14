@@ -12,8 +12,8 @@ jest.mock('../src/config/analyticsPage', () => {
         loadingLabel: 'Loading analytics...',
         emptyLabel: 'No analytics widgets are configured for this dashboard.',
         backToLandingLabel: '← Apps',
-        pendingNavigationTitle: 'Please wait',
-        pendingNavigationMessage: 'Opening forms...'
+        pendingNavigationTitle: '',
+        pendingNavigationMessage: 'Please wait while we open the Community Kitchen Home page. This may take a few seconds.'
       },
       landingTile: {
         title: 'Analytics',

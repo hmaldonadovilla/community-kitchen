@@ -10,7 +10,7 @@
     "loadingAppsLabel": "Loading apps...",
     "emptyPrimaryAppsLabel": "No primary apps were found.",
     "pendingNavigationTitle": "",
-    "pendingNavigationMessage": "Opening the selected app...",
+    "pendingNavigationMessage": "Please wait while we open the app. This may take a few seconds.",
     "openAppLabel": "Go to app",
     "primarySectionTitle": "Apps for cooks",
     "adminSectionTitle": "Administrator apps",

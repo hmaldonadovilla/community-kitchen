@@ -6,6 +6,7 @@ import { isDebugEnabled } from './webform/debug';
 import { getUiEnvTag } from './webform/envTag';
 import { ServerTimingRecorder } from './webform/serverTiming';
 import { resolveReactBundleScript } from './webform/staticAssets';
+import { isAppOpeningNavigationParams } from '../web/navigationIntent';
 
 const SCRIPT_CLOSE_PATTERN = /<\/script/gi;
 const SCRIPT_CLOSE_ESCAPED = String.raw`<\\/script`;
@@ -128,6 +129,10 @@ export function buildWebFormHtml(
     serviceUrlJson,
     webAssetJson
   } = serialized;
+  const suppressNavigationWaitCopy = isAppOpeningNavigationParams(requestParams || {});
+  const navigationWaitCopyHtml = suppressNavigationWaitCopy
+    ? ''
+    : '\n          <p>Please keep this page open. This may take a few seconds.</p>';
 
   return `<!DOCTYPE html>
 <html>
@@ -1478,8 +1483,7 @@ export function buildWebFormHtml(
     <div id="react-prototype-root">
       <div class="page">
         <main class="card form-card">
-          <h1>Loading…</h1>
-          <p>Please keep this page open. This may take a few seconds.</p>
+          <h1>Loading…</h1>${navigationWaitCopyHtml}
         </main>
       </div>
     </div>

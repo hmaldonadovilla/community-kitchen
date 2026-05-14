@@ -4,6 +4,7 @@ import { AnalyticsSnapshot, WebFormDefinition, WebFormSubmission } from '../type
 import { LoadingScreen } from './components/app/LoadingScreen';
 import { fetchBootstrapContextApi } from './api';
 import { readCachedFormDefinition, writeCachedFormDefinition, StorageLike } from '../data/formDefinitionCache';
+import { isAppOpeningNavigationParams } from '../navigationIntent';
 
 export type AppPhase = 'bootstrapping' | 'loadingData' | 'ready' | 'error';
 
@@ -50,6 +51,15 @@ export const Root: React.FC<RootProps> = ({
     return raw ? raw : null;
   });
   const definitionRef = useRef<WebFormDefinition | null>(initialDefinition ?? null);
+  const suppressNavigationWaitCopyRef = useRef<boolean>(
+    (() => {
+      try {
+        return isAppOpeningNavigationParams(((globalThis as any)?.__WEB_FORM_REQUEST_PARAMS__ || {}) as Record<string, unknown>);
+      } catch {
+        return false;
+      }
+    })()
+  );
 
   const resolveLocalStorage = (): StorageLike | null => {
     try {
@@ -88,7 +98,11 @@ export const Root: React.FC<RootProps> = ({
     setShowSlowMessage(false);
     setAllowRetry(false);
     setErrorMessage(null);
-    logBootEvent('phase.enter', { phase: 'bootstrapping', formKey });
+    logBootEvent('phase.enter', {
+      phase: 'bootstrapping',
+      formKey,
+      suppressNavigationWaitCopy: suppressNavigationWaitCopyRef.current
+    });
 
     slowTimer = (globalThis as any).setTimeout(() => {
       setShowSlowMessage(true);
@@ -230,6 +244,7 @@ export const Root: React.FC<RootProps> = ({
         <LoadingScreen
           showSlowMessage={showSlowMessage}
           allowRetry={allowRetry}
+          suppressWaitCopy={suppressNavigationWaitCopyRef.current}
           onRetry={handleRetry}
           errorMessage={errorMessage}
         />

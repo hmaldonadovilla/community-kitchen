@@ -3,6 +3,7 @@ import {
   buildLandingUrl,
   isTruthyParam,
   resolveDevModeEnabled,
+  resolveHomeNavigationWaitDialog,
   resolveHeaderDrawerEnabled
 } from '../../src/web/react/app/headerNavigation';
 
@@ -17,6 +18,13 @@ describe('header navigation helpers', () => {
     expect(buildAnalyticsUrl('https://script.google.com/macros/s/deployment/exec', true)).toBe(
       'https://script.google.com/macros/s/deployment/exec?app=analytics&admin=true'
     );
+  });
+
+  test('home navigation wait dialog has no title and uses the home-specific message', () => {
+    expect(resolveHomeNavigationWaitDialog('EN')).toEqual({
+      title: '',
+      message: 'Please wait while we open the Community Kitchen Home page. This may take a few seconds.'
+    });
   });
 
   test('buildLandingUrl falls back to the current page path when the service URL is unavailable', () => {
