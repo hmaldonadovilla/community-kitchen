@@ -527,7 +527,6 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
     applyStepDataSourceAvailabilitySnapshots,
     queueStepUtilisationDraftSnapshotSync,
     syncStepDataSourceOutputRow,
-    syncStepDataSourceOutputRowWithUtilisation,
     onDiagnostic
   });
 

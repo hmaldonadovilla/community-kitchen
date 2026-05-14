@@ -10,10 +10,14 @@ import {
 import type { LineItemState } from '../../../types';
 import { isEmptyValue } from '../../../utils/values';
 import {
+  consumeGuidedStepUtilisationAvailabilityEvents,
+  forgetGuidedStepUtilisationAvailabilityEvent,
   GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
+  hasHandledGuidedStepUtilisationAvailabilityEvent,
+  markGuidedStepUtilisationAvailabilityEventHandled,
   type GuidedStepUtilisationAvailabilityEventDetail
 } from '../../utilisations/liveSyncEvents';
-import { resolveUtilisationSourceItemKey } from '../../utilisations/sourceFields';
+import { resolveRejectedStepUtilisationSourceRow } from '../../utilisations/rejectedUtilisations';
 
 type UseStepDataSourceAvailabilityReconciliationArgs = {
   groupId: string;
@@ -37,15 +41,6 @@ type UseStepDataSourceAvailabilityReconciliationArgs = {
     sourceRow: Record<string, any>;
     patch: Record<string, FieldValue>;
   }) => LineItemState | null;
-  syncStepDataSourceOutputRowWithUtilisation: (
-    args: {
-      config: any;
-      parentRow: LineItemRowState;
-      sourceRow: Record<string, any>;
-      patch: Record<string, FieldValue>;
-    },
-    options?: { skipUtilisation?: boolean }
-  ) => void;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
 };
 
@@ -71,7 +66,6 @@ export const useStepDataSourceAvailabilityReconciliation = ({
   applyStepDataSourceAvailabilitySnapshots,
   queueStepUtilisationDraftSnapshotSync,
   syncStepDataSourceOutputRow,
-  syncStepDataSourceOutputRowWithUtilisation,
   onDiagnostic
 }: UseStepDataSourceAvailabilityReconciliationArgs) => {
   const rollbackRejectedStepUtilisations = React.useCallback(
@@ -81,6 +75,7 @@ export const useStepDataSourceAvailabilityReconciliation = ({
       const parentRowsForGroup = Array.isArray(lineItems[groupId]) ? lineItems[groupId] : [];
       if (!parentRowsForGroup.length) return;
       const handled = new Set<string>();
+      let rolledBackCount = 0;
 
       entries.forEach(entry => {
         const sourceParentGroupId = `${entry?.sourceParentGroupId || ''}`.trim();
@@ -99,13 +94,11 @@ export const useStepDataSourceAvailabilityReconciliation = ({
 
           const cached = peekCachedDataSource(config?.dataSource, language) as any;
           const items = Array.isArray(cached?.items) ? cached.items : Array.isArray(cached) ? cached : [];
-          const sourceRow =
-            items.find((item: Record<string, any>) => {
-              if (!item || typeof item !== 'object') return false;
-              if (`${item.id ?? ''}`.trim() !== resourceRecordId) return false;
-              if (!resourceItemId) return true;
-              return resolveUtilisationSourceItemKey(config, item) === resourceItemId;
-            }) || null;
+          const sourceRow = resolveRejectedStepUtilisationSourceRow({
+            config,
+            entry,
+            cachedItems: items
+          });
           if (!sourceRow) return;
 
           const selectedFieldId = `${config?.selectedFieldId || ''}`.trim();
@@ -126,19 +119,38 @@ export const useStepDataSourceAvailabilityReconciliation = ({
           if (handled.has(rollbackKey)) return;
           handled.add(rollbackKey);
 
-          syncStepDataSourceOutputRowWithUtilisation(
-            {
-              config,
-              parentRow,
-              sourceRow,
-              patch
-            },
-            { skipUtilisation: true }
-          );
+          const draftKey = buildStepDataSourceDraftKey(config, parentRow.id, resourceItemId);
+          if (draftKey && utilisationCommittedValuesRef.current[draftKey]) {
+            delete utilisationCommittedValuesRef.current[draftKey];
+          }
+
+          syncStepDataSourceOutputRow({
+            config,
+            parentRow,
+            sourceRow,
+            patch
+          });
+          rolledBackCount += 1;
         });
       });
+      onDiagnostic?.('guidedStep.utilisationAvailability.rollbackRejected', {
+        groupId,
+        stepId: currentGuidedStepId || null,
+        rejectedCount: entries.length,
+        rolledBackCount
+      });
     },
-    [activeStepDataSourceRows, groupId, language, lineItems, syncStepDataSourceOutputRowWithUtilisation]
+    [
+      activeStepDataSourceRows,
+      buildStepDataSourceDraftKey,
+      currentGuidedStepId,
+      groupId,
+      language,
+      lineItems,
+      onDiagnostic,
+      syncStepDataSourceOutputRow,
+      utilisationCommittedValuesRef
+    ]
   );
 
   const commitStepUtilisationValuesForAvailabilitySnapshots = React.useCallback(
@@ -321,21 +333,47 @@ export const useStepDataSourceAvailabilityReconciliation = ({
     if (!activeStepDataSourceRows.length) return;
     if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
     const currentRecordId = `${recordId || ''}`.trim();
-    const handleAvailability = (event: Event) => {
-      const detail = (event as CustomEvent<GuidedStepUtilisationAvailabilityEventDetail>)?.detail;
-      if (!detail || !Array.isArray(detail.availability) || !detail.availability.length) return;
-      if (currentRecordId && `${detail.recordId || ''}`.trim() !== currentRecordId) return;
-      if (currentGuidedStepId && `${detail.stepId || ''}`.trim() && `${detail.stepId || ''}`.trim() !== currentGuidedStepId) return;
+    const shouldHandleAvailability = (detail: GuidedStepUtilisationAvailabilityEventDetail): boolean => {
+      if (!detail || !Array.isArray(detail.availability) || !detail.availability.length) return false;
+      if (currentRecordId && `${detail.recordId || ''}`.trim() !== currentRecordId) return false;
+      if (currentGuidedStepId && `${detail.stepId || ''}`.trim() && `${detail.stepId || ''}`.trim() !== currentGuidedStepId) return false;
+      return true;
+    };
+    const applyAvailabilityDetail = (detail: GuidedStepUtilisationAvailabilityEventDetail): boolean => {
+      if (hasHandledGuidedStepUtilisationAvailabilityEvent(detail)) return true;
+      if (!shouldHandleAvailability(detail)) return false;
+      if (detail.rejectedUtilisations?.length) {
+        rollbackRejectedStepUtilisations(detail.rejectedUtilisations);
+      }
       applyStepDataSourceAvailabilitySnapshots(detail.availability);
       if (!detail.rejectedUtilisations?.length) {
         commitStepUtilisationValuesForAvailabilitySnapshots(detail.availability);
       }
-      rollbackRejectedStepUtilisations(detail.rejectedUtilisations);
+      onDiagnostic?.('guidedStep.utilisationAvailability.applied', {
+        groupId,
+        stepId: currentGuidedStepId || null,
+        recordId: currentRecordId || `${detail.recordId || ''}`.trim() || null,
+        availabilityCount: detail.availability.length,
+        rejectedCount: detail.rejectedUtilisations?.length || 0
+      });
+      markGuidedStepUtilisationAvailabilityEventHandled(detail);
+      return true;
+    };
+    const handleAvailability = (event: Event) => {
+      const detail = (event as CustomEvent<GuidedStepUtilisationAvailabilityEventDetail>)?.detail;
+      if (!detail) return;
+      if (applyAvailabilityDetail(detail)) {
+        forgetGuidedStepUtilisationAvailabilityEvent(detail);
+      }
     };
     window.addEventListener(
       GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
       handleAvailability as EventListener
     );
+    const pending = consumeGuidedStepUtilisationAvailabilityEvents(shouldHandleAvailability);
+    pending.forEach(detail => {
+      applyAvailabilityDetail(detail);
+    });
     return () => {
       window.removeEventListener(
         GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
@@ -347,6 +385,8 @@ export const useStepDataSourceAvailabilityReconciliation = ({
     applyStepDataSourceAvailabilitySnapshots,
     commitStepUtilisationValuesForAvailabilitySnapshots,
     currentGuidedStepId,
+    groupId,
+    onDiagnostic,
     recordId,
     rollbackRejectedStepUtilisations
   ]);

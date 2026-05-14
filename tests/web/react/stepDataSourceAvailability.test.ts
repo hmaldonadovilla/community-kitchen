@@ -1,4 +1,7 @@
-import { buildStepDataSourceAvailabilityOptimisticMutationAction } from '../../../src/web/react/features/lineItems/domain/stepDataSourceAvailability';
+import {
+  buildStepDataSourceAvailabilityOptimisticMutationAction,
+  shouldApplyStepDataSourceAvailabilityOptimisticMutation
+} from '../../../src/web/react/features/lineItems/domain/stepDataSourceAvailability';
 
 describe('step data-source availability helpers', () => {
   const config = {
@@ -37,7 +40,8 @@ describe('step data-source availability helpers', () => {
       remaining: 8,
       __ckServerCurrentRecordUtilisedQuantity: 3,
       __ckCurrentRecordUtilisedQuantity: 3,
-      __ckFreeQuantity: 8
+      __ckFreeQuantity: 8,
+      __ckFreeQuantityAuthoritative: false
     });
     expect(rows?.[1]).toEqual({ id: 'record-2', LEFTOVER_ID: 'leftover-1', remaining: 10 });
     expect(rows?.[2]).toEqual({ id: 'record-1', LEFTOVER_ID: 'leftover-2', remaining: 10 });
@@ -77,5 +81,20 @@ describe('step data-source availability helpers', () => {
         resolveCurrentUtilisationStateForSource: () => ({ totalUtilisedQuantity: 0, currentRowQuantity: 0 })
       })
     ).toBeNull();
+  });
+
+  test('does not allow invalid drafts to update optimistic availability', () => {
+    expect(
+      shouldApplyStepDataSourceAvailabilityOptimisticMutation({
+        patchTouchesUtilisation: true,
+        hasValidationErrors: true
+      })
+    ).toBe(false);
+    expect(
+      shouldApplyStepDataSourceAvailabilityOptimisticMutation({
+        patchTouchesUtilisation: true,
+        hasValidationErrors: false
+      })
+    ).toBe(true);
   });
 });

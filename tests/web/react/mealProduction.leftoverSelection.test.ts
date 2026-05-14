@@ -116,7 +116,7 @@ describe('meal production leftover selection config', () => {
           formKey: 'Config: Leftover Bank',
           mode: 'options',
           statusFieldId: 'LEFTOVER_STATUS',
-          statusAllowList: ['available'],
+          statusAllowList: ['available', 'used'],
           projection: expect.arrayContaining([
             'LEFTOVER_ID',
             'LEFTOVER_KIND',
@@ -346,7 +346,17 @@ describe('meal production leftover selection config', () => {
     expect(config?.utilisation).toEqual(
       expect.objectContaining({
         enabled: true,
-        utilisationFormKey: 'Config: Leftover Utilisation'
+        utilisationFormKey: 'Config: Leftover Utilisation',
+        conflictDialog: expect.objectContaining({
+          title: { en: '' },
+          message: {
+            en: 'Leftover availability changed before you completed your selection. Your selected quantity is no longer available. Please adjust your selections before continuing'
+          },
+          confirmLabel: { en: 'OK' },
+          showCancel: false,
+          showCloseButton: false,
+          dismissOnBackdrop: false
+        })
       })
     );
   });

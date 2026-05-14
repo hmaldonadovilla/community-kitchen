@@ -150,8 +150,12 @@ export const resolveSourceFirstAllocationDisplayFreeQuantity = (args: {
   localCurrentRecordUtilisedQuantity?: unknown;
   explicitFreeQuantity?: unknown;
   allowExplicitFreeQuantity?: boolean;
+  forceExplicitFreeQuantity?: boolean;
 }): number => {
   const explicitFreeQuantity = toExplicitFiniteNumberValue(args.explicitFreeQuantity);
+  if (args.forceExplicitFreeQuantity === true && explicitFreeQuantity !== null) {
+    return explicitFreeQuantity;
+  }
   if (
     args.allowExplicitFreeQuantity !== false &&
     explicitFreeQuantity !== null &&
@@ -200,13 +204,15 @@ export const decorateSourceFirstAllocationRowForVisibility = (args: {
   const availabilityConfig =
     args.availabilityConfig && typeof args.availabilityConfig === 'object' ? args.availabilityConfig : null;
   const { remainingFieldId } = resolveSourceFirstAllocationAvailabilityFieldPair(availabilityConfig, row);
+  const forceExplicitFreeQuantity = row.__ckFreeQuantityAuthoritative === true;
   const nextFreeQuantity =
     remainingFieldId
       ? resolveSourceFirstAllocationDisplayFreeQuantity({
           remainingQuantity: row[remainingFieldId],
           serverCurrentRecordUtilisedQuantity,
           localCurrentRecordUtilisedQuantity,
-          explicitFreeQuantity: row.__ckFreeQuantity
+          explicitFreeQuantity: row.__ckFreeQuantity,
+          forceExplicitFreeQuantity
         })
       : row.__ckFreeQuantity;
 

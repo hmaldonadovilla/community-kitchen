@@ -3194,6 +3194,136 @@ export class WebFormService {
     }
   }
 
+  private validateBankUtilisationPlanRequest(
+    request: BankUtilisationPlanRequest,
+    timing: OperationTimingTracker,
+    labelPrefix = ''
+  ): BankUtilisationPlanResult | null {
+    const sourceFormKey = (request?.sourceFormKey || '').toString().trim();
+    const sourceRecordId = (request?.sourceRecordId || '').toString().trim();
+    if (!sourceFormKey || !sourceRecordId) {
+      return {
+        success: false,
+        message: 'sourceFormKey and sourceRecordId are required.'
+      };
+    }
+
+    const label = (value: string): string => `${labelPrefix || ''}${value}`;
+    const managedScopes = this.normalizeUtilisationPlanScopes(request?.managedScopes);
+    const normalizedUtilisations = this.normalizeUtilisationPlanEntries({
+      sourceFormKey,
+      sourceRecordId,
+      utilisationFormKey: request?.utilisationFormKey,
+      entries: request?.utilisations
+    });
+    const utilisationFormKey =
+      (request?.utilisationFormKey || normalizedUtilisations[0]?.utilisationFormKey || 'Config: Leftover Utilisation')
+        .toString()
+        .trim();
+    const utilisationContext = this.measureOperationStep(timing, label('utilisationContext'), () =>
+      this.getFormContextLite(utilisationFormKey)
+    );
+    const batchCache: BankUtilisationBatchCache = {
+      utilisationContext,
+      activeUtilisationsByResource: new Map<string, WebFormSubmission[]>(),
+      bankRecordsByResource: new Map<string, WebFormSubmission>()
+    };
+    const allActiveUtilisations = this.measureOperationStep(timing, label('activeUtilisationScan'), () =>
+      this.fetchSubmissionRecordsByFieldCriteria(utilisationContext.form, utilisationContext.questions, [
+        { fieldId: 'STATUS', expected: 'active' }
+      ]).filter(record => this.isActiveUtilisationRecord(record))
+    );
+    this.incrementOperationCount(timing, label('activeUtilisations'), allActiveUtilisations.length);
+    allActiveUtilisations.forEach(record => {
+      const resourceFormKey = this.readRecordFieldString(record, 'RESOURCE_FORM_KEY');
+      const resourceRecordId = this.readRecordFieldString(record, 'RESOURCE_RECORD_ID');
+      if (!resourceFormKey || !resourceRecordId) return;
+      const resourceKey = this.buildBankUtilisationResourceKey(resourceFormKey, resourceRecordId);
+      const existing = batchCache.activeUtilisationsByResource.get(resourceKey);
+      if (existing) {
+        existing.push(record);
+      } else {
+        batchCache.activeUtilisationsByResource.set(resourceKey, [record]);
+      }
+    });
+    const activeUtilisations = allActiveUtilisations.filter(
+      record =>
+        this.readRecordFieldString(record, 'SOURCE_FORM_KEY') === sourceFormKey &&
+        this.readRecordFieldString(record, 'SOURCE_RECORD_ID') === sourceRecordId
+    );
+    const managedActiveUtilisations = managedScopes.length
+      ? activeUtilisations.filter(record => this.matchesBankUtilisationScope(record, managedScopes))
+      : activeUtilisations.slice();
+
+    const desiredByUtilisationId = new Map<string, BankUtilisationMutationRequest>();
+    normalizedUtilisations.forEach(entry => {
+      const utilisationId = this.buildBankUtilisationId({
+        resourceFormKey: entry.resourceFormKey,
+        resourceRecordId: entry.resourceRecordId,
+        resourceItemId: entry.resourceItemId,
+        sourceFormKey,
+        sourceRecordId,
+        sourceParentGroupId: entry.sourceParentGroupId,
+        sourceParentRowId: entry.sourceParentRowId,
+        sourceOutputRowId: entry.sourceOutputRowId
+      });
+      desiredByUtilisationId.set(utilisationId, entry);
+    });
+    const desiredUtilisationIds = new Set(desiredByUtilisationId.keys());
+    const releaseCandidates = managedActiveUtilisations.filter(record => {
+      const recordId = (record.id || '').toString().trim();
+      return !!recordId && !desiredUtilisationIds.has(recordId);
+    });
+
+    return this.measureOperationStep(timing, label('validatePlan'), () =>
+      this.validateBankUtilisationPlan({
+        desiredEntries: Array.from(desiredByUtilisationId.values()),
+        desiredUtilisationIds,
+        releaseCandidates,
+        batchCache
+      })
+    );
+  }
+
+  private preflightSaveSubmissionUtilisationPlan(
+    request: BankUtilisationPlanRequest
+  ): BankUtilisationPlanResult | null {
+    const sourceFormKey = (request?.sourceFormKey || '').toString().trim();
+    const sourceRecordId = (request?.sourceRecordId || '').toString().trim();
+    const timing = this.createOperationTiming();
+    try {
+      const result = this.withDocumentTransactionLock('bankUtilisation.preflightPlan', () => {
+        const validationFailure = this.validateBankUtilisationPlanRequest(request, timing, 'preflight.');
+        return validationFailure || {
+          success: true,
+          message: 'Bank utilisation plan validated.'
+        };
+      });
+      const timingSnapshot = this.snapshotOperationTiming(timing);
+      debugLog('bankUtilisation.preflightPlan.timing', {
+        sourceFormKey,
+        sourceRecordId,
+        success: result.success,
+        ...timingSnapshot
+      });
+      return result.success ? null : { ...result, timing: timingSnapshot };
+    } catch (err: any) {
+      const timingSnapshot = this.snapshotOperationTiming(timing);
+      debugLog('bankUtilisation.preflightPlan.timing', {
+        sourceFormKey,
+        sourceRecordId,
+        success: false,
+        message: err?.message || err?.toString?.() || 'unknown',
+        ...timingSnapshot
+      });
+      return {
+        success: false,
+        message: (err?.message || 'Could not validate bank utilisations. Please retry.').toString(),
+        timing: timingSnapshot
+      };
+    }
+  }
+
   private resolveSaveSubmissionMutationPlan(formObject: WebFormSubmission): SaveSubmissionMutationPlan {
     const rawPlan =
       (formObject as any).__ckMutationPlan && typeof (formObject as any).__ckMutationPlan === 'object'
@@ -3790,6 +3920,27 @@ export class WebFormService {
           .map(record => [(record.id || '').toString().trim(), this.readNumericRecordField(record, 'UTILISED_QTY')] as const)
           .filter(([id]) => Boolean(id))
       );
+      const currentUtilisationQuantityForRequests = (
+        requests: Array<{ request: BankUtilisationMutationRequest; utilisationId: string }>
+      ): number =>
+        requests.reduce((sum, item) => sum + Math.max(0, activeQtyById.get(item.utilisationId) || 0), 0);
+      const currentRecordUtilisedQuantityForRequests = (
+        requests: Array<{ request: BankUtilisationMutationRequest }>
+      ): number => {
+        const sourceKeys = new Set(
+          requests
+            .map(item => `${item.request.sourceFormKey || ''}::${item.request.sourceRecordId || ''}`)
+            .filter(key => key !== '::')
+        );
+        if (!sourceKeys.size) return 0;
+        return entry.activeUtilisations
+          .filter(record =>
+            sourceKeys.has(
+              `${this.readRecordFieldString(record, 'SOURCE_FORM_KEY')}::${this.readRecordFieldString(record, 'SOURCE_RECORD_ID')}`
+            )
+          )
+          .reduce((sum, record) => sum + this.readNumericRecordField(record, 'UTILISED_QTY'), 0);
+      };
       const requestedAdditionalQuantity = positiveRequests.reduce(
         (sum, item) => sum + Math.max(0, item.requestedQty - (activeQtyById.get(item.utilisationId) || 0)),
         0
@@ -3821,8 +3972,8 @@ export class WebFormService {
                 resourceRecordId: positiveRequests[0].request.resourceRecordId,
                 resourceItemId: positiveRequests[0].request.resourceItemId || this.readRecordFieldString(entry.bankRecord, 'LEFTOVER_ID'),
                 resourceKind: positiveRequests[0].request.resourceKind || this.readRecordFieldString(entry.bankRecord, 'LEFTOVER_KIND'),
-                currentUtilisationQuantity: positiveRequests.reduce((sum, item) => sum + item.requestedQty, 0),
-                currentRecordUtilisedQuantity: positiveRequests.reduce((sum, item) => sum + item.requestedQty, 0)
+                currentUtilisationQuantity: currentUtilisationQuantityForRequests(positiveRequests),
+                currentRecordUtilisedQuantity: currentRecordUtilisedQuantityForRequests(positiveRequests)
               })
             ]
           };
@@ -3852,8 +4003,8 @@ export class WebFormService {
               resourceRecordId: first.request.resourceRecordId,
               resourceItemId: first.request.resourceItemId || this.readRecordFieldString(entry.bankRecord, 'LEFTOVER_ID'),
               resourceKind: first.request.resourceKind || this.readRecordFieldString(entry.bankRecord, 'LEFTOVER_KIND'),
-              currentUtilisationQuantity: desiredTotal,
-              currentRecordUtilisedQuantity: desiredTotal
+              currentUtilisationQuantity: currentUtilisationQuantityForRequests(entry.requests),
+              currentRecordUtilisedQuantity: currentRecordUtilisedQuantityForRequests(entry.requests)
             })
           ]
         };
@@ -4246,111 +4397,140 @@ export class WebFormService {
     if (this.isStatusOnlyClosePayload(form, savePayload)) {
       return this.saveStatusOnlyCloseWithIdDirect(savePayload, form, questions, formKey, recordId);
     }
-    const result = this.saveSubmissionRecordWithRetry({
-      formKey,
-      recordId,
-      reason: 'saveSubmissionWithId',
-      formObject: savePayload,
-      form,
-      questions,
-      dedupRules
-    });
-    if (result?.success) {
+    const runSave = () => {
       if (mutationPlan.utilisationPlan) {
-        const utilisationStartedAt = Date.now();
-        const utilisationResult = this.applyBankUtilisationPlan({
-          ...(mutationPlan.utilisationPlan as BankUtilisationPlanRequest),
-          refreshMode: 'none'
-        });
-        (result as any).utilisationResult = utilisationResult;
-        (result as any).availability = utilisationResult.availability;
-        if (!utilisationResult.success) {
+        const preflightFailure = this.preflightSaveSubmissionUtilisationPlan(
+          mutationPlan.utilisationPlan as BankUtilisationPlanRequest
+        );
+        if (preflightFailure) {
           return {
             success: false,
-            message: utilisationResult.message || 'Record saved but failed to update bank utilisations.',
+            message: preflightFailure.message || 'Record was not saved because bank utilisations are no longer available.',
             meta: {
-              ...(result.meta || {}),
-              sourceSaved: true,
+              id: recordId || undefined,
+              sourceSaved: false,
               utilisationPlan: {
                 success: false,
                 sourceRecordId: mutationPlan.utilisationPlan.sourceRecordId || recordId
               }
             },
-            utilisationResult,
-            availability: utilisationResult.availability
+            utilisationResult: preflightFailure,
+            availability: preflightFailure.availability
           } as any;
         }
-        result.meta = {
-          ...(result.meta || {}),
-          utilisationPlan: {
-            success: true,
-            sourceRecordId: mutationPlan.utilisationPlan.sourceRecordId || recordId,
-            utilisationsApplied: Number(utilisationResult.utilisationsApplied || 0) || 0,
-            utilisationsReleased: Number(utilisationResult.utilisationsReleased || 0) || 0
+      }
+
+      const result = this.saveSubmissionRecordWithRetry({
+        formKey,
+        recordId,
+        reason: 'saveSubmissionWithId',
+        formObject: savePayload,
+        form,
+        questions,
+        dedupRules
+      });
+      if (result?.success) {
+        if (mutationPlan.utilisationPlan) {
+          const utilisationStartedAt = Date.now();
+          const utilisationResult = this.applyBankUtilisationPlan({
+            ...(mutationPlan.utilisationPlan as BankUtilisationPlanRequest),
+            refreshMode: 'none'
+          });
+          (result as any).utilisationResult = utilisationResult;
+          (result as any).availability = utilisationResult.availability;
+          if (!utilisationResult.success) {
+            return {
+              success: false,
+              message: utilisationResult.message || 'Record saved but failed to update bank utilisations.',
+              meta: {
+                ...(result.meta || {}),
+                sourceSaved: true,
+                utilisationPlan: {
+                  success: false,
+                  sourceRecordId: mutationPlan.utilisationPlan.sourceRecordId || recordId
+                }
+              },
+              utilisationResult,
+              availability: utilisationResult.availability
+            } as any;
           }
-        };
-        debugLog('saveSubmission.utilisationPlan.done', {
-          formKey,
-          recordId,
-          durationMs: Date.now() - utilisationStartedAt,
-          utilisationsApplied: Number(utilisationResult.utilisationsApplied || 0) || 0,
-          utilisationsReleased: Number(utilisationResult.utilisationsReleased || 0) || 0
-        });
-      }
-      const operation = (result.meta?.operation || '').toString().trim().toLowerCase();
-      if (operation === 'noop') {
-        return result;
-      }
-      const savedRecordId = (result.meta?.id || (formObject as any).id || '').toString().trim();
-      const skipSubmitEffectsRaw = (savePayload as any).__ckSkipSubmitEffects;
-      const skipSubmitEffects =
-        skipSubmitEffectsRaw === true ||
-        skipSubmitEffectsRaw === 'true' ||
-        skipSubmitEffectsRaw === '1' ||
-        skipSubmitEffectsRaw === 1;
-      if (!skipSubmitEffects) {
-        const submitEffectsStartedAt = Date.now();
-        const submitEffectsResult = this.applyFollowupSubmitEffects({
-          form,
-          questions,
-          formKey,
-          formObject: savePayload,
-          saveResult: result,
-          refreshMode: 'revisionOnly'
-        });
-        if (!submitEffectsResult.success) {
-          return {
-            success: false,
-            message: submitEffectsResult.message || result.message,
-            meta: {
-              ...(result.meta || {}),
-              submitEffects: submitEffectsResult.meta || undefined,
-              sourceSaved: true
-            }
-          };
-        }
-        if (submitEffectsResult.meta) {
           result.meta = {
             ...(result.meta || {}),
-            submitEffects: submitEffectsResult.meta
+            utilisationPlan: {
+              success: true,
+              sourceRecordId: mutationPlan.utilisationPlan.sourceRecordId || recordId,
+              utilisationsApplied: Number(utilisationResult.utilisationsApplied || 0) || 0,
+              utilisationsReleased: Number(utilisationResult.utilisationsReleased || 0) || 0
+            }
           };
+          debugLog('saveSubmission.utilisationPlan.done', {
+            formKey,
+            recordId,
+            durationMs: Date.now() - utilisationStartedAt,
+            utilisationsApplied: Number(utilisationResult.utilisationsApplied || 0) || 0,
+            utilisationsReleased: Number(utilisationResult.utilisationsReleased || 0) || 0
+          });
         }
-        debugLog('saveSubmission.submitEffects.done', {
-          formKey,
-          recordId: savedRecordId || null,
-          durationMs: Date.now() - submitEffectsStartedAt,
-          configured: Number(submitEffectsResult.meta?.configured || 0) || 0,
-          executed: Number(submitEffectsResult.meta?.executed || 0) || 0,
-          created: Number(submitEffectsResult.meta?.created || 0) || 0,
-          updated: Number(submitEffectsResult.meta?.updated || 0) || 0
-        });
+        const operation = (result.meta?.operation || '').toString().trim().toLowerCase();
+        if (operation === 'noop') {
+          return result;
+        }
+        const savedRecordId = (result.meta?.id || (formObject as any).id || '').toString().trim();
+        const skipSubmitEffectsRaw = (savePayload as any).__ckSkipSubmitEffects;
+        const skipSubmitEffects =
+          skipSubmitEffectsRaw === true ||
+          skipSubmitEffectsRaw === 'true' ||
+          skipSubmitEffectsRaw === '1' ||
+          skipSubmitEffectsRaw === 1;
+        if (!skipSubmitEffects) {
+          const submitEffectsStartedAt = Date.now();
+          const submitEffectsResult = this.applyFollowupSubmitEffects({
+            form,
+            questions,
+            formKey,
+            formObject: savePayload,
+            saveResult: result,
+            refreshMode: 'revisionOnly'
+          });
+          if (!submitEffectsResult.success) {
+            return {
+              success: false,
+              message: submitEffectsResult.message || result.message,
+              meta: {
+                ...(result.meta || {}),
+                submitEffects: submitEffectsResult.meta || undefined,
+                sourceSaved: true
+              }
+            };
+          }
+          if (submitEffectsResult.meta) {
+            result.meta = {
+              ...(result.meta || {}),
+              submitEffects: submitEffectsResult.meta
+            };
+          }
+          debugLog('saveSubmission.submitEffects.done', {
+            formKey,
+            recordId: savedRecordId || null,
+            durationMs: Date.now() - submitEffectsStartedAt,
+            configured: Number(submitEffectsResult.meta?.configured || 0) || 0,
+            executed: Number(submitEffectsResult.meta?.executed || 0) || 0,
+            created: Number(submitEffectsResult.meta?.created || 0) || 0,
+            updated: Number(submitEffectsResult.meta?.updated || 0) || 0
+          });
+        }
+        const refreshMode = this.resolveSaveSubmissionRefreshMode(savePayload, result);
+        if (refreshMode !== 'none') {
+          this.refreshMutationCaches(form, questions, 'saveSubmissionWithId', refreshMode);
+        }
       }
-      const refreshMode = this.resolveSaveSubmissionRefreshMode(savePayload, result);
-      if (refreshMode !== 'none') {
-        this.refreshMutationCaches(form, questions, 'saveSubmissionWithId', refreshMode);
-      }
+      return result;
+    };
+
+    if (mutationPlan.utilisationPlan) {
+      return this.withDocumentTransactionLock('saveSubmissionWithId.utilisationPlan', runSave);
     }
-    return result;
+    return runSave();
   }
 
   private saveSubmissionRecordWithRetry(args: {

@@ -1837,7 +1837,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
             "formKey": "Config: Leftover Bank",
             "mode": "options",
             "statusFieldId": "LEFTOVER_STATUS",
-            "statusAllowList": ["available"],
+            "statusAllowList": ["available", "used"],
             "prefetchOnHome": true
           }
         }
@@ -2993,13 +2993,13 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
    Utilisation-backed bank flow:
    - Use a shared bank form such as `Config: Leftover Bank` for the current authoritative availability. The quantity field on each bank row is the available quantity.
    - Add a dedicated internal form such as `Config: Leftover Utilisation` to track `active` and `released` utilisations per source row.
-   - Keep the UI read path on the bank datasource only; do not query the utilisation form just to render availability.
+   - Keep the UI read path on the bank datasource only; do not query the utilisation form just to render availability. If the bank record status moves to `used` when the available quantity reaches zero, include both `available` and `used` in the selector datasource `statusAllowList`; use `sourceRows.includeWhen` to hide fully used rows unless the current record already has an active selection for that bank row.
    - Write utilisation changes through one atomic server endpoint. Selecting a bank item immediately subtracts quantity from the bank row, and editing or clearing that usage gives quantity back to the bank row.
    - For guided leftover-selection steps that should avoid per-keystroke utilisation writes, set `utilisation.commitMode: "step"` on the datasource-row config. The app updates availability locally first, then live-syncs one batched step utilisation plan on valid selection edits and quantity blur, replacing stale utilisations in the managed step scopes.
    - If a step should only enter with a fresh datasource fetch and should not queue advance-time utilisation sync when the user taps `Next`, set `navigation.backgroundUtilisationSyncOnAdvance: false` on that step.
    - If a later guided step reads shared bank that can still be changing because another step just edited utilisation-managed output rows, set `dataSourceBootstrap.waitForGuidedUtilisationSync: true` on that step's line-group target.
    - If the step reads shared bank that can be created or updated by follow-up actions still running in the current app session, also set `dataSourceBootstrap.waitForSharedDataMutations: true`.
-   - Optional: define `utilisation.conflictDialog` on the datasource-backed selector config so concurrency conflicts explain what changed and let the user either use the remaining authoritative availability or cancel the attempted change.
+   - Optional: define `utilisation.conflictDialog` on the datasource-backed selector config so concurrency conflicts explain what changed. Immediate utilisation writes can offer choices such as using the remaining authoritative availability or cancelling the attempted change. For `commitMode: "step"` conflicts, the app shows the configured dialog, returns the user to that guided step after acknowledgement, applies the fresh availability snapshot, and deselects rejected rows so dependent cook quantities recalculate.
 
    Example conflict dialog copy:
 
@@ -3013,18 +3013,20 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
        "allowedStatuses": ["available"],
        "conflictDialog": {
          "title": {
-           "en": "Availability changed"
+           "en": ""
          },
          "message": {
-           "en": "{itemLabel} was updated by another user. {availableWithUnit} are available now. Do you want to use the available amount or cancel this change?"
+           "en": "Leftover availability changed before you completed your selection. Your selected quantity is no longer available. Please adjust your selections before continuing"
          },
          "confirmLabel": {
-           "en": "Use available amount"
+           "en": "OK"
          },
          "cancelLabel": {
-           "en": "Cancel action"
+           "en": "Cancel"
          },
-         "showCancel": true
+         "showCancel": false,
+         "showCloseButton": false,
+         "dismissOnBackdrop": false
        }
      }
    }

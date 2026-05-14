@@ -65,7 +65,8 @@ const RUNTIME_RESERVATION_LINE_ITEM_FIELD_IDS = [
   '__ckCurrentRecordUtilisedQuantity',
   '__ckServerCurrentRecordUtilisedQuantity',
   '__ckCurrentUtilisationQuantity',
-  '__ckFreeQuantity'
+  '__ckFreeQuantity',
+  '__ckFreeQuantityAuthoritative'
 ];
 
 const AVAILABILITY_TARGET_FIELD_KEYS = [

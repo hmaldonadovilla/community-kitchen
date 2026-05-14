@@ -122,6 +122,17 @@ describe('quantityConstraints', () => {
     ).toBe(10);
   });
 
+  it('does not let a new over-availability draft become its own editable max', () => {
+    expect(
+      computeOptimisticRowMaxQuantity({
+        remainingQuantity: 1,
+        serverCurrentRecordUtilisedQuantity: 0,
+        localCurrentRecordUtilisedQuantity: 20,
+        currentRowQuantity: 20
+      })
+    ).toBe(1);
+  });
+
   it('keeps editable max at least equal to the current row quantity', () => {
     expect(ensureEditableMaxIncludesCurrentValue(0, 2)).toBe(2);
     expect(ensureEditableMaxIncludesCurrentValue(1, '3')).toBe(3);

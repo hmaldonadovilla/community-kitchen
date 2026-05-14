@@ -1,4 +1,7 @@
-import { buildRejectedStepUtilisationEntries } from '../../../src/web/react/features/utilisations/rejectedUtilisations';
+import {
+  buildRejectedStepUtilisationEntries,
+  resolveRejectedStepUtilisationSourceRow
+} from '../../../src/web/react/features/utilisations/rejectedUtilisations';
 
 describe('buildRejectedStepUtilisationEntries', () => {
   test('returns plan utilisations that match rejected availability snapshots', () => {
@@ -109,5 +112,36 @@ describe('buildRejectedStepUtilisationEntries', () => {
         sourceParentRowId: 'meal-row'
       })
     );
+  });
+});
+
+describe('resolveRejectedStepUtilisationSourceRow', () => {
+  test('uses the cached datasource row when it is still present', () => {
+    const sourceRow = resolveRejectedStepUtilisationSourceRow({
+      config: { rowKeyFieldId: 'LEFTOVER_ID' },
+      entry: {
+        resourceRecordId: 'bank-row-1',
+        resourceItemId: 'LE-1'
+      },
+      cachedItems: [
+        { id: 'bank-row-1', LEFTOVER_ID: 'LE-1', LEFTOVER_PORTIONS: 4 },
+        { id: 'bank-row-2', LEFTOVER_ID: 'LE-2', LEFTOVER_PORTIONS: 8 }
+      ]
+    });
+
+    expect(sourceRow).toEqual({ id: 'bank-row-1', LEFTOVER_ID: 'LE-1', LEFTOVER_PORTIONS: 4 });
+  });
+
+  test('falls back to the conflict payload when the datasource cache is stale or filtered', () => {
+    const sourceRow = resolveRejectedStepUtilisationSourceRow({
+      config: { rowKeyFieldId: 'LEFTOVER_ID' },
+      entry: {
+        resourceRecordId: 'bank-row-1',
+        resourceItemId: 'LE-1'
+      },
+      cachedItems: []
+    });
+
+    expect(sourceRow).toEqual({ id: 'bank-row-1', LEFTOVER_ID: 'LE-1' });
   });
 });

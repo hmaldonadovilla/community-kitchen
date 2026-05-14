@@ -148,6 +148,7 @@ describe('submission payload compaction', () => {
             __ckCurrentRecordUtilisedQuantity: 2,
             __ckServerCurrentRecordUtilisedQuantity: 2,
             __ckFreeQuantity: 3,
+            __ckFreeQuantityAuthoritative: true,
             [CK_RECIPE_INGREDIENTS_DIRTY_KEY]: true
           }
         }
@@ -181,6 +182,7 @@ describe('submission payload compaction', () => {
     expect(draft.values.MEALS[0].__ckCurrentRecordUtilisedQuantity).toBeUndefined();
     expect(draft.values.MEALS[0].__ckServerCurrentRecordUtilisedQuantity).toBeUndefined();
     expect(draft.values.MEALS[0].__ckFreeQuantity).toBeUndefined();
+    expect(draft.values.MEALS[0].__ckFreeQuantityAuthoritative).toBeUndefined();
     expect(submitted.values.MEALS[0].LEFTOVER_QTY_MAX).toBeUndefined();
   });
 
@@ -228,7 +230,8 @@ describe('submission payload compaction', () => {
                 LEFTOVER_USE_PORTIONS: 5,
                 LEFTOVER_PORTIONS_AVAILABLE: 6,
                 LEFTOVER_PORTIONS_MAX: 11,
-                __ckFreeQuantity: 6
+                __ckFreeQuantity: 6,
+                __ckFreeQuantityAuthoritative: true
               }
             }
           ]
@@ -250,7 +253,8 @@ describe('submission payload compaction', () => {
                 LEFTOVER_USE_PORTIONS: 5,
                 LEFTOVER_PORTIONS_AVAILABLE: 7,
                 LEFTOVER_PORTIONS_MAX: 12,
-                __ckFreeQuantity: 7
+                __ckFreeQuantity: 7,
+                __ckFreeQuantityAuthoritative: true
               }
             }
           ]
@@ -272,7 +276,8 @@ describe('submission payload compaction', () => {
                 LEFTOVER_USE_PORTIONS: 6,
                 LEFTOVER_PORTIONS_AVAILABLE: 5,
                 LEFTOVER_PORTIONS_MAX: 11,
-                __ckFreeQuantity: 5
+                __ckFreeQuantity: 5,
+                __ckFreeQuantityAuthoritative: true
               }
             }
           ]

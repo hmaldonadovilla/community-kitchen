@@ -51,4 +51,38 @@ describe('utilisationConflictDialog', () => {
     expect(copy.cancelLabel).toBe('Cancel action');
     expect(copy.showCancel).toBe(true);
   });
+
+  test('supports a single-action conflict notice without a title', () => {
+    const copy = buildUtilisationConflictDialogCopy({
+      language: 'EN',
+      dialog: {
+        title: { en: '' },
+        message: {
+          en: 'Leftover availability changed before you completed your selection. Your selected quantity is no longer available. Please adjust your selections before continuing'
+        },
+        confirmLabel: { en: 'OK' },
+        showCancel: false,
+        showCloseButton: false,
+        dismissOnBackdrop: false
+      },
+      availability: null,
+      requestedQuantity: 4,
+      fallbackTitle: 'Notice',
+      fallbackMessage: 'Fallback message',
+      fallbackConfirmLabel: 'OK',
+      fallbackCancelLabel: 'Cancel'
+    });
+
+    expect(copy).toEqual(
+      expect.objectContaining({
+        title: '',
+        message:
+          'Leftover availability changed before you completed your selection. Your selected quantity is no longer available. Please adjust your selections before continuing',
+        confirmLabel: 'OK',
+        showCancel: false,
+        showCloseButton: false,
+        dismissOnBackdrop: false
+      })
+    );
+  });
 });

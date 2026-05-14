@@ -45,13 +45,17 @@ export function computeOptimisticRowMaxQuantity(args: {
   localCurrentRecordUtilisedQuantity?: unknown;
   currentRowQuantity?: unknown;
 }): number {
-  const optimisticFreeQuantity = computeOptimisticFreeQuantity({
-    remainingQuantity: args.remainingQuantity,
-    serverCurrentRecordUtilisedQuantity: args.serverCurrentRecordUtilisedQuantity,
-    localCurrentRecordUtilisedQuantity: args.localCurrentRecordUtilisedQuantity
-  });
+  const remainingQuantity = toFiniteNumberValue(args.remainingQuantity);
+  const serverCurrentRecordUtilisedQuantity = Math.max(0, toFiniteNumberValue(args.serverCurrentRecordUtilisedQuantity));
+  const localCurrentRecordUtilisedQuantity = Math.max(0, toFiniteNumberValue(args.localCurrentRecordUtilisedQuantity));
   const currentRowQuantity = Math.max(0, toFiniteNumberValue(args.currentRowQuantity));
-  return Math.max(0, optimisticFreeQuantity + currentRowQuantity);
+  return Math.max(
+    0,
+    remainingQuantity +
+      serverCurrentRecordUtilisedQuantity -
+      localCurrentRecordUtilisedQuantity +
+      currentRowQuantity
+  );
 }
 
 export function ensureEditableMaxIncludesCurrentValue(maxValue: unknown, currentValue: unknown): number {

@@ -224,6 +224,18 @@ describe('sourceFirstAllocations helpers', () => {
     ).toBe(1);
   });
 
+  it('uses authoritative server free quantity without recomputing against local utilisation', () => {
+    expect(
+      resolveSourceFirstAllocationDisplayFreeQuantity({
+        remainingQuantity: 0,
+        serverCurrentRecordUtilisedQuantity: 8,
+        localCurrentRecordUtilisedQuantity: 0,
+        explicitFreeQuantity: 3,
+        forceExplicitFreeQuantity: true
+      })
+    ).toBe(3);
+  });
+
   it('keeps server and local current-record utilisations separate during release drafts', () => {
     const decorated = decorateSourceFirstAllocationRowForVisibility({
       row: {

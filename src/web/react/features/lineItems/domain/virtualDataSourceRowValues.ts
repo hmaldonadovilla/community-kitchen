@@ -8,6 +8,48 @@ import {
   toFiniteNumberValue
 } from '../../../app/quantityConstraints';
 
+const hasAuthoritativeFreeQuantity = (row: Record<string, any> | null | undefined): boolean =>
+  row?.__ckFreeQuantityAuthoritative === true;
+
+const computeAvailabilityDisplayFreeQuantity = (args: {
+  sourceRow: Record<string, any>;
+  sourceFieldId: string;
+  serverCurrentRecordUtilisedQuantity: number;
+  localCurrentRecordUtilisedQuantity: number;
+}): number =>
+  resolveSourceFirstAllocationDisplayFreeQuantity({
+    remainingQuantity: args.sourceRow?.[args.sourceFieldId],
+    serverCurrentRecordUtilisedQuantity: args.serverCurrentRecordUtilisedQuantity,
+    localCurrentRecordUtilisedQuantity: args.localCurrentRecordUtilisedQuantity,
+    explicitFreeQuantity: args.sourceRow?.__ckFreeQuantity,
+    allowExplicitFreeQuantity: hasAvailabilityValue(args.sourceRow, args.sourceFieldId),
+    forceExplicitFreeQuantity: hasAuthoritativeFreeQuantity(args.sourceRow)
+  });
+
+const computeAvailabilityEditableMaxQuantity = (args: {
+  sourceRow: Record<string, any>;
+  sourceFieldId: string;
+  serverCurrentRecordUtilisedQuantity: number;
+  localCurrentRecordUtilisedQuantity: number;
+  currentRowQuantity: number;
+}): number => {
+  if (hasAuthoritativeFreeQuantity(args.sourceRow)) {
+    const currentUtilisationQuantity = Object.prototype.hasOwnProperty.call(
+      args.sourceRow,
+      '__ckCurrentUtilisationQuantity'
+    )
+      ? toFiniteNumberValue(args.sourceRow.__ckCurrentUtilisationQuantity)
+      : args.currentRowQuantity;
+    return Math.max(0, toFiniteNumberValue(args.sourceRow.__ckFreeQuantity) + currentUtilisationQuantity);
+  }
+  return computeOptimisticRowMaxQuantity({
+    remainingQuantity: args.sourceRow?.[args.sourceFieldId],
+    serverCurrentRecordUtilisedQuantity: args.serverCurrentRecordUtilisedQuantity,
+    localCurrentRecordUtilisedQuantity: args.localCurrentRecordUtilisedQuantity,
+    currentRowQuantity: args.currentRowQuantity
+  });
+};
+
 export const resolveServerCurrentRecordUtilisedQuantityFromRow = (
   row: Record<string, any> | null | undefined,
   fallbackCurrentRecordUtilisedQuantity: unknown
@@ -109,20 +151,17 @@ export const buildVirtualDataSourceRowValuesAction = (args: {
   const resolvedQuantityMaxFieldId = targetMaxQuantityFieldId || targetQuantityFieldId;
   const resolvedQuantityDisplayFieldId = targetMaxQuantityFieldId ? targetQuantityFieldId : '';
   const resolvedQuantityFreeValue = sourceQuantityFieldId
-    ? resolveSourceFirstAllocationDisplayFreeQuantity({
-        remainingQuantity: (args.sourceRow as any)?.[sourceQuantityFieldId],
+    ? computeAvailabilityDisplayFreeQuantity({
+        sourceRow: args.sourceRow,
+        sourceFieldId: sourceQuantityFieldId,
         serverCurrentRecordUtilisedQuantity,
-        localCurrentRecordUtilisedQuantity,
-        explicitFreeQuantity: (args.sourceRow as any)?.__ckFreeQuantity,
-        allowExplicitFreeQuantity: hasAvailabilityValue(
-          args.sourceRow,
-          sourceQuantityFieldId
-        )
+        localCurrentRecordUtilisedQuantity
       })
     : 0;
   if (sourceQuantityFieldId && resolvedQuantityMaxFieldId) {
-    next[resolvedQuantityMaxFieldId] = computeOptimisticRowMaxQuantity({
-      remainingQuantity: (args.sourceRow as any)?.[sourceQuantityFieldId],
+    next[resolvedQuantityMaxFieldId] = computeAvailabilityEditableMaxQuantity({
+      sourceRow: args.sourceRow,
+      sourceFieldId: sourceQuantityFieldId,
       serverCurrentRecordUtilisedQuantity,
       localCurrentRecordUtilisedQuantity,
       currentRowQuantity
@@ -138,20 +177,17 @@ export const buildVirtualDataSourceRowValuesAction = (args: {
   const resolvedPortionsMaxFieldId = targetMaxPortionsFieldId || targetPortionsFieldId;
   const resolvedPortionsDisplayFieldId = targetMaxPortionsFieldId ? targetPortionsFieldId : '';
   const resolvedPortionsFreeValue = sourcePortionsFieldId
-    ? resolveSourceFirstAllocationDisplayFreeQuantity({
-        remainingQuantity: (args.sourceRow as any)?.[sourcePortionsFieldId],
+    ? computeAvailabilityDisplayFreeQuantity({
+        sourceRow: args.sourceRow,
+        sourceFieldId: sourcePortionsFieldId,
         serverCurrentRecordUtilisedQuantity,
-        localCurrentRecordUtilisedQuantity,
-        explicitFreeQuantity: (args.sourceRow as any)?.__ckFreeQuantity,
-        allowExplicitFreeQuantity: hasAvailabilityValue(
-          args.sourceRow,
-          sourcePortionsFieldId
-        )
+        localCurrentRecordUtilisedQuantity
       })
     : 0;
   if (sourcePortionsFieldId && resolvedPortionsMaxFieldId) {
-    next[resolvedPortionsMaxFieldId] = computeOptimisticRowMaxQuantity({
-      remainingQuantity: (args.sourceRow as any)?.[sourcePortionsFieldId],
+    next[resolvedPortionsMaxFieldId] = computeAvailabilityEditableMaxQuantity({
+      sourceRow: args.sourceRow,
+      sourceFieldId: sourcePortionsFieldId,
       serverCurrentRecordUtilisedQuantity,
       localCurrentRecordUtilisedQuantity,
       currentRowQuantity

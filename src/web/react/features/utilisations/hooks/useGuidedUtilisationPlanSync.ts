@@ -21,19 +21,22 @@ import { buildUtilisationFailureMessage } from '../../../components/form/utilisa
 import { applyBankAvailabilitySnapshotsToCachedDataSources } from '../availabilityCache';
 import { resolveUtilisationDisplayLabelFromCachedDataSources } from '../displayLabel';
 import {
-  GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
+  dispatchGuidedStepUtilisationAvailabilityEvent,
+  scheduleGuidedStepUtilisationAvailabilityEvent,
   type GuidedStepUtilisationAvailabilityEventDetail
 } from '../liveSyncEvents';
 import { buildRejectedStepUtilisationEntries } from '../rejectedUtilisations';
 import { issueUtilisationRequestEpoch, shouldApplyUtilisationPlanResponse } from '../utilisationResponsePolicy';
 import {
   buildBankUtilisationPlanFingerprint,
-  buildStepBankUtilisationPlan
+  buildStepBankUtilisationPlan,
+  resolveStepUtilisationConflictDialogConfig
 } from '../stepUtilisationPlan';
 import {
   shouldRefreshDataSourcesAfterUtilisationPlan,
   type GuidedUtilisationSyncFreshness
 } from '../domain/utilisationSyncFreshness';
+import { buildUtilisationConflictDialogCopy } from '../../../components/form/utilisationConflictDialog';
 
 export type GuidedUtilisationSyncOutcome = {
   success: boolean;
@@ -139,6 +142,38 @@ export const useGuidedUtilisationPlanSync = ({
     [definition, formKey, lineItemsRef, utilisationManagedScopesRef]
   );
 
+  const returnToStepAndApplyRejectedAvailability = React.useCallback(
+    (args: {
+      stepId: string;
+      recordId: string;
+      logPrefix: string;
+      availability: BankAvailabilitySnapshot[];
+      rejectedUtilisations: GuidedStepUtilisationAvailabilityEventDetail['rejectedUtilisations'];
+    }): void => {
+      const availability = Array.isArray(args.availability) ? args.availability.filter(Boolean) : [];
+      const rejectedUtilisations = Array.isArray(args.rejectedUtilisations)
+        ? args.rejectedUtilisations.filter(Boolean)
+        : [];
+      if (!availability.length) return;
+      const detail: GuidedStepUtilisationAvailabilityEventDetail = {
+        stepId: args.stepId,
+        recordId: args.recordId,
+        availability,
+        rejectedUtilisations
+      };
+      setRequestedGuidedStepId(args.stepId || null);
+      const scheduled = scheduleGuidedStepUtilisationAvailabilityEvent(detail);
+      logEvent(`${args.logPrefix}.utilisationPlan.rejected.returnToStep`, {
+        stepId: args.stepId,
+        recordId: args.recordId,
+        availability: availability.length,
+        rejectedUtilisations: rejectedUtilisations.length,
+        scheduled
+      });
+    },
+    [logEvent, setRequestedGuidedStepId]
+  );
+
   const resolveCurrentUtilisationRecordId = React.useCallback(
     () =>
       resolveExistingRecordId({
@@ -220,51 +255,64 @@ export const useGuidedUtilisationPlanSync = ({
             updatedDataSourceIds: cacheSync.updatedDataSourceIds,
             rejectedUtilisations: rejectedUtilisations.length
           });
-          if (
-            typeof window !== 'undefined' &&
-            typeof window.dispatchEvent === 'function' &&
-            typeof CustomEvent === 'function'
-          ) {
-            const detail: GuidedStepUtilisationAvailabilityEventDetail = {
-              stepId: args.stepId,
-              recordId: args.recordId,
-              availability,
-              rejectedUtilisations
-            };
-            window.dispatchEvent(
-              new CustomEvent<GuidedStepUtilisationAvailabilityEventDetail>(
-                GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
-                { detail }
-              )
-            );
-          }
         }
         const primaryAvailability =
           availability.length
             ? (availability[0] as BankAvailabilitySnapshot)
             : null;
-        const message = buildUtilisationFailureMessage(
-          resolveUserFacingErrorMessage(
-            utilisationResult,
-            utilisationResult.message ||
-              tSystem('bank.utilisationUpdateFailed', languageRef.current, 'Failed to update the utilisation.')
-          ) || '',
-          tSystem('bank.utilisationUpdateFailed', languageRef.current, 'Failed to update the utilisation.'),
-          tSystem(
-            'bank.utilisationUpdateFailedDetail',
-            languageRef.current,
-            "We couldn't update the utilisation properly. Please try again."
-          ),
-          {
-            availability: primaryAvailability,
-            itemId: primaryAvailability?.resourceItemId,
-            itemLabel: resolveUtilisationDisplayLabelFromCachedDataSources({
-              dataSourceConfigs: guidedDataSourceConfigs,
-              language,
-              availability: primaryAvailability
+        const conflictDialogConfig = utilisationResult.conflict === true
+          ? resolveStepUtilisationConflictDialogConfig({
+              definition,
+              stepId: args.stepId,
+              resourceFormKey: primaryAvailability?.resourceFormKey
             })
-          }
-        );
+          : null;
+        const conflictDialog = utilisationResult.conflict === true
+          ? buildUtilisationConflictDialogCopy({
+              language,
+              dialog: conflictDialogConfig,
+              availability: primaryAvailability,
+              requestedQuantity: Number((args.plan?.utilisations || [])[0]?.quantity) || 0,
+              itemId: primaryAvailability?.resourceItemId,
+              itemLabel: resolveUtilisationDisplayLabelFromCachedDataSources({
+                dataSourceConfigs: guidedDataSourceConfigs,
+                language,
+                availability: primaryAvailability
+              }),
+              fallbackTitle: '',
+              fallbackMessage: tSystem(
+                'bank.utilisationAvailabilityChanged',
+                languageRef.current,
+                'Leftover availability changed before you completed your selection. Your selected quantity is no longer available. Please adjust your selections before continuing'
+              ),
+              fallbackConfirmLabel: tSystem('common.ok', languageRef.current, 'OK'),
+              fallbackCancelLabel: tSystem('common.cancel', languageRef.current, 'Cancel')
+            })
+          : null;
+        const message = conflictDialog
+          ? conflictDialog.message
+          : buildUtilisationFailureMessage(
+              resolveUserFacingErrorMessage(
+                utilisationResult,
+                utilisationResult.message ||
+                  tSystem('bank.utilisationUpdateFailed', languageRef.current, 'Failed to update the utilisation.')
+              ) || '',
+              tSystem('bank.utilisationUpdateFailed', languageRef.current, 'Failed to update the utilisation.'),
+              tSystem(
+                'bank.utilisationUpdateFailedDetail',
+                languageRef.current,
+                "We couldn't update the utilisation properly. Please try again."
+              ),
+              {
+                availability: primaryAvailability,
+                itemId: primaryAvailability?.resourceItemId,
+                itemLabel: resolveUtilisationDisplayLabelFromCachedDataSources({
+                  dataSourceConfigs: guidedDataSourceConfigs,
+                  language,
+                  availability: primaryAvailability
+                })
+              }
+            );
         logEvent(`${args.logPrefix}.utilisationPlan.failed`, {
           stepId: args.stepId,
           recordId: args.recordId,
@@ -273,15 +321,24 @@ export const useGuidedUtilisationPlanSync = ({
         });
         await openConfiguredConfirmDialog({
           dialog: {
-            title: tSystem('common.notice', languageRef.current, 'Notice'),
+            title: conflictDialog ? conflictDialog.title : tSystem('common.notice', languageRef.current, 'Notice'),
             message,
-            confirmLabel: tSystem('common.ok', languageRef.current, 'OK'),
-            showCancel: false,
-            showCloseButton: true,
-            dismissOnBackdrop: true
+            confirmLabel: conflictDialog?.confirmLabel || tSystem('common.ok', languageRef.current, 'OK'),
+            cancelLabel: conflictDialog?.cancelLabel,
+            showCancel: conflictDialog ? conflictDialog.showCancel : false,
+            showCloseButton: conflictDialog ? conflictDialog.showCloseButton : true,
+            dismissOnBackdrop: conflictDialog ? conflictDialog.dismissOnBackdrop : true,
+            primaryAction: conflictDialog?.primaryAction
           },
           kind: `${args.dialogKind}.utilisationPlan`,
           refId: args.stepId
+        });
+        returnToStepAndApplyRejectedAvailability({
+          stepId: args.stepId,
+          recordId: args.recordId,
+          logPrefix: args.logPrefix,
+          availability,
+          rejectedUtilisations
         });
         return { success: false, message, applied: true };
       }
@@ -352,23 +409,13 @@ export const useGuidedUtilisationPlanSync = ({
           retryDelaysMs: [0, 1500]
         });
       }
-      if (
-        availability.length &&
-        typeof window !== 'undefined' &&
-        typeof window.dispatchEvent === 'function' &&
-        typeof CustomEvent === 'function'
-      ) {
+      if (availability.length) {
         const detail: GuidedStepUtilisationAvailabilityEventDetail = {
           stepId: args.stepId,
           recordId: args.recordId,
           availability
         };
-        window.dispatchEvent(
-          new CustomEvent<GuidedStepUtilisationAvailabilityEventDetail>(
-            GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
-            { detail }
-          )
-        );
+        dispatchGuidedStepUtilisationAvailabilityEvent(detail);
       }
       utilisationManagedScopesRef.current = {
         recordId: args.recordId,
@@ -391,7 +438,9 @@ export const useGuidedUtilisationPlanSync = ({
     [
       applySuccessfulSubmissionState,
       getCurrentKnownClientDataVersion,
+      returnToStepAndApplyRejectedAvailability,
       guidedDataSourceConfigs,
+      definition,
       language,
       languageRef,
       logEvent,
@@ -495,49 +544,62 @@ export const useGuidedUtilisationPlanSync = ({
             updatedDataSourceIds: cacheSync.updatedDataSourceIds,
             rejectedUtilisations: rejectedUtilisations.length
           });
-          if (
-            typeof window !== 'undefined' &&
-            typeof window.dispatchEvent === 'function' &&
-            typeof CustomEvent === 'function'
-          ) {
-            const detail: GuidedStepUtilisationAvailabilityEventDetail = {
-              stepId: args.stepId,
-              recordId: args.recordId,
-              availability,
-              rejectedUtilisations
-            };
-            window.dispatchEvent(
-              new CustomEvent<GuidedStepUtilisationAvailabilityEventDetail>(
-                GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
-                { detail }
-              )
-            );
-          }
         }
         const primaryAvailability = availability.length
           ? (availability[0] as BankAvailabilitySnapshot)
           : null;
-        const message = buildUtilisationFailureMessage(
-          resolveUserFacingErrorMessage(
-            err,
-            tSystem('bank.utilisationUpdateFailed', languageRef.current, 'Failed to update the utilisation.')
-          ) || '',
-          tSystem('bank.utilisationUpdateFailed', languageRef.current, 'Failed to update the utilisation.'),
-          tSystem(
-            'bank.utilisationUpdateFailedDetail',
-            languageRef.current,
-            "We couldn't update the utilisation properly. Please try again."
-          ),
-          {
-            availability: primaryAvailability,
-            itemId: primaryAvailability?.resourceItemId,
-            itemLabel: resolveUtilisationDisplayLabelFromCachedDataSources({
-              dataSourceConfigs: guidedDataSourceConfigs,
-              language,
-              availability: primaryAvailability
+        const conflictDialogConfig = (err as any)?.conflict === true
+          ? resolveStepUtilisationConflictDialogConfig({
+              definition,
+              stepId: args.stepId,
+              resourceFormKey: primaryAvailability?.resourceFormKey
             })
-          }
-        );
+          : null;
+        const conflictDialog = (err as any)?.conflict === true
+          ? buildUtilisationConflictDialogCopy({
+              language,
+              dialog: conflictDialogConfig,
+              availability: primaryAvailability,
+              requestedQuantity: Number((utilisationPlan?.utilisations || [])[0]?.quantity) || 0,
+              itemId: primaryAvailability?.resourceItemId,
+              itemLabel: resolveUtilisationDisplayLabelFromCachedDataSources({
+                dataSourceConfigs: guidedDataSourceConfigs,
+                language,
+                availability: primaryAvailability
+              }),
+              fallbackTitle: '',
+              fallbackMessage: tSystem(
+                'bank.utilisationAvailabilityChanged',
+                languageRef.current,
+                'Leftover availability changed before you completed your selection. Your selected quantity is no longer available. Please adjust your selections before continuing'
+              ),
+              fallbackConfirmLabel: tSystem('common.ok', languageRef.current, 'OK'),
+              fallbackCancelLabel: tSystem('common.cancel', languageRef.current, 'Cancel')
+            })
+          : null;
+        const message = conflictDialog
+          ? conflictDialog.message
+          : buildUtilisationFailureMessage(
+              resolveUserFacingErrorMessage(
+                err,
+                tSystem('bank.utilisationUpdateFailed', languageRef.current, 'Failed to update the utilisation.')
+              ) || '',
+              tSystem('bank.utilisationUpdateFailed', languageRef.current, 'Failed to update the utilisation.'),
+              tSystem(
+                'bank.utilisationUpdateFailedDetail',
+                languageRef.current,
+                "We couldn't update the utilisation properly. Please try again."
+              ),
+              {
+                availability: primaryAvailability,
+                itemId: primaryAvailability?.resourceItemId,
+                itemLabel: resolveUtilisationDisplayLabelFromCachedDataSources({
+                  dataSourceConfigs: guidedDataSourceConfigs,
+                  language,
+                  availability: primaryAvailability
+                })
+              }
+            );
         logEvent(`${args.logPrefix}.utilisationPlan.exception`, {
           stepId: args.stepId,
           recordId: args.recordId,
@@ -545,15 +607,24 @@ export const useGuidedUtilisationPlanSync = ({
         });
         await openConfiguredConfirmDialog({
           dialog: {
-            title: tSystem('common.notice', languageRef.current, 'Notice'),
+            title: conflictDialog ? conflictDialog.title : tSystem('common.notice', languageRef.current, 'Notice'),
             message,
-            confirmLabel: tSystem('common.ok', languageRef.current, 'OK'),
-            showCancel: false,
-            showCloseButton: true,
-            dismissOnBackdrop: true
+            confirmLabel: conflictDialog?.confirmLabel || tSystem('common.ok', languageRef.current, 'OK'),
+            cancelLabel: conflictDialog?.cancelLabel,
+            showCancel: conflictDialog ? conflictDialog.showCancel : false,
+            showCloseButton: conflictDialog ? conflictDialog.showCloseButton : true,
+            dismissOnBackdrop: conflictDialog ? conflictDialog.dismissOnBackdrop : true,
+            primaryAction: conflictDialog?.primaryAction
           },
           kind: `${args.dialogKind}.utilisationPlan`,
           refId: args.stepId
+        });
+        returnToStepAndApplyRejectedAvailability({
+          stepId: args.stepId,
+          recordId: args.recordId,
+          logPrefix: args.logPrefix,
+          availability,
+          rejectedUtilisations
         });
         return { success: false, message, applied: true };
       }
@@ -562,10 +633,12 @@ export const useGuidedUtilisationPlanSync = ({
       adoptGuidedStepUtilisationPlanResult,
       getCurrentKnownClientDataVersion,
       guidedDataSourceConfigs,
+      definition,
       language,
       languageRef,
       logEvent,
       openConfiguredConfirmDialog,
+      returnToStepAndApplyRejectedAvailability,
       utilisationSyncEpochRef,
       resolveGuidedStepUtilisationPlan,
       resolveLogMessage,
