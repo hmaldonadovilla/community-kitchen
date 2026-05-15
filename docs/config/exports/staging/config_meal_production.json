@@ -99,11 +99,26 @@
             "DIETARY_APPLICABILITY": {
               "op": "lookupSetIntersection",
               "collection": {
-                "op": "filterCollection",
-                "collectionPath": "row.MP_INGREDIENTS_LI",
-                "pickFields": [
-                  "ING"
-                ]
+                "op": "ifPresent",
+                "path": "parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY",
+                "then": {
+                  "op": "filterCollection",
+                  "collectionPath": "parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
+                  "when": {
+                    "fieldId": "ING_SELECTED",
+                    "equals": true
+                  },
+                  "pickFields": [
+                    "ING"
+                  ]
+                },
+                "else": {
+                  "op": "filterCollection",
+                  "collectionPath": "row.MP_INGREDIENTS_LI",
+                  "pickFields": [
+                    "ING"
+                  ]
+                }
               },
               "itemFieldId": "ING",
               "lookupFormKey": "Config: Ingredients Management",
@@ -132,20 +147,44 @@
             "LEFTOVER_SOURCE_RECORD_ID": "{{source.id}}",
             "LEFTOVER_SOURCE_ROW_ID": "{{lineItem.rowId}}",
             "LEFTOVER_INGREDIENTS_LI": {
-              "op": "scaleCollection",
-              "collectionPath": "row.MP_INGREDIENTS_LI",
-              "pickFields": [
-                "ING",
-                "QTY",
-                "UNIT",
-                "CAT",
-                "ALLERGEN"
-              ],
-              "scaleNumericFields": [
-                "QTY"
-              ],
-              "multiplierPath": "parent.MP_LEFTOVER_PORTIONS_CAPTURE",
-              "divisorPath": "row.PREP_QTY"
+              "op": "ifPresent",
+              "path": "parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY",
+              "then": {
+                "op": "scaleCollection",
+                "collectionPath": "parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
+                "when": {
+                  "fieldId": "ING_SELECTED",
+                  "equals": true
+                },
+                "pickFields": [
+                  "ING",
+                  "QTY",
+                  "UNIT",
+                  "CAT",
+                  "ALLERGEN"
+                ],
+                "scaleNumericFields": [
+                  "QTY"
+                ],
+                "multiplierPath": "parent.MP_LEFTOVER_PORTIONS_CAPTURE",
+                "divisorPath": "row.PREP_QTY"
+              },
+              "else": {
+                "op": "scaleCollection",
+                "collectionPath": "row.MP_INGREDIENTS_LI",
+                "pickFields": [
+                  "ING",
+                  "QTY",
+                  "UNIT",
+                  "CAT",
+                  "ALLERGEN"
+                ],
+                "scaleNumericFields": [
+                  "QTY"
+                ],
+                "multiplierPath": "parent.MP_LEFTOVER_PORTIONS_CAPTURE",
+                "divisorPath": "row.PREP_QTY"
+              }
             },
             "LEFTOVER_STORAGE": "{{parent.MP_LEFTOVER_STORAGE_CAPTURE}}"
           }
@@ -6520,7 +6559,7 @@
       "listView": false,
       "ui": {
         "helperText": {
-          "en": "You can upload up to 10 photos only."
+          "en": "Upload up to 10 photos max 10 Mb each"
         },
         "helperPlacement": "belowLabel"
       },
@@ -6690,7 +6729,7 @@
       "listView": false,
       "ui": {
         "helperText": {
-          "en": "You can upload up to 10 photos only."
+          "en": "Upload up to 10 photos max 10 Mb each"
         },
         "helperPlacement": "belowLabel"
       },
@@ -10010,7 +10049,7 @@
         "listView": false,
         "ui": {
           "helperText": {
-            "en": "You can upload up to 10 photos only."
+            "en": "Upload up to 10 photos max 10 Mb each"
           },
           "helperPlacement": "belowLabel"
         },
@@ -10180,7 +10219,7 @@
         "listView": false,
         "ui": {
           "helperText": {
-            "en": "You can upload up to 10 photos only."
+            "en": "Upload up to 10 photos max 10 Mb each"
           },
           "helperPlacement": "belowLabel"
         },
@@ -10986,11 +11025,26 @@
             "DIETARY_APPLICABILITY": {
               "op": "lookupSetIntersection",
               "collection": {
-                "op": "filterCollection",
-                "collectionPath": "row.MP_INGREDIENTS_LI",
-                "pickFields": [
-                  "ING"
-                ]
+                "op": "ifPresent",
+                "path": "parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY",
+                "then": {
+                  "op": "filterCollection",
+                  "collectionPath": "parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
+                  "when": {
+                    "fieldId": "ING_SELECTED",
+                    "equals": true
+                  },
+                  "pickFields": [
+                    "ING"
+                  ]
+                },
+                "else": {
+                  "op": "filterCollection",
+                  "collectionPath": "row.MP_INGREDIENTS_LI",
+                  "pickFields": [
+                    "ING"
+                  ]
+                }
               },
               "itemFieldId": "ING",
               "lookupFormKey": "Config: Ingredients Management",
@@ -11019,20 +11073,44 @@
             "LEFTOVER_SOURCE_RECORD_ID": "{{source.id}}",
             "LEFTOVER_SOURCE_ROW_ID": "{{lineItem.rowId}}",
             "LEFTOVER_INGREDIENTS_LI": {
-              "op": "scaleCollection",
-              "collectionPath": "row.MP_INGREDIENTS_LI",
-              "pickFields": [
-                "ING",
-                "QTY",
-                "UNIT",
-                "CAT",
-                "ALLERGEN"
-              ],
-              "scaleNumericFields": [
-                "QTY"
-              ],
-              "multiplierPath": "parent.MP_LEFTOVER_PORTIONS_CAPTURE",
-              "divisorPath": "row.PREP_QTY"
+              "op": "ifPresent",
+              "path": "parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY",
+              "then": {
+                "op": "scaleCollection",
+                "collectionPath": "parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_LI",
+                "when": {
+                  "fieldId": "ING_SELECTED",
+                  "equals": true
+                },
+                "pickFields": [
+                  "ING",
+                  "QTY",
+                  "UNIT",
+                  "CAT",
+                  "ALLERGEN"
+                ],
+                "scaleNumericFields": [
+                  "QTY"
+                ],
+                "multiplierPath": "parent.MP_LEFTOVER_PORTIONS_CAPTURE",
+                "divisorPath": "row.PREP_QTY"
+              },
+              "else": {
+                "op": "scaleCollection",
+                "collectionPath": "row.MP_INGREDIENTS_LI",
+                "pickFields": [
+                  "ING",
+                  "QTY",
+                  "UNIT",
+                  "CAT",
+                  "ALLERGEN"
+                ],
+                "scaleNumericFields": [
+                  "QTY"
+                ],
+                "multiplierPath": "parent.MP_LEFTOVER_PORTIONS_CAPTURE",
+                "divisorPath": "row.PREP_QTY"
+              }
             },
             "LEFTOVER_STORAGE": "{{parent.MP_LEFTOVER_STORAGE_CAPTURE}}"
           }

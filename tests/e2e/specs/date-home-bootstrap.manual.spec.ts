@@ -1,6 +1,7 @@
 import { expect, test, type Frame, type Page } from 'playwright/test';
 
 import { buildFormUrl, e2eEnv } from '../fixtures/env';
+import { displayDate, today } from '../helpers/dates';
 import { applyMobileThrottling } from '../helpers/throttling';
 
 async function waitForFormFrame(page: Page, titleText: string, timeoutMs = 90_000): Promise<Frame> {
@@ -32,26 +33,11 @@ async function openFormHome(page: Page, formKey: string, titleText: string): Pro
   return waitForFormFrame(page, titleText);
 }
 
-function currentLocalIsoDate(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = `${now.getMonth() + 1}`.padStart(2, '0');
-  const day = `${now.getDate()}`.padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
-function currentLocalDisplayDate(): string {
-  const now = new Date();
-  const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${weekdays[now.getDay()]}, ${`${now.getDate()}`.padStart(2, '0')}-${months[now.getMonth()]}-${now.getFullYear()}`;
-}
-
 test.describe('Date-mode home bootstrap', () => {
   test('@smoke meal production home bootstraps the configured search date', async ({ page }) => {
     const frame = await openFormHome(page, 'Config: Meal Production', 'Meal Production');
-    const expectedIsoDate = currentLocalIsoDate();
-    const expectedDisplayDate = currentLocalDisplayDate();
+    const expectedIsoDate = today();
+    const expectedDisplayDate = displayDate(expectedIsoDate);
 
     await expect(frame.locator('input[aria-label="Filter by date"]')).toHaveValue(expectedIsoDate);
     await expect(frame.getByText(`${expectedDisplayDate} Meal Productions`)).toBeVisible({ timeout: 60_000 });

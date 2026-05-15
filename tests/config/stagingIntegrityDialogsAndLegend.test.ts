@@ -58,6 +58,16 @@ describe('staging integrity dialogs and list legend config', () => {
     });
   });
 
+  test('meal production photo upload helpers include photo count and size limits', () => {
+    const cfg = readConfig('config_meal_production.json');
+    ['ING_EVD', 'TEMP_EVD'].forEach(id => {
+      expect(findQuestion(cfg.questions || [], id)?.ui?.helperText?.en).toBe('Upload up to 10 photos max 10 Mb each');
+      expect(findQuestion(cfg.definition?.questions || [], id)?.ui?.helperText?.en).toBe(
+        'Upload up to 10 photos max 10 Mb each'
+      );
+    });
+  });
+
   test('recipes list legend keeps required action icons and valid layout config', () => {
     const cfg = readConfig('config_recipes.json');
 
@@ -887,9 +897,22 @@ describe('staging integrity dialogs and list legend config', () => {
         expect.objectContaining({
           op: 'lookupSetIntersection',
           collection: expect.objectContaining({
-            op: 'filterCollection',
-            collectionPath: 'row.MP_INGREDIENTS_LI',
-            pickFields: ['ING']
+            op: 'ifPresent',
+            path: 'parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY',
+            then: expect.objectContaining({
+              op: 'filterCollection',
+              collectionPath: 'parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_LI',
+              when: {
+                fieldId: 'ING_SELECTED',
+                equals: true
+              },
+              pickFields: ['ING']
+            }),
+            else: expect.objectContaining({
+              op: 'filterCollection',
+              collectionPath: 'row.MP_INGREDIENTS_LI',
+              pickFields: ['ING']
+            })
           }),
           itemFieldId: 'ING',
           lookupFormKey: 'Config: Ingredients Management',
@@ -913,12 +936,28 @@ describe('staging integrity dialogs and list legend config', () => {
       );
       expect(entireDishEffect?.values?.LEFTOVER_INGREDIENTS_LI).toEqual(
         expect.objectContaining({
-          op: 'scaleCollection',
-          collectionPath: 'row.MP_INGREDIENTS_LI',
-          pickFields: ['ING', 'QTY', 'UNIT', 'CAT', 'ALLERGEN'],
-          scaleNumericFields: ['QTY'],
-          multiplierPath: 'parent.MP_LEFTOVER_PORTIONS_CAPTURE',
-          divisorPath: 'row.PREP_QTY'
+          op: 'ifPresent',
+          path: 'parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY',
+          then: expect.objectContaining({
+            op: 'scaleCollection',
+            collectionPath: 'parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_LI',
+            when: {
+              fieldId: 'ING_SELECTED',
+              equals: true
+            },
+            pickFields: ['ING', 'QTY', 'UNIT', 'CAT', 'ALLERGEN'],
+            scaleNumericFields: ['QTY'],
+            multiplierPath: 'parent.MP_LEFTOVER_PORTIONS_CAPTURE',
+            divisorPath: 'row.PREP_QTY'
+          }),
+          else: expect.objectContaining({
+            op: 'scaleCollection',
+            collectionPath: 'row.MP_INGREDIENTS_LI',
+            pickFields: ['ING', 'QTY', 'UNIT', 'CAT', 'ALLERGEN'],
+            scaleNumericFields: ['QTY'],
+            multiplierPath: 'parent.MP_LEFTOVER_PORTIONS_CAPTURE',
+            divisorPath: 'row.PREP_QTY'
+          })
         })
       );
       const partialDishEffect = followupEffects.find((entry: any) => entry?.id === 'captureProducedLeftovers');

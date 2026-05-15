@@ -805,19 +805,48 @@ describe('meal production leftover selection config', () => {
 
     expect(target?.values?.DIETARY_APPLICABILITY?.collection).toEqual(
       expect.objectContaining({
-        op: 'filterCollection',
-        collectionPath: 'row.MP_INGREDIENTS_LI',
-        pickFields: ['ING']
+        op: 'ifPresent',
+        path: 'parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY',
+        then: expect.objectContaining({
+          op: 'filterCollection',
+          collectionPath: 'parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_LI',
+          when: {
+            fieldId: 'ING_SELECTED',
+            equals: true
+          },
+          pickFields: ['ING']
+        }),
+        else: expect.objectContaining({
+          op: 'filterCollection',
+          collectionPath: 'row.MP_INGREDIENTS_LI',
+          pickFields: ['ING']
+        })
       })
     );
     expect(target?.values?.LEFTOVER_INGREDIENTS_LI).toEqual(
       expect.objectContaining({
-        op: 'scaleCollection',
-        collectionPath: 'row.MP_INGREDIENTS_LI',
-        pickFields: ['ING', 'QTY', 'UNIT', 'CAT', 'ALLERGEN'],
-        scaleNumericFields: ['QTY'],
-        multiplierPath: 'parent.MP_LEFTOVER_PORTIONS_CAPTURE',
-        divisorPath: 'row.PREP_QTY'
+        op: 'ifPresent',
+        path: 'parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY',
+        then: expect.objectContaining({
+          op: 'scaleCollection',
+          collectionPath: 'parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_LI',
+          when: {
+            fieldId: 'ING_SELECTED',
+            equals: true
+          },
+          pickFields: ['ING', 'QTY', 'UNIT', 'CAT', 'ALLERGEN'],
+          scaleNumericFields: ['QTY'],
+          multiplierPath: 'parent.MP_LEFTOVER_PORTIONS_CAPTURE',
+          divisorPath: 'row.PREP_QTY'
+        }),
+        else: expect.objectContaining({
+          op: 'scaleCollection',
+          collectionPath: 'row.MP_INGREDIENTS_LI',
+          pickFields: ['ING', 'QTY', 'UNIT', 'CAT', 'ALLERGEN'],
+          scaleNumericFields: ['QTY'],
+          multiplierPath: 'parent.MP_LEFTOVER_PORTIONS_CAPTURE',
+          divisorPath: 'row.PREP_QTY'
+        })
       })
     );
   });

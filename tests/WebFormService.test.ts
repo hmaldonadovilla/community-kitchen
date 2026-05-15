@@ -2359,7 +2359,8 @@ describe('WebFormService', () => {
           targetFormKey: bankFormKey,
           values: expect.objectContaining({
             LEFTOVER_ID: 'LE-1',
-            LEFTOVER_RECIPE: 'Renamed curry & fish'
+            LEFTOVER_RECIPE: 'Renamed curry & fish',
+            LEFTOVER_INGREDIENTS_LI: [{ ING: 'Salt', QTY: 1, UNIT: 'kg', CAT: 'Herbs', ALLERGEN: 'None' }]
           })
         }),
         expect.objectContaining({
@@ -2399,7 +2400,6 @@ describe('WebFormService', () => {
     expect(entireDishRow.LEFTOVER_SOURCE_FORM_KEY).toBe(mealProductionFormKey);
     expect(entireDishRow.LEFTOVER_SOURCE_RECORD_ID).toBe('MP-CLOSE-1');
     expect(entireDishRow.LEFTOVER_SOURCE_ROW_ID).toBe('COOK-1');
-    expect((entireDishRow.LEFTOVER_INGREDIENTS_LI || '').toString()).toBeTruthy();
     expect((entireDishRow.LEFTOVER_ID || '').toString()).toBe('LE-1');
 
     expect(partialDish).toBeDefined();
@@ -2421,7 +2421,7 @@ describe('WebFormService', () => {
     expect((partialDishRow.LEFTOVER_ID || '').toString()).toBe('LP-1');
   });
 
-  test('saveSubmissionWithId scales produced leftover ingredients from the Cook row only', () => {
+  test('saveSubmissionWithId scales selected produced leftover ingredients', () => {
     const mealProductionFormKey = 'Config: Test Meal Production Combined Leftovers';
     const bankFormKey = 'Config: Combined Leftover Bank';
     const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
@@ -2456,12 +2456,28 @@ describe('WebFormService', () => {
             LEFTOVER_SOURCE_RECORD_ID: '{{source.id}}',
             LEFTOVER_SOURCE_ROW_ID: '{{lineItem.rowId}}',
             LEFTOVER_INGREDIENTS_LI: {
-              op: 'scaleCollection',
-              collectionPath: 'row.MP_INGREDIENTS_LI',
-              pickFields: ['ING', 'QTY', 'UNIT', 'CAT', 'ALLERGEN'],
-              scaleNumericFields: ['QTY'],
-              multiplierPath: 'parent.MP_LEFTOVER_PORTIONS_CAPTURE',
-              divisorPath: 'row.PREP_QTY'
+              op: 'ifPresent',
+              path: 'parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY',
+              then: {
+                op: 'scaleCollection',
+                collectionPath: 'parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_LI',
+                when: {
+                  fieldId: 'ING_SELECTED',
+                  equals: true
+                },
+                pickFields: ['ING', 'QTY', 'UNIT', 'CAT', 'ALLERGEN'],
+                scaleNumericFields: ['QTY'],
+                multiplierPath: 'parent.MP_LEFTOVER_PORTIONS_CAPTURE',
+                divisorPath: 'row.PREP_QTY'
+              },
+              else: {
+                op: 'scaleCollection',
+                collectionPath: 'row.MP_INGREDIENTS_LI',
+                pickFields: ['ING', 'QTY', 'UNIT', 'CAT', 'ALLERGEN'],
+                scaleNumericFields: ['QTY'],
+                multiplierPath: 'parent.MP_LEFTOVER_PORTIONS_CAPTURE',
+                divisorPath: 'row.PREP_QTY'
+              }
             }
           }
         }
@@ -2516,6 +2532,11 @@ describe('WebFormService', () => {
         __ckRowId: 'MEAL-1',
         MEAL_TYPE: 'Dinner',
         MP_LEFTOVER_PORTIONS_CAPTURE: 3,
+        MP_LEFTOVER_INGREDIENTS_CAPTURE_READY: '1',
+        MP_LEFTOVER_INGREDIENTS_CAPTURE_LI: [
+          { ING_SELECTED: true, ING: 'Couscous', QTY: 8, UNIT: 'kg', CAT: 'Dry carbohydrates', ALLERGEN: 'Gluten' },
+          { ING_SELECTED: false, ING: 'Carrot', QTY: 4, UNIT: 'kg', CAT: 'Vegetables', ALLERGEN: 'None' }
+        ],
         MP_TYPE_LI: [
           {
             __ckRowId: 'COOK-1',
@@ -2577,8 +2598,7 @@ describe('WebFormService', () => {
     expect(savedBank?.values?.LEFTOVER_SOURCE_RECORD_ID).toBe('MP-COMBINED-1');
     expect(savedBank?.values?.LEFTOVER_SOURCE_ROW_ID).toBe('COOK-1');
     expect(savedBank?.values?.LEFTOVER_INGREDIENTS_LI).toEqual([
-      { ING: 'Couscous', QTY: 2, UNIT: 'kg', CAT: 'Dry carbohydrates', ALLERGEN: 'Gluten' },
-      { ING: 'Carrot', QTY: 1, UNIT: 'kg', CAT: 'Vegetables', ALLERGEN: 'None' }
+      { ING: 'Couscous', QTY: 2, UNIT: 'kg', CAT: 'Dry carbohydrates', ALLERGEN: 'Gluten' }
     ]);
   });
 

@@ -1879,7 +1879,12 @@ describe('Cloud Run API server', () => {
   });
 
   test('blocks updateRecord dependency guards through Sheets-backed RPC', async () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    const today = [
+      now.getFullYear(),
+      String(now.getMonth() + 1).padStart(2, '0'),
+      String(now.getDate()).padStart(2, '0')
+    ].join('-');
     const recipeQuestions = [
       { id: 'QFTD5RD2EM', type: 'TEXT', qEn: 'Recipe name', status: 'Active' },
       {

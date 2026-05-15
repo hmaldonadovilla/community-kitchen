@@ -238,4 +238,56 @@ describe('Cloud Run SubmitEffectsRepository', () => {
       { ING: 'Carrot', QTY: 1, UNIT: 'kg', CAT: 'Vegetables', ALLERGEN: 'None' }
     ]);
   });
+
+  test('ifPresent scaleCollection keeps only selected leftover capture ingredients', async () => {
+    const repository = new SubmitEffectsRepository({});
+    const result = await repository.resolveComputedValue(
+      {
+        op: 'ifPresent',
+        path: 'parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_READY',
+        then: {
+          op: 'scaleCollection',
+          collectionPath: 'parent.MP_LEFTOVER_INGREDIENTS_CAPTURE_LI',
+          when: {
+            fieldId: 'ING_SELECTED',
+            equals: true
+          },
+          pickFields: ['ING', 'QTY', 'UNIT', 'CAT', 'ALLERGEN'],
+          scaleNumericFields: ['QTY'],
+          multiplierPath: 'parent.MP_LEFTOVER_PORTIONS_CAPTURE',
+          divisorPath: 'row.PREP_QTY'
+        },
+        else: {
+          op: 'scaleCollection',
+          collectionPath: 'row.MP_INGREDIENTS_LI',
+          pickFields: ['ING', 'QTY', 'UNIT', 'CAT', 'ALLERGEN'],
+          scaleNumericFields: ['QTY'],
+          multiplierPath: 'parent.MP_LEFTOVER_PORTIONS_CAPTURE',
+          divisorPath: 'row.PREP_QTY'
+        }
+      },
+      {
+        parent: {
+          MP_LEFTOVER_PORTIONS_CAPTURE: 3,
+          MP_LEFTOVER_INGREDIENTS_CAPTURE_READY: '1',
+          MP_LEFTOVER_INGREDIENTS_CAPTURE_LI: [
+            { ING_SELECTED: true, ING: 'Couscous', QTY: 8, UNIT: 'kg', CAT: 'Dry carbohydrates', ALLERGEN: 'Gluten' },
+            { ING_SELECTED: false, ING: 'Carrot', QTY: 4, UNIT: 'kg', CAT: 'Vegetables', ALLERGEN: 'None' }
+          ]
+        },
+        row: {
+          PREP_TYPE: 'Cook',
+          PREP_QTY: 12,
+          MP_INGREDIENTS_LI: [
+            { ING: 'Couscous', QTY: 8, UNIT: 'kg', CAT: 'Dry carbohydrates', ALLERGEN: 'Gluten' },
+            { ING: 'Carrot', QTY: 4, UNIT: 'kg', CAT: 'Vegetables', ALLERGEN: 'None' }
+          ]
+        }
+      }
+    );
+
+    expect(result).toEqual([
+      { ING: 'Couscous', QTY: 2, UNIT: 'kg', CAT: 'Dry carbohydrates', ALLERGEN: 'Gluten' }
+    ]);
+  });
 });
