@@ -2,7 +2,6 @@ import { QuestionConfig, LineItemGroupConfig } from '../../../types';
 import type { DataSourceService } from '../dataSources';
 import { normalizeText, slugifyPlaceholder } from './utils';
 import { replaceLineItemPlaceholders } from './lineItemPlaceholders';
-import { resolveSubgroupKey } from './utils';
 
 type SubGroupConfig = LineItemGroupConfig;
 
@@ -273,5 +272,4 @@ export const applyOrderBy = (args: {
   enriched.sort(cmp);
   return enriched.map(e => e.row);
 };
-
 

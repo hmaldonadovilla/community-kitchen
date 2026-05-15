@@ -5,7 +5,7 @@ export class ConfigValidator {
    * Validates configuration and returns error messages if any
    * @returns Array of error messages, empty if validation passes
    */
-  static validate(questions: QuestionConfig[], sheetName: string): string[] {
+  static validate(questions: QuestionConfig[], _sheetName: string): string[] {
     const errors: string[] = [];
 
     // Check for duplicate question IDs (stable keys)

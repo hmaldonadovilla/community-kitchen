@@ -61,7 +61,7 @@ description: Development Rules
 - `src/web/react/App.tsx` is the app shell only. It may compose hooks/components and wire high-level callbacks, but new record lifecycle, dialog, transport, dedup, report, upload, cache, navigation, or status-transition logic must live in focused hooks or helpers.
 - App-level hooks and shell helpers belong under `src/web/react/components/app/` or a more specific `src/web/react/features/<feature>/hooks/` folder when the concern is feature-owned.
 - `src/web/react/components/FormView.tsx` is the form orchestration shell only. New guided-step, overlay, validation, upload, blur, autosave-hold, or section/group logic must be extracted into feature hooks, components, or domain helpers.
-- `src/web/react/components/form/LineItemGroupQuestion.tsx` is the line-item orchestration shell only. New row rendering, row-flow rendering, table rendering, source-first rendering, upload rendering, subgroup rendering, overlay-open rendering, compact-row logic, reservation derivation, or row mutation rules must live under `src/web/react/features/lineItems/`, `src/web/react/features/uploads/`, `src/web/react/features/reservations/`, `src/web/react/features/steps/`, or another focused feature folder.
+- `src/web/react/components/form/LineItemGroupQuestion.tsx` is the line-item orchestration shell only. New row rendering, row-flow rendering, table rendering, source-first rendering, upload rendering, subgroup rendering, overlay-open rendering, compact-row logic, availability/utilisation derivation, or row mutation rules must live under `src/web/react/features/lineItems/`, `src/web/react/features/uploads/`, `src/web/react/features/utilisations/`, `src/web/react/features/steps/`, or another focused feature folder.
 - `src/web/react/components/` is for shared, low-level, feature-neutral UI components. Feature-specific components must not be added there.
 - `src/web/react/features/<feature>/components/` contains React rendering components that receive resolved values and callbacks. Components in this folder should not own persistence, transport, or cross-feature business rules.
 - `src/web/react/features/<feature>/hooks/` contains React state machines and orchestration for a feature. Hooks may coordinate effects and call injected services, but should delegate pure decisions to domain helpers.
@@ -89,6 +89,9 @@ description: Development Rules
 
 ### Legacy touch rule
 
+- Do not keep unused or legacy code paths after replacing behavior. Remove stale helpers, flags, aliases, comments, tests, docs, and configuration in the same slice when they are no longer needed.
+- Compatibility code for existing production data must be explicit: name the compatibility reason, keep it isolated behind a focused helper or adapter, cover it with tests, and remove it once the supported data shape no longer requires it.
+- Do not add new fallback branches for superseded terminology or behavior unless they are required to read existing records. If required, keep the external/client-facing language current and confine the older terms to the smallest compatibility boundary.
 - When editing a file that mixes rendering, state, business logic, and IO, first identify the smallest coherent part related to the task that can move to the correct layer.
 - If adding a new condition, projection, parser, formatter, field mapping, row mutation rule, validation rule, transport decision, or status transition, put it in a domain/helper/use-case module and call it from the legacy file.
 - If adding a new visual branch or repeated JSX block, put it in a focused component and inject callbacks/data from the parent.

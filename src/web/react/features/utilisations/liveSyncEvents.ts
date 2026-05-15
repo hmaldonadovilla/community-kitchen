@@ -1,6 +1,6 @@
 import type { BankAvailabilitySnapshot } from '../../../../types';
 
-export const GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT = 'ck:guidedStepUtilisationAvailability';
+export const GUIDED_STEP_UTILISATION_AVAILABILITY_EVENT = 'ck:guidedStepUtilisationAvailability';
 
 export interface GuidedStepRejectedUtilisationDetail {
   sourceParentGroupId?: string;
@@ -80,7 +80,7 @@ export const dispatchGuidedStepUtilisationAvailabilityEvent = (
   }
   window.dispatchEvent(
     new CustomEvent<GuidedStepUtilisationAvailabilityEventDetail>(
-      GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
+      GUIDED_STEP_UTILISATION_AVAILABILITY_EVENT,
       { detail }
     )
   );

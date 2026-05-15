@@ -46,7 +46,7 @@ import {
   toDateInputValue
 } from '../../../components/form/utils';
 import { applyValueMapsToForm, resolveValueMapValue } from '../../../components/form/valueMaps';
-import { resolveFieldLabel, resolveLabel } from '../../../utils/labels';
+import { resolveFieldLabel } from '../../../utils/labels';
 import { isEmptyValue } from '../../../utils/values';
 import { isPrimaryActionLabel } from '../../../app/buttonTone';
 import { applyLineItemGroupOverride } from '../../../app/lineItemTree';
@@ -321,9 +321,6 @@ export const SubgroupOverlayPortal: React.FC<SubgroupOverlayPortalProps> = ({
     )
       .toString()
       .trim();
-    const parentLabel = parentGroup ? resolveLabel(parentGroup, language) : (parsed?.rootGroupId || 'Group');
-    const _breadcrumbText = [parentLabel, subLabel].filter(Boolean).join(' / ');
-
     const isIncludedByRowFilter = (rowValues: Record<string, FieldValue>): boolean => {
       if (!overlayRowFilter) return true;
       const includeWhen = (overlayRowFilter as any)?.includeWhen;

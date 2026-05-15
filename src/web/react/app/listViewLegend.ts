@@ -6,7 +6,6 @@ import type {
   ListViewRuleIcon
 } from '../../types';
 import { resolveLocalizedString } from '../../i18n';
-import { tSystem } from '../../systemStrings';
 
 export type ResolvedListViewLegendItem = {
   icon?: ListViewRuleIcon;
@@ -28,35 +27,7 @@ export const collectListViewRuleIconsUsed = (columns: ListViewColumnConfig[]): L
   return Array.from(icons);
 };
 
-const defaultLegendText = (icon: ListViewRuleIcon, language: LangCode): string => {
-  switch (icon) {
-    case 'warning':
-      return tSystem('list.legend.warning', language, 'Warning');
-    case 'check':
-      return tSystem('list.legend.check', language, 'OK');
-    case 'error':
-      return tSystem('list.legend.error', language, 'Error');
-    case 'info':
-      return tSystem('list.legend.info', language, 'Info');
-    case 'external':
-      return tSystem('list.legend.external', language, 'External link');
-    case 'lock':
-      return tSystem('list.legend.lock', language, 'Locked');
-    case 'edit':
-      return tSystem('list.legend.edit', language, 'Edit');
-    case 'view':
-      return tSystem('list.legend.view', language, 'View');
-    case 'copy':
-      return tSystem('list.legend.copy', language, 'Copy');
-    default:
-      return '';
-  }
-};
-
-const ICON_ORDER: ListViewRuleIcon[] = ['warning', 'error', 'check', 'info', 'external', 'lock', 'edit', 'view', 'copy'];
-
 export const buildListViewLegendItems = (
-  columns: ListViewColumnConfig[],
   configured: ListViewLegendItem[] | undefined,
   language: LangCode
 ): ResolvedListViewLegendItem[] => {
@@ -92,4 +63,3 @@ export const buildListViewLegendItems = (
 
   return out;
 };
-

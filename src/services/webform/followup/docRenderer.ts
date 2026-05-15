@@ -1,4 +1,4 @@
-import { FollowupConfig, FormConfig, QuestionConfig, TemplateIdMap, WebFormSubmission } from '../../../types';
+import { FormConfig, QuestionConfig, TemplateIdMap, WebFormSubmission } from '../../../types';
 import { DataSourceService } from '../dataSources';
 import { debugLog } from '../debug';
 import {

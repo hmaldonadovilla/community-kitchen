@@ -7,8 +7,7 @@ export const TooltipIcon: React.FC<{
   text?: string;
   label?: string;
   triggerText?: string;
-  linkStyle?: boolean;
-}> = ({ text, label, triggerText, linkStyle }) => {
+}> = ({ text, label, triggerText }) => {
   const [hoverOpen, setHoverOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
@@ -155,7 +154,7 @@ export const renderValueWithTooltip = (
   const display = formatFieldValue(value);
   if (!tooltipText) return display;
   if (linkStyle) {
-    return <TooltipIcon text={tooltipText} label={label} triggerText={display} linkStyle />;
+    return <TooltipIcon text={tooltipText} label={label} triggerText={display} />;
   }
   return <TooltipIcon text={tooltipText} label={label} />;
 };
@@ -178,5 +177,4 @@ export const resolveTooltipText = (
   }
   return pick(value);
 };
-
 

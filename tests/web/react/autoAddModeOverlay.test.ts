@@ -1,7 +1,7 @@
 import { reconcileOverlayAutoAddModeGroups, reconcileOverlayAutoAddModeSubgroups } from '../../../src/web/react/app/autoAddModeOverlay';
 import { ROW_SOURCE_AUTO, ROW_SOURCE_KEY, ROW_SELECTION_EFFECT_ID_KEY, buildSubgroupKey } from '../../../src/web/react/app/lineItems';
 
-describe('autoAddMode overlay reconciliation', () => {
+describe('autoAddMode overlay sync', () => {
   it('reconciles openInOverlay group auto rows from controlling field changes without opening overlay', () => {
     const ensureLineOptions = jest.fn();
 

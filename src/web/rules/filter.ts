@@ -477,7 +477,6 @@ export function buildLocalizedOptions(
   const labels = (options as any)[langKey] || options.en || [];
   const baseOpts = options.en || labels;
   const rawIndex = buildRawOptionIndex(options.raw as any[] | undefined);
-  const allowedSet = allowed ? new Set(allowed) : null;
   const values = allowed ? allowed : baseOpts;
   const seen = new Set<string>();
   const items: OptionItem[] = [];

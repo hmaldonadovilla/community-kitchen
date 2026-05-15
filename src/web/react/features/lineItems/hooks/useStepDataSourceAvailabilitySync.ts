@@ -12,14 +12,14 @@ import { isEmptyValue } from '../../../utils/values';
 import {
   consumeGuidedStepUtilisationAvailabilityEvents,
   forgetGuidedStepUtilisationAvailabilityEvent,
-  GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
+  GUIDED_STEP_UTILISATION_AVAILABILITY_EVENT,
   hasHandledGuidedStepUtilisationAvailabilityEvent,
   markGuidedStepUtilisationAvailabilityEventHandled,
   type GuidedStepUtilisationAvailabilityEventDetail
 } from '../../utilisations/liveSyncEvents';
 import { resolveRejectedStepUtilisationSourceRow } from '../../utilisations/rejectedUtilisations';
 
-type UseStepDataSourceAvailabilityReconciliationArgs = {
+type UseStepDataSourceAvailabilitySyncArgs = {
   groupId: string;
   recordId?: string | null;
   currentGuidedStepId?: string | null;
@@ -45,11 +45,11 @@ type UseStepDataSourceAvailabilityReconciliationArgs = {
 };
 
 /**
- * Owner: guided step data-source availability reconciliation.
+ * Owner: guided step data-source availability sync.
  * Handles live availability events, stale allocation cleanup, and rejected
  * utilisation rollback outside the line-item group renderer shell.
  */
-export const useStepDataSourceAvailabilityReconciliation = ({
+export const useStepDataSourceAvailabilitySync = ({
   groupId,
   recordId,
   currentGuidedStepId,
@@ -67,7 +67,7 @@ export const useStepDataSourceAvailabilityReconciliation = ({
   queueStepUtilisationDraftSnapshotSync,
   syncStepDataSourceOutputRow,
   onDiagnostic
-}: UseStepDataSourceAvailabilityReconciliationArgs) => {
+}: UseStepDataSourceAvailabilitySyncArgs) => {
   const rollbackRejectedStepUtilisations = React.useCallback(
     (rejectedUtilisations: GuidedStepUtilisationAvailabilityEventDetail['rejectedUtilisations']): void => {
       const entries = Array.isArray(rejectedUtilisations) ? rejectedUtilisations.filter(Boolean) : [];
@@ -367,7 +367,7 @@ export const useStepDataSourceAvailabilityReconciliation = ({
       }
     };
     window.addEventListener(
-      GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
+      GUIDED_STEP_UTILISATION_AVAILABILITY_EVENT,
       handleAvailability as EventListener
     );
     const pending = consumeGuidedStepUtilisationAvailabilityEvents(shouldHandleAvailability);
@@ -376,7 +376,7 @@ export const useStepDataSourceAvailabilityReconciliation = ({
     });
     return () => {
       window.removeEventListener(
-        GUIDED_STEP_RESERVATION_AVAILABILITY_EVENT,
+        GUIDED_STEP_UTILISATION_AVAILABILITY_EVENT,
         handleAvailability as EventListener
       );
     };

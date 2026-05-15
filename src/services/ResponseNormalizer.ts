@@ -115,7 +115,7 @@ export class ResponseNormalizer {
     });
     
     // Translate CHOICE and CHECKBOX responses to English
-    this.translateResponses(cleanSheet, destinationTabName, questions);
+    this.translateResponses(cleanSheet, questions);
   }
 
   private getColLetter(colIndex: number): string {
@@ -136,7 +136,7 @@ export class ResponseNormalizer {
    * Translates CHOICE and CHECKBOX responses from FR/NL to EN
    * Can be called independently to re-translate existing responses
    */
-  public translateResponses(cleanSheet: GoogleAppsScript.Spreadsheet.Sheet, destinationTabName: string, questions: QuestionConfig[]): void {
+  public translateResponses(cleanSheet: GoogleAppsScript.Spreadsheet.Sheet, questions: QuestionConfig[]): void {
     const lastRow = cleanSheet.getLastRow();
     if (lastRow < 2) return; // No data to translate
     

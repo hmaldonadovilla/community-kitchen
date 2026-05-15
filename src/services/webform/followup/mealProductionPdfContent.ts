@@ -141,14 +141,6 @@ const parseNumber = (value: any): number | null => {
   return Number.isFinite(num) ? num : null;
 };
 
-const formatPortions = (value: any, fallback = 0): string => {
-  const n = parseNumber(value);
-  if (n !== null) return `${n} portions`;
-  const raw = normalizeText(value);
-  if (raw) return `${raw} portions`;
-  return `${fallback} portions`;
-};
-
 const formatCount = (value: any, fallback = '0'): string => {
   const n = parseNumber(value);
   if (n !== null) {

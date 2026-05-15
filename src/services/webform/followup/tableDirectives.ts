@@ -1,7 +1,4 @@
-import { resolveSubgroupKey, normalizeText, escapeRegExp } from './utils';
-import { LineItemGroupConfig } from '../../../types';
-
-type SubGroupConfig = LineItemGroupConfig;
+import { escapeRegExp } from './utils';
 
 export const extractTableRepeatDirective = (
   table: GoogleAppsScript.Document.Table

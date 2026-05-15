@@ -1147,12 +1147,7 @@ components:
           $ref: '#/components/schemas/LocalizedString'
           description: |
             Message shown when a selected file does not match `allowedExtensions`/`allowedMimeTypes`.
-            Variables: {name}, {ext}, {exts}, {type}, {types}
-        compressFailed:
-          $ref: '#/components/schemas/LocalizedString'
-          description: |
-            Message used when client-side image compression fails (best-effort).
-            Variables: {name}
+            Variables: {name}, {allowedTypes}
 
     FileUploadWarningMessages:
       type: object

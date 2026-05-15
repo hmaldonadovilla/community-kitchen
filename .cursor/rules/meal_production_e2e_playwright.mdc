@@ -50,13 +50,13 @@ Expected result:
 
 ### 2. Leftover bank
 
-- If leftover suggestions are shown, leave them unchanged unless the scenario requires testing reservations.
+- If leftover suggestions are shown, leave them unchanged unless the scenario requires testing utilisation.
 - Click `Next`.
 
 Expected result:
 - Move to `Production`
-- `fetchDataSource(Leftover Inventory Data)` may fire here
-- `applyInventoryReservationPlan` should only fire if there is an actual reservation plan to apply
+- `fetchDataSource(Leftover Bank data)` may fire here
+- `applyBankUtilisationPlan` should only fire if there is an actual utilisation plan to apply
 
 ### 3. Production
 
@@ -96,9 +96,9 @@ Expected result:
 Expected result:
 - Remain blocked until the final report PDF is generated and the report email send call succeeds
 - Move to `Leftovers` only after the record reaches `Final report emailed`
-- `Create report` should not block on a fresh `applyInventoryReservationPlan`, but it must block on report generation/email completion
+- `Create report` should not block on a fresh `applyBankUtilisationPlan`, but it must block on report generation/email completion
 - Expected milestone shape:
-  - pre-actions: reservation reconciliation + direct `SEND_EMAIL`
+  - pre-actions: utilisation sync + direct `SEND_EMAIL`
   - `SEND_EMAIL` generates or reuses the PDF before sending
 
 ### 6. Leftovers
@@ -138,7 +138,7 @@ Avoid:
 
 Expected:
 - one draft save
-- optional leftover inventory datasource refresh
+- optional leftover bank datasource refresh
 
 Watch for:
 - duplicate `saveSubmissionWithId` with identical payloads
@@ -153,7 +153,7 @@ Expected:
 - direct follow-up batch completion
 
 Avoid:
-- blocking `applyInventoryReservationPlan`
+- blocking `applyBankUtilisationPlan`
 - advancing to `Leftovers` after only PDF creation or email queueing
 
 ### Return to list after complete
@@ -201,4 +201,4 @@ const text = await frame.locator('body').innerText();
 - When a flow failure happens, capture:
   - current step label
   - last 10 callback requests
-  - the request body for the failing `saveSubmissionWithId` or `applyInventoryReservationPlan`
+  - the request body for the failing `saveSubmissionWithId` or `applyBankUtilisationPlan`

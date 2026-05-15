@@ -511,16 +511,6 @@ export const applyUploadConstraints = (
   return { items: next, errorMessage: message };
 };
 
-const asScalarString = (raw: unknown): string => {
-  if (raw === undefined || raw === null) return '';
-  if (Array.isArray(raw)) {
-    const first = raw[0];
-    return first === undefined || first === null ? '' : first.toString().trim();
-  }
-  if (typeof raw === 'boolean') return raw ? 'true' : 'false';
-  return raw.toString().trim();
-};
-
 const asListString = (raw: unknown): string => {
   if (raw === undefined || raw === null) return '';
   if (Array.isArray(raw)) {

@@ -1,4 +1,4 @@
-import { FieldValue, LineItemDedupRule, LineItemRowState, OptionFilter, WebFormDefinition, WebQuestionDefinition } from '../../types';
+import { FieldValue, LineItemDedupRule, LineItemRowState, OptionFilter, WebFormDefinition } from '../../types';
 import { LineItemState } from '../types';
 import { toDependencyValue } from '../../core';
 import { computeNonMatchOptionKeys } from '../../rules/filter';
@@ -497,16 +497,6 @@ export const clearAutoIncrementFields = (
   return { values: nextValues, lineItems: nextLineItems };
 };
 
-export const seedSubgroupDefaults = (
-  lineItems: LineItemState,
-  group: WebQuestionDefinition,
-  parentRowId: string
-): LineItemState => {
-  // Intentionally no-op: do not auto-create empty subgroup rows in any mode.
-  // Subgroup rows should only exist when explicitly added (manual or selection effects).
-  return lineItems;
-};
-
 export const buildInitialLineItems = (definition: WebFormDefinition, recordValues?: Record<string, any>): LineItemState => {
   let state: LineItemState = {};
 
@@ -712,10 +702,6 @@ export const buildInitialLineItems = (definition: WebFormDefinition, recordValue
         path: [],
         rawRows: rows,
         legacyParentIdByAnchor
-      });
-
-      parsedRows.forEach(row => {
-        state = seedSubgroupDefaults(state, q, row.id);
       });
 
       state[q.id] = parsedRows;

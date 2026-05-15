@@ -3804,13 +3804,6 @@ export class ConfigSheet {
     };
   }
 
-  private static normalizeValueMap(
-    ss: GoogleAppsScript.Spreadsheet.Spreadsheet,
-    raw: any
-  ): ValueMapConfig | undefined {
-    return this.normalizeValueMapLike(ss, raw);
-  }
-
   private static normalizeDerivedValue(raw: any): DerivedValueConfig | undefined {
     if (!raw || typeof raw !== 'object') return undefined;
     const opRaw = raw.op ? raw.op.toString().trim() : 'addDays';

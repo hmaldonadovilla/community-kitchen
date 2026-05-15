@@ -64,7 +64,7 @@ const cloneRowWithFields = (
     const resolved = resolveCopyProfileValue(raw as FieldValue, rowValues, topValues);
     if (resolved !== undefined) nextRowValues[fieldId] = resolved;
   });
-  // Preserve internal/system row attributes (e.g. __ckRowSource) so addMode="auto" reconciliation
+  // Preserve internal/system row attributes (e.g. __ckRowSource) so addMode="auto" sync
   // can correctly recognize auto-generated rows and avoid duplicate auto-add behavior.
   Object.keys(rowValues || {}).forEach(key => {
     if (!key || !key.startsWith(SYSTEM_ROW_VALUE_PREFIX)) return;

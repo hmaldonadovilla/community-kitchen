@@ -1,4 +1,4 @@
-import { PaginatedResult, WebFormSubmission } from '../../types';
+import { WebFormSubmission } from '../../types';
 import { HeaderColumns } from './types';
 import { debugLog } from './debug';
 
@@ -151,7 +151,7 @@ export class CacheEtagManager {
 
   bumpSheetEtag(
     sheet: GoogleAppsScript.Spreadsheet.Sheet,
-    columns?: HeaderColumns,
+    _columns?: HeaderColumns,
     reason: string = 'bump'
   ): string {
     const next = this.generateEtag();

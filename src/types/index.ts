@@ -1542,7 +1542,6 @@ export interface FileUploadErrorMessages {
   maxFiles?: LocalizedString;
   maxFileSizeMb?: LocalizedString;
   fileType?: LocalizedString;
-  compressFailed?: LocalizedString;
 }
 
 export interface FileUploadWarningMessages {

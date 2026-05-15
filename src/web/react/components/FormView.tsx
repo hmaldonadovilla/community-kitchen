@@ -1,15 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import {
-  computeAllowedOptions,
-  buildLocalizedOptions,
-  mergeOptionStateValue,
   shouldHideField,
-  matchesWhen,
-  computeTotals,
-  loadOptionsFromDataSource,
   optionKey,
-  toDependencyValue,
   toOptionSet
 } from '../../core';
 import { resolveLocalizedString, resolveOptionalLocalizedString } from '../../i18n';
@@ -29,10 +21,8 @@ import {
 } from '../../types';
 import type {
   BankUtilisationPlanScope,
-  LineItemFieldConfig,
   LineItemGroupConfigOverride,
   LineItemOverlaySessionConfig,
-  LineItemOverlayOpenActionConfig,
   OverlayCloseConfirmLike,
   RowFlowActionEffect
 } from '../../../types';

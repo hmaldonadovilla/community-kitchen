@@ -1,4 +1,4 @@
-import React, { MutableRefObject, useCallback, useMemo } from 'react';
+import { MutableRefObject, useCallback, useMemo } from 'react';
 
 import type { FieldValue, LangCode, WebFormDefinition } from '../../../types';
 import type { OptionState } from '../../types';

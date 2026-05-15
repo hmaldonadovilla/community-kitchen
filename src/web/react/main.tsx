@@ -1,6 +1,4 @@
-import React from 'react';
 import { createRoot } from 'react-dom/client';
-import App from './App';
 import { FormConfigExport, WebFormDefinition } from '../types';
 import { fetchFormConfigApi } from './api';
 

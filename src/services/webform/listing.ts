@@ -104,7 +104,7 @@ export class ListingService {
     const dateFilterToRaw = (((sort as any)?.__dateTo ?? '') || '').toString().trim();
     const hasDateFilter = Boolean(dateFilterFieldId && (dateFilterEqualsRaw || dateFilterFromRaw || dateFilterToRaw));
 
-    const { sheet, headers, columns } = this.submissionService.ensureDestination(
+    const { sheet, columns } = this.submissionService.ensureDestination(
       form.destinationTab || `${form.title} Responses`,
       questions
     );

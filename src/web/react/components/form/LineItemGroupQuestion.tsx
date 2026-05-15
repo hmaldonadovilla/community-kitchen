@@ -41,7 +41,7 @@ import { useLineItemSelectionEffectInit } from '../../features/lineItems/hooks/u
 import { useRowFlowActionController } from '../../features/lineItems/hooks/useRowFlowActionController';
 import { useRowFlowGroupOutputState } from '../../features/lineItems/hooks/useRowFlowGroupOutputState';
 import { useRowFlowRuntimeState } from '../../features/lineItems/hooks/useRowFlowRuntimeState';
-import { useStepDataSourceAvailabilityReconciliation } from '../../features/lineItems/hooks/useStepDataSourceAvailabilityReconciliation';
+import { useStepDataSourceAvailabilitySync } from '../../features/lineItems/hooks/useStepDataSourceAvailabilitySync';
 import { useStepDataSourceOutputSync } from '../../features/lineItems/hooks/useStepDataSourceOutputSync';
 import { useStepDataSourceUtilisationDrafts } from '../../features/lineItems/hooks/useStepDataSourceUtilisationDrafts';
 import { useStepDataSourceRowProjection } from '../../features/lineItems/hooks/useStepDataSourceRowProjection';
@@ -510,7 +510,7 @@ export const LineItemGroupQuestion: React.FC<LineItemGroupQuestionProps> = ({
     stepDataSourceDraftsRef
   });
 
-  useStepDataSourceAvailabilityReconciliation({
+  useStepDataSourceAvailabilitySync({
     groupId: q.id,
     recordId,
     currentGuidedStepId,

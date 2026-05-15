@@ -454,7 +454,6 @@ export const validateForm = (args: {
     const ui = (groupCfg as any)?.ui;
     const isProgressive =
       ui?.mode === 'progressive' && Array.isArray(ui?.collapsedFields) && (ui?.collapsedFields || []).length > 0;
-    const expandGate = (ui?.expandGate || 'collapsedFieldsValid') as 'collapsedFieldsValid' | 'always';
     const defaultCollapsed = ui?.defaultCollapsed !== undefined ? !!ui.defaultCollapsed : true;
     const expandGateFields = (((groupCfg as any)?._expandGateFields as any[]) || groupCfg?.fields || []) as any[];
     const fields = (groupCfg?.fields || []) as any[];

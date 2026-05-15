@@ -86,7 +86,7 @@ export class FormBuilder {
       let item: GoogleAppsScript.Forms.Item;
       
       if (existingItem) {
-        this.updateItem(existingItem, q.type, title, q.required, options); // Adjusted call to match updateItem signature
+        this.updateItem(existingItem, title, q.required, options);
         item = existingItem;
       } else {
         item = this.createItem(q.type, title, q.required, options);
@@ -174,7 +174,7 @@ export class FormBuilder {
     return item;
   }
 
-  private updateItem(item: GoogleAppsScript.Forms.Item, type: QuestionType, title: string, required: boolean, options: string[]): void {
+  private updateItem(item: GoogleAppsScript.Forms.Item, title: string, required: boolean, options: string[]): void {
     item.setTitle(title);
     
     if (item.getType() === FormApp.ItemType.TEXT) {

@@ -389,7 +389,7 @@ const expandBlock = (args: {
           orderBy && orderBy.keys.length
             ? applyOrderBy({ rows: scopedRows, orderBy, group, opts: { subConfig: subConfig as any, subToken: targetSubToken } })
             : scopedRows;
-        orderedRows.forEach((row, rowIdx) => {
+        orderedRows.forEach(row => {
           const rendered = replaceLineItemPlaceholders(template, group, row, {
             subGroup: subConfig as any,
             subGroupToken: targetSubToken,
@@ -410,7 +410,7 @@ const expandBlock = (args: {
     const orderedRows = rows.slice();
     const template = stripDirectiveTokens(blockText);
     const out: string[] = [];
-    orderedRows.forEach((row, rowIdx) => {
+    orderedRows.forEach(row => {
       const title = formatTemplateValue(row?.[repeatDirective.fieldId] ?? '');
       const withTitle = replaceRepeatDirectiveToken(template, repeatDirective, title);
       const rendered = replaceLineItemPlaceholders(withTitle, group, row, {

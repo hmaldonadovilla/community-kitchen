@@ -20,7 +20,7 @@ const getExecutionDocumentLockState = (): ExecutionDocumentLockState => {
 };
 
 export const withSharedDocumentLock = <T>(
-  label: string,
+  _label: string,
   timeoutMs: number,
   fn: () => T,
   busyMessage = DOCUMENT_LOCK_BUSY_MESSAGE

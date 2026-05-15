@@ -464,7 +464,6 @@ const ListView: React.FC<ListViewProps> = ({
           });
         } catch (err: any) {
           if (requestId !== activeFetchRef.current) return;
-          const message = resolveUserFacingErrorMessage(err, 'Failed to load records.');
           const logMessage = (err?.message || err?.toString?.() || 'Failed to load records.').toString();
           setPrefetching(false);
           onDiagnostic?.('list.fetch.background.error', { message: logMessage });
@@ -2372,8 +2371,8 @@ const ListView: React.FC<ListViewProps> = ({
       (Array.isArray(definition.listView?.legend) && definition.listView?.legend.length
         ? definition.listView.legend
         : ((definition as any)?.listViewLegend as any[] | undefined)) || [];
-    return buildListViewLegendItems(columnsAll as any, configuredLegend as any, language);
-  }, [columnsAll, definition, language, legendItems]);
+    return buildListViewLegendItems(configuredLegend as any, language);
+  }, [definition, language, legendItems]);
 
   useEffect(() => {
     if (!onDiagnostic || !overlayPresetButton) return;

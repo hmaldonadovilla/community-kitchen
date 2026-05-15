@@ -19,7 +19,6 @@ import {
   resolveLineItemRowLimits,
   ROW_NON_MATCH_OPTIONS_KEY,
   ROW_SOURCE_KEY,
-  seedSubgroupDefaults,
   shouldBlockLineItemRowRemoval
 } from '../../../app/lineItems';
 import { markRecipeIngredientsDirtyForGroupKey } from '../../../app/recipeIngredientsDirty';
@@ -228,19 +227,7 @@ export function useFormLineItemRows({
             }
           }
         }
-        const groupDefForDefaults =
-          !subgroupInfo && groupDef && effectiveConfig
-            ? ({
-                ...(groupDef as any),
-                lineItemConfig: {
-                  ...(effectiveConfig as any),
-                  fields: effectiveConfig.fields || [],
-                  subGroups: effectiveConfig.subGroups || []
-                }
-              } as WebQuestionDefinition)
-            : groupDef;
-        const nextLineItems = groupDefForDefaults ? seedSubgroupDefaults(nextWithRow, groupDefForDefaults, row.id) : nextWithRow;
-        const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, nextLineItems, {
+        const { values: nextValues, lineItems: recomputed } = applyValueMapsToForm(definition, values, nextWithRow, {
           mode: 'init'
         });
         setValues(nextValues);

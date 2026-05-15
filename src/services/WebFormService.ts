@@ -100,18 +100,14 @@ import {
   buildRecordVisibilityContext,
   buildRowVisibilityContext,
   buildTemplateVars,
-  evaluateUpdateRecordDependencyPreview
-  ,
+  evaluateUpdateRecordDependencyPreview,
   resolveTemplateValue
 } from './webform/updateRecordDependencies';
 import { matchesWhenClause } from '../web/rules/visibility';
 import { normalizeToIsoDate } from './webform/followup/utils';
 import { HeaderColumns } from './webform/types';
 import { resolveStatusTransitionValue } from '../domain/statusTransitions';
-import {
-  shiftIsoDate as shiftLifecycleIsoDate,
-  shouldApplyLifecycleStatusDateRule
-} from './webform/lifecycleRules';
+import { shouldApplyLifecycleStatusDateRule } from './webform/lifecycleRules';
 import { isSingleIngredientLeftoverKind } from '../domain/leftoverKinds';
 
 const HOME_BOOTSTRAP_CACHE_TTL_SECONDS = 60 * 60 * 6; // CacheService max TTL
@@ -1708,10 +1704,6 @@ export class WebFormService {
       // ignore
     }
     return normalizeToIsoDate(now) || now.toISOString().slice(0, 10);
-  }
-
-  private shiftIsoDate(iso: string, dayOffset: number): string {
-    return shiftLifecycleIsoDate(iso, dayOffset);
   }
 
   private resolveLifecycleStatusColumn(form: FormConfig, rule: LifecycleRule, columns: HeaderColumns): number | undefined {
@@ -5882,7 +5874,7 @@ export class WebFormService {
     formKey: string
   ): WebFormSubmission {
     const record = this.normalizeTemplateRenderRecord(formObject as any, questions, formKey);
-    this.attachRelatedSubmitEffectRecords(record, questions, formKey);
+    this.attachRelatedSubmitEffectRecords(record, formKey);
     return record;
   }
 
@@ -6009,7 +6001,6 @@ export class WebFormService {
 
   private attachRelatedSubmitEffectRecords(
     record: WebFormSubmission,
-    questions: QuestionConfig[],
     formKey: string
   ): void {
     const sourceRecordId = (record.id || '').toString().trim();
@@ -6329,80 +6320,6 @@ export class WebFormService {
     if (!matchedRows.length) return [];
     const recordsById = this.listing.fetchSubmissionsByRowNumbers(form, questions, matchedRows);
     return Object.values(recordsById || {}).filter((record): record is WebFormSubmission => Boolean(record));
-  }
-
-  private resolveBankRecordForUtilisation(
-    utilisationRecord: WebFormSubmission
-  ): {
-    resourceFormKey: string;
-    resourceRecordId: string;
-    resourceItemId: string;
-    bankRecord: WebFormSubmission | null;
-    healed: boolean;
-  } {
-    const resourceFormKey = this.readRecordFieldString(utilisationRecord, 'RESOURCE_FORM_KEY');
-    const rawResourceRecordId = this.readRecordFieldString(utilisationRecord, 'RESOURCE_RECORD_ID');
-    const resourceItemId = this.readRecordFieldString(utilisationRecord, 'RESOURCE_ITEM_ID');
-    if (!resourceFormKey) {
-      return {
-        resourceFormKey: '',
-        resourceRecordId: rawResourceRecordId,
-        resourceItemId,
-        bankRecord: null,
-        healed: false
-      };
-    }
-
-    const directRecord = rawResourceRecordId ? this.fetchSubmissionById(resourceFormKey, rawResourceRecordId) : null;
-    if (directRecord) {
-      return {
-        resourceFormKey,
-        resourceRecordId: rawResourceRecordId,
-        resourceItemId,
-        bankRecord: directRecord,
-        healed: false
-      };
-    }
-
-    if (!resourceItemId) {
-      return {
-        resourceFormKey,
-        resourceRecordId: rawResourceRecordId,
-        resourceItemId,
-        bankRecord: null,
-        healed: false
-      };
-    }
-
-    const bankContext = this.getFormContextLite(resourceFormKey);
-    const matchedRecords = this.fetchAllSubmissionRecords(bankContext.form, bankContext.questions).filter(record => {
-      const candidateItemId = this.readRecordFieldString(record, 'LEFTOVER_ID');
-      return candidateItemId === resourceItemId;
-    });
-    if (matchedRecords.length !== 1) {
-      return {
-        resourceFormKey,
-        resourceRecordId: rawResourceRecordId,
-        resourceItemId,
-        bankRecord: null,
-        healed: false
-      };
-    }
-
-    const healedRecord = matchedRecords[0];
-    debugLog('bankUtilisation.resolveResourceFallback', {
-      resourceFormKey,
-      resourceRecordId: rawResourceRecordId || null,
-      healedRecordId: healedRecord.id || null,
-      resourceItemId
-    });
-    return {
-      resourceFormKey,
-      resourceRecordId: (healedRecord.id || '').toString().trim(),
-      resourceItemId,
-      bankRecord: healedRecord,
-      healed: true
-    };
   }
 
   private withDocumentTransactionLock<T>(label: string, fn: () => T): T {
@@ -8268,7 +8185,7 @@ export class WebFormService {
       if (!Number.isFinite(rev)) return null;
       if (expectedRev !== undefined && Number.isFinite(expectedRev) && rev !== expectedRev) return null;
       meta = { chunks, rev, cachedAt: (parsed as any).cachedAt };
-    } catch (_) {
+    } catch {
       return null;
     }
     if (!meta) return null;
@@ -8277,7 +8194,7 @@ export class WebFormService {
     let parts: Record<string, string> = {};
     try {
       parts = cache.getAll(keys) || {};
-    } catch (_) {
+    } catch {
       return null;
     }
     let payloadRaw = '';
@@ -8290,7 +8207,7 @@ export class WebFormService {
     try {
       const parsed = JSON.parse(payloadRaw);
       return this.normalizeCachedHomeBootstrap(parsed, expectedRev);
-    } catch (_) {
+    } catch {
       return null;
     }
   }

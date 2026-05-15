@@ -40,12 +40,11 @@ export const useAppActionNotices = (args: {
     ) : null;
 
   const listLegendItems = useMemo(() => {
-    const cols = ((definition.listView?.columns as any) || []) as any[];
     const configuredLegend =
       (Array.isArray(definition.listView?.legend) && definition.listView?.legend.length
         ? definition.listView?.legend
         : ((definition as any)?.listViewLegend as any[] | undefined)) || [];
-    return buildListViewLegendItems(cols as any, configuredLegend as any, language);
+    return buildListViewLegendItems(configuredLegend as any, language);
   }, [definition, language]);
 
   const listLegendColumns = useMemo(() => {

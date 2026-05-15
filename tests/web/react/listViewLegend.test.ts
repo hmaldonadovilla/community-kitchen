@@ -16,19 +16,11 @@ describe('listViewLegend', () => {
   });
 
   it('builds legend items only from configured entries (icons optional)', () => {
-    const columns: any[] = [
-      {
-        type: 'rule',
-        fieldId: 'action',
-        label: { en: 'Action' },
-        cases: [{ text: 'Missing', icon: 'warning' }, { text: 'OK', icon: 'check' }]
-      }
-    ];
     const configured: any[] = [
       { icon: 'warning', pill: { text: { en: 'Draft' }, tone: 'muted' }, text: { en: 'Missing DATE' } },
       { text: { en: 'Click Action to open the record.' } }
     ];
-    const legend = buildListViewLegendItems(columns as any, configured as any, 'EN');
+    const legend = buildListViewLegendItems(configured as any, 'EN');
 
     expect(legend).toEqual([
       { icon: 'warning', text: 'Missing DATE', pill: { text: 'Draft', tone: 'muted' } },
@@ -37,16 +29,6 @@ describe('listViewLegend', () => {
   });
 
   it('does not auto-create a legend when icons are used but legend is not configured', () => {
-    const columns: any[] = [
-      {
-        type: 'rule',
-        fieldId: 'action',
-        label: { en: 'Action' },
-        cases: [{ text: 'Missing', icon: 'warning' }]
-      }
-    ];
-    expect(buildListViewLegendItems(columns as any, undefined, 'EN')).toEqual([]);
+    expect(buildListViewLegendItems(undefined, 'EN')).toEqual([]);
   });
 });
-
-

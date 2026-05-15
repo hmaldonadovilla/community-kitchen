@@ -211,7 +211,6 @@ export class SubmissionService {
     questions: QuestionConfig[],
     dedupRules: DedupRule[]
   ): { success: boolean; message: string; meta: RecordMetadata } {
-    const formKey = (formObject.formKey || (formObject as any).form || '').toString();
     const langValue = Array.isArray((formObject as any).language)
       ? ((formObject as any).language[(formObject as any).language.length - 1] || (formObject as any).language[0])
       : (formObject as any).language;
@@ -1265,7 +1264,7 @@ export class SubmissionService {
             const destLastId = (sheet.getRange(destLastRow, recordIdCol || 1, 1, 1).getValues()[0][0] || '').toString().trim();
             const idxLastId = (idx.sheet.getRange(destLastRow, idx.columns.recordId, 1, 1).getValues()[0][0] || '').toString().trim();
             indexAppearsIncomplete = Boolean(((destTopId && !idxTopId) || (destLastId && !idxLastId)) && destLastRow > 2);
-          } catch (_) {
+          } catch {
             // ignore
           }
           if (indexAppearsIncomplete) throw new Error('Record index appears incomplete; falling back to sheet scan.');

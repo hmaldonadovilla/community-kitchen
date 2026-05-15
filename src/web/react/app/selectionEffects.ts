@@ -15,8 +15,7 @@ import {
   cascadeRemoveLineItemRows,
   parseRowSource,
   parseSubgroupKey,
-  resolveSubgroupKey,
-  seedSubgroupDefaults
+  resolveSubgroupKey
 } from './lineItems';
 import { isLineItemContextSnapshotCurrent } from './lineItemContextSnapshot';
 import { mergeRebuiltAutoRowValues, resolveStableSelectionEffectContextId } from './selectionEffectAutoRows';
@@ -497,7 +496,6 @@ export const runSelectionEffects = (args: {
             effectContextId: meta?.effectContextId
           };
           newRow.values[ROW_ID_KEY] = newRow.id;
-          const subgroupInfo = parseSubgroupKey(targetKey);
           let nextRows: LineItemRowState[] = [];
           let appended = true;
           if (wantsInsertUnderTrigger) {

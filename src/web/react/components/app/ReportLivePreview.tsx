@@ -303,8 +303,7 @@ const LineItemRowCard: React.FC<{
       <div style={{ padding: 12 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
           <tbody>
-            {visibleFields.map((field, fieldIdx) => {
-              const stripe = fieldIdx % 2 === 1;
+            {visibleFields.map(field => {
               const label = resolveFieldLabel(field as any, language, field.id);
               const hideLabel = resolveSummaryHideLabel(field);
               const v = row.values[field.id];
@@ -471,7 +470,7 @@ const LineItemRowCard: React.FC<{
                               </tr>
                             </thead>
                             <tbody>
-                              {childRows.map((cr, crIdx) => (
+                              {childRows.map(cr => (
                                 <tr key={cr.id} style={{ background: 'transparent' }}>
                                   {subFields.map((sf: any) => {
                                     const subCtx = {
