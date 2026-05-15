@@ -2292,9 +2292,6 @@
                             }
                           ]
                         },
-                        "label": {
-                          "en": "Tap “Edit ingredients” to add, adjust, or remove ingredients to match today’s dish. At least one ingredient must remain."
-                        },
                         "closeButtonLabel": {
                           "en": "Back to Production"
                         },
@@ -2390,6 +2387,27 @@
                               "rowActions": {
                                 "editPlacement": "hidden",
                                 "viewPlacement": "hidden"
+                              },
+                              "body": {
+                                "subGroupId": "MP_INGREDIENTS_LI",
+                                "view": {
+                                  "helperText": {
+                                    "en": "Review recipe ingredients for today’s dish. Tap “Edit ingredients” to adjust ingredients if needed."
+                                  }
+                                },
+                                "edit": {
+                                  "helperText": {
+                                    "en": "Adjust ingredients to match today’s dish. Add, update, or remove ingredients as needed. At least one ingredient must remain."
+                                  },
+                                  "saveLabel": {
+                                    "en": "Back to View Recipe"
+                                  },
+                                  "rowSort": {
+                                    "fieldId": "ING",
+                                    "direction": "asc",
+                                    "mode": "text"
+                                  }
+                                }
                               }
                             }
                           },
@@ -5955,11 +5973,25 @@
                       "QTY": "25%",
                       "UNIT": "25%",
                       "__remove": "44px"
+                    },
+                    "helperText": {
+                      "en": "Adjust ingredients to match today’s dish. Add, update, or remove ingredients as needed. At least one ingredient must remain."
+                    },
+                    "saveLabel": {
+                      "en": "Back to View Recipe"
+                    },
+                    "rowSort": {
+                      "fieldId": "ING",
+                      "direction": "asc",
+                      "mode": "text"
                     }
                   },
                   "view": {
                     "mode": "html",
-                    "templateId": "bundle:mp.ing_recipe.html"
+                    "templateId": "bundle:mp.ing_recipe.html",
+                    "helperText": {
+                      "en": "Review recipe ingredients for today’s dish. Tap “Edit ingredients” to adjust ingredients if needed."
+                    }
                   }
                 },
                 "rowActions": {
@@ -6182,27 +6214,32 @@
                   },
                   "showItemPill": false,
                   "openInOverlay": true,
-                  "addButtonPlacement": "top"
+                  "addButtonPlacement": "top",
+                  "rowSort": {
+                    "fieldId": "ING",
+                    "direction": "asc",
+                    "mode": "text"
+                  }
                 },
                 "minRows": 0,
                 "maxRows": 200,
                 "addMode": "overlay",
                 "addOverlay": {
                   "title": {
-                    "en": "Select the ingredient(s) not mentioned in the original recipe that you will use to cook today's dish."
+                    "en": "Add ingredients"
                   },
                   "helperText": {
-                    "en": ""
+                    "en": "Search and select ingredients to adjust today’s dish recipe."
                   },
                   "searchHelperText": {
-                    "en": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom)."
+                    "en": "Enter exact ingredient name (example: tomato, not tom)."
                   },
                   "placeholder": {
                     "en": "Search ingredients"
                   }
                 },
                 "addButtonLabel": {
-                  "en": "Add ingredient"
+                  "en": "Add ingredients"
                 },
                 "anchorFieldId": "ING",
                 "removeGuard": {
@@ -9426,11 +9463,25 @@
                         "QTY": "25%",
                         "UNIT": "25%",
                         "__remove": "44px"
+                      },
+                      "helperText": {
+                        "en": "Adjust ingredients to match today’s dish. Add, update, or remove ingredients as needed. At least one ingredient must remain."
+                      },
+                      "saveLabel": {
+                        "en": "Back to View Recipe"
+                      },
+                      "rowSort": {
+                        "fieldId": "ING",
+                        "direction": "asc",
+                        "mode": "text"
                       }
                     },
                     "view": {
                       "mode": "html",
-                      "templateId": "bundle:mp.ing_recipe.html"
+                      "templateId": "bundle:mp.ing_recipe.html",
+                      "helperText": {
+                        "en": "Review recipe ingredients for today’s dish. Tap “Edit ingredients” to adjust ingredients if needed."
+                      }
                     }
                   },
                   "rowActions": {
@@ -9653,27 +9704,32 @@
                     },
                     "showItemPill": false,
                     "openInOverlay": true,
-                    "addButtonPlacement": "top"
+                    "addButtonPlacement": "top",
+                    "rowSort": {
+                      "fieldId": "ING",
+                      "direction": "asc",
+                      "mode": "text"
+                    }
                   },
                   "minRows": 0,
                   "maxRows": 200,
                   "addMode": "overlay",
                   "addOverlay": {
                     "title": {
-                      "en": "Select the ingredient(s) not mentioned in the original recipe that you will use to cook today's dish."
+                      "en": "Add ingredients"
                     },
                     "helperText": {
-                      "en": ""
+                      "en": "Search and select ingredients to adjust today’s dish recipe."
                     },
                     "searchHelperText": {
-                      "en": "Use exact words to search ingredients by name (example: tomato or tomatoes, not tom)."
+                      "en": "Enter exact ingredient name (example: tomato, not tom)."
                     },
                     "placeholder": {
                       "en": "Search ingredients"
                     }
                   },
                   "addButtonLabel": {
-                    "en": "Add ingredient"
+                    "en": "Add ingredients"
                   },
                   "anchorFieldId": "ING",
                   "removeGuard": {
@@ -11567,6 +11623,16 @@
               "fieldId": "status",
               "equals": "In production"
             }
+          },
+          "contextHeader": {
+            "parts": [
+              {
+                "id": "MP_DISTRIBUTOR",
+                "displayField": "DIST_NAME"
+              },
+              "MP_SERVICE",
+              "MP_PREP_DATE"
+            ]
           }
         },
         {
@@ -12891,9 +12957,6 @@
                             }
                           ]
                         },
-                        "label": {
-                          "en": "Tap “Edit ingredients” to add, adjust, or remove ingredients to match today’s dish. At least one ingredient must remain."
-                        },
                         "closeButtonLabel": {
                           "en": "Back to Production"
                         },
@@ -12989,6 +13052,27 @@
                               "rowActions": {
                                 "editPlacement": "hidden",
                                 "viewPlacement": "hidden"
+                              },
+                              "body": {
+                                "view": {
+                                  "helperText": {
+                                    "en": "Review recipe ingredients for today’s dish. Tap “Edit ingredients” to adjust ingredients if needed."
+                                  }
+                                },
+                                "edit": {
+                                  "helperText": {
+                                    "en": "Adjust ingredients to match today’s dish. Add, update, or remove ingredients as needed. At least one ingredient must remain."
+                                  },
+                                  "saveLabel": {
+                                    "en": "Back to View Recipe"
+                                  },
+                                  "rowSort": {
+                                    "fieldId": "ING",
+                                    "direction": "asc",
+                                    "mode": "text"
+                                  }
+                                },
+                                "subGroupId": "MP_INGREDIENTS_LI"
                               }
                             }
                           },

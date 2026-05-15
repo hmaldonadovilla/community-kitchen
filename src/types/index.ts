@@ -2576,10 +2576,26 @@ export interface LineItemOverlayDetailBodyConfig {
     mode?: 'table';
     tableColumns?: string[];
     tableColumnWidths?: Record<string, string | number>;
+    /**
+     * Optional helper copy shown above the edit body.
+     */
+    helperText?: LocalizedString | string;
+    /**
+     * Optional label for the edit save/return button.
+     */
+    saveLabel?: LocalizedString | string;
+    /**
+     * Optional display-only row order for the edit body table.
+     */
+    rowSort?: LineItemRowSortConfig;
   };
   view?: {
     mode?: 'html';
     templateId: TemplateIdMap;
+    /**
+     * Optional helper copy shown above the view body.
+     */
+    helperText?: LocalizedString | string;
     /**
      * Optional list of tab targets to hide in HTML templates that use data-tab-target/data-tab-panel.
      */

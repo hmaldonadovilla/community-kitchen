@@ -33,6 +33,29 @@ export const FORM_VIEW_STYLES = `
         .ck-guided-context-header::-webkit-scrollbar {
           display: none;
         }
+        .ck-record-reference {
+          font-size: var(--ck-font-label);
+          color: var(--text);
+          font-weight: 600;
+          line-height: 1.35;
+          white-space: normal;
+          overflow-wrap: anywhere;
+        }
+        .ck-helper-frame {
+          width: 100%;
+          margin: 4px 0 0;
+          padding: 8px 10px;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          background: #EAF4FF;
+          color: var(--text);
+          box-sizing: border-box;
+          font-size: var(--ck-font-helper);
+          font-weight: 400;
+          line-height: 1.35;
+          text-align: left;
+          white-space: pre-line;
+        }
         .ck-step-help-text {
           white-space: pre-line;
           margin: 0 0 4px;
@@ -1732,11 +1755,17 @@ export const FORM_VIEW_STYLES = `
         .form-card .ck-line-item-multiadd__helper,
         .webform-overlay .ck-line-item-multiadd__helper {
           margin: 4px 0 0;
-          color: var(--muted);
+          padding: 8px 10px;
+          border: 1px solid var(--border);
+          border-radius: 8px;
+          background: #EAF4FF;
+          color: var(--text);
+          box-sizing: border-box;
           font-size: var(--ck-font-helper);
           font-weight: 400;
           line-height: 1.35;
           text-align: left;
+          white-space: pre-line;
         }
         .ck-line-item-multiadd__feedback,
         .form-card .ck-line-item-multiadd__feedback,
@@ -1762,6 +1791,28 @@ export const FORM_VIEW_STYLES = `
           background: var(--card);
           position: sticky;
           bottom: 0;
+        }
+        .ck-overlay-detail-edit-actions {
+          display: flex;
+          gap: 8px;
+          justify-content: space-between;
+          align-items: center;
+          flex-wrap: wrap;
+          width: 100%;
+        }
+        .ck-overlay-detail-edit-actions__start,
+        .ck-overlay-detail-edit-actions__end {
+          display: flex;
+          gap: 8px;
+          align-items: center;
+          flex-wrap: wrap;
+        }
+        .ck-overlay-detail-edit-actions__start {
+          justify-content: flex-start;
+        }
+        .ck-overlay-detail-edit-actions__end {
+          justify-content: flex-end;
+          margin-left: auto;
         }
         .ck-searchable-select > input {
           width: 100%;

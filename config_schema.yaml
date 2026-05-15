@@ -2126,6 +2126,15 @@ components:
             oneOf:
               - type: string
               - type: number
+        helperText:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional helper copy shown above the edit body.
+        saveLabel:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional label for the edit save/return button.
+        rowSort:
+          $ref: '#/components/schemas/LineItemRowSortConfig'
+          description: Optional display-only row ordering for the edit body table.
       additionalProperties: false
 
     LineItemOverlayDetailBodyViewConfig:
@@ -2137,6 +2146,9 @@ components:
           description: Rendering mode for body view (html template).
         templateId:
           $ref: '#/components/schemas/TemplateIdMap'
+        helperText:
+          $ref: '#/components/schemas/LocalizedString'
+          description: Optional helper copy shown above the view body.
         hideTabTargets:
           type: array
           items:

@@ -74,6 +74,7 @@ interface LineItemGroupOverlayPortalProps {
   lineItemGroupOverlay: LineItemGroupOverlayPortalState;
   definition: WebFormDefinition;
   language: LangCode;
+  recordReference?: string;
   values: Record<string, FieldValue>;
   setValues: React.Dispatch<React.SetStateAction<Record<string, FieldValue>>>;
   valuesRef: React.MutableRefObject<Record<string, FieldValue>>;
@@ -130,6 +131,7 @@ export const LineItemGroupOverlayPortal: React.FC<LineItemGroupOverlayPortalProp
   lineItemGroupOverlay,
   definition,
   language,
+  recordReference,
   values,
   setValues,
   valuesRef,
@@ -232,6 +234,7 @@ export const LineItemGroupOverlayPortal: React.FC<LineItemGroupOverlayPortalProp
     const overlayHeaderLabel = lineItemGroupOverlay.label ? lineItemGroupOverlay.label.toString().trim() : '';
     const overlayContextHeader = lineItemGroupOverlay.contextHeader ? lineItemGroupOverlay.contextHeader.toString().trim() : '';
     const overlayHelperText = lineItemGroupOverlay.helperText ? lineItemGroupOverlay.helperText.toString().trim() : '';
+    const overlayRecordReference = (recordReference || '').toString().trim();
     const overlayHideCloseButton = lineItemGroupOverlay.hideCloseButton === true;
     const overlayCloseButtonLabel =
       lineItemGroupOverlay.closeButtonLabel || tSystem('common.close', language, 'Close');
@@ -367,6 +370,19 @@ export const LineItemGroupOverlayPortal: React.FC<LineItemGroupOverlayPortalProp
     const overlayDetailEditLabel = resolveLocalizedString(overlayDetail?.rowActions?.editLabel, language, 'Edit');
     const overlayDetailViewPlacement = (overlayDetail?.rowActions?.viewPlacement || 'header').toString().trim().toLowerCase();
     const overlayDetailEditPlacement = (overlayDetail?.rowActions?.editPlacement || 'header').toString().trim().toLowerCase();
+    const overlayDetailModeHelperText = overlayDetailSelectionForGroup
+      ? overlayDetailSelectionForGroup.mode === 'edit'
+        ? resolveLocalizedString(overlayDetail?.body?.edit?.helperText, language, '')
+        : overlayDetailSelectionForGroup.mode === 'view'
+          ? resolveLocalizedString(overlayDetail?.body?.view?.helperText, language, '')
+          : ''
+      : '';
+    const overlayHeaderHelperText = (overlayDetailModeHelperText || overlayHelperText || '').toString().trim();
+    const overlayDetailEditSaveLabel = resolveLocalizedString(
+      overlayDetail?.body?.edit?.saveLabel,
+      language,
+      tSystem('common.saveChanges', language, 'Save')
+    );
     const showOverlayDetailViewInHeader =
       overlayDetailCanView && overlayDetailViewPlacement !== 'hidden' && overlayDetailViewPlacement !== 'body';
     const showOverlayDetailEditInHeader = overlayDetailEditPlacement !== 'hidden' && overlayDetailEditPlacement !== 'body';
@@ -649,15 +665,16 @@ export const LineItemGroupOverlayPortal: React.FC<LineItemGroupOverlayPortalProp
               }}
             >
               <div style={{ flex: '1 1 280px', minWidth: 0, padding: '0 8px', overflowWrap: 'anywhere' }}>
+                {overlayRecordReference ? <div className="ck-record-reference">{overlayRecordReference}</div> : null}
                 {overlayHeaderLabel ? (
-                  <div style={{ fontWeight: 600, marginBottom: overlayContextHeader || overlayHelperText ? 6 : 0 }}>
+                  <div style={{ fontWeight: 600, marginTop: overlayRecordReference ? 6 : 0, marginBottom: overlayContextHeader || overlayHeaderHelperText ? 6 : 0 }}>
                     {overlayHeaderLabel}
                   </div>
                 ) : null}
-                {overlayContextHeader ? <div style={{ whiteSpace: 'pre-line' }}>{overlayContextHeader}</div> : null}
-                {overlayHelperText ? (
-                  <div className="muted" style={{ marginTop: overlayContextHeader ? 6 : 0, whiteSpace: 'pre-line' }}>
-                    {overlayHelperText}
+                {overlayContextHeader ? <div style={{ marginTop: !overlayHeaderLabel && overlayRecordReference ? 6 : 0, whiteSpace: 'pre-line' }}>{overlayContextHeader}</div> : null}
+                {overlayHeaderHelperText ? (
+                  <div className="ck-helper-frame" style={{ marginTop: overlayContextHeader || overlayHeaderLabel || overlayRecordReference ? 6 : 0 }}>
+                    {overlayHeaderHelperText}
                   </div>
                 ) : null}
                 <div style={srOnly}>{title}</div>
@@ -1060,7 +1077,8 @@ export const LineItemGroupOverlayPortal: React.FC<LineItemGroupOverlayPortalProp
                             ...((overlayDetailSubConfig as any)?.ui || {}),
                             mode: 'table',
                             tableColumns: Array.isArray(editCfg?.tableColumns) ? editCfg.tableColumns : (overlayDetailSubConfig as any)?.ui?.tableColumns,
-                            tableColumnWidths: editCfg?.tableColumnWidths || (overlayDetailSubConfig as any)?.ui?.tableColumnWidths
+                            tableColumnWidths: editCfg?.tableColumnWidths || (overlayDetailSubConfig as any)?.ui?.tableColumnWidths,
+                            rowSort: editCfg?.rowSort || (overlayDetailSubConfig as any)?.ui?.rowSort
                           }
                         }
                       } as any;
@@ -1115,7 +1133,7 @@ export const LineItemGroupOverlayPortal: React.FC<LineItemGroupOverlayPortalProp
                               disabled={dedupOverlayActionsDisabled}
                               onClick={handleDetailSave}
                             >
-                              {tSystem('common.saveChanges', language, 'Save')}
+                              {overlayDetailEditSaveLabel}
                             </button>
                             <button type="button" style={buttonStyles.secondary} onClick={handleDetailCancel}>
                               {tSystem('common.cancel', language, 'Cancel')}

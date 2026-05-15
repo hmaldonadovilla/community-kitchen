@@ -22,6 +22,7 @@ export const LineSelectOverlay: React.FC<{
   overlay: LineOverlayState;
   setOverlay: React.Dispatch<React.SetStateAction<LineOverlayState>>;
   language: LangCode;
+  recordReference?: string;
   submitting: boolean;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
   onBack?: () => void;
@@ -30,7 +31,7 @@ export const LineSelectOverlay: React.FC<{
     preset?: Record<string, any>,
     options?: { configOverride?: any; rowFilter?: { includeWhen?: any; excludeWhen?: any } | null }
   ) => LineItemAddResult | undefined;
-}> = ({ overlay, setOverlay, language, submitting, onDiagnostic, onBack, addLineItemRowManual }) => {
+}> = ({ overlay, setOverlay, language, recordReference, submitting, onDiagnostic, onBack, addLineItemRowManual }) => {
   const [query, setQuery] = useState('');
   const [dedupMessage, setDedupMessage] = useState('');
   const selectedCount = (overlay.selected || []).length;
@@ -80,6 +81,7 @@ export const LineSelectOverlay: React.FC<{
   const searchHelpId = showSearchHelper ? 'line-select-search-help' : undefined;
   const describedBy = [helpId, searchHelpId].filter(Boolean).join(' ') || undefined;
   const placeholderText = resolvedPlaceholder || tSystem('lineItems.selectLinesSearch', language, 'Search items');
+  const recordReferenceText = (recordReference || '').toString().trim();
 
   return (
     <div
@@ -115,9 +117,14 @@ export const LineSelectOverlay: React.FC<{
         <h3 style={{ marginTop: 0, marginBottom: 12, fontSize: 'var(--ck-font-group-title)', letterSpacing: 0 }}>
           {titleText}
         </h3>
+        {recordReferenceText ? (
+          <div className="ck-record-reference" style={{ marginBottom: 10 }}>
+            {recordReferenceText}
+          </div>
+        ) : null}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {showHelper ? (
-            <div id={helpId} className="muted">
+            <div id={helpId} className="ck-helper-frame">
               {helperText}
             </div>
           ) : null}
@@ -146,7 +153,11 @@ export const LineSelectOverlay: React.FC<{
             style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--border)' }}
           />
           {showSearchHelper ? (
-            <div id={searchHelpId} className="muted">
+            <div
+              id={searchHelpId}
+              className="muted"
+              style={{ fontSize: 'var(--ck-font-helper)', fontWeight: 400, lineHeight: 1.35 }}
+            >
               {searchHelperText}
             </div>
           ) : null}

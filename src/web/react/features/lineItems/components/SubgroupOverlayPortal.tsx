@@ -104,6 +104,7 @@ interface SubgroupOverlayPortalProps {
   resolveSubgroupDefs: (subKey: string) => any;
   definition: WebFormDefinition;
   language: LangCode;
+  recordReference?: string;
   values: Record<string, FieldValue>;
   setValues: React.Dispatch<React.SetStateAction<Record<string, FieldValue>>>;
   valuesRef: React.MutableRefObject<Record<string, FieldValue>>;
@@ -181,6 +182,7 @@ export const SubgroupOverlayPortal: React.FC<SubgroupOverlayPortalProps> = ({
   resolveSubgroupDefs,
   definition,
   language,
+  recordReference,
   values,
   setValues,
   valuesRef,
@@ -295,6 +297,7 @@ export const SubgroupOverlayPortal: React.FC<SubgroupOverlayPortalProps> = ({
     const overlayHeaderLabel = subgroupOverlay.label ? subgroupOverlay.label.toString().trim() : '';
     const overlayContextHeader = subgroupOverlay.contextHeader ? subgroupOverlay.contextHeader.toString().trim() : '';
     const overlayHelperText = subgroupOverlay.helperText ? subgroupOverlay.helperText.toString().trim() : '';
+    const overlayRecordReference = (recordReference || '').toString().trim();
     const overlayHideCloseButton = subgroupOverlay.hideCloseButton === true;
     const overlayCloseButtonLabel =
       subgroupOverlay.closeButtonLabel || tSystem('common.close', language, 'Close');
@@ -381,6 +384,19 @@ export const SubgroupOverlayPortal: React.FC<SubgroupOverlayPortalProps> = ({
     const overlayDetailEditLabel = resolveLocalizedString(overlayDetail?.rowActions?.editLabel, language, 'Edit');
     const overlayDetailViewPlacement = (overlayDetail?.rowActions?.viewPlacement || 'header').toString().trim().toLowerCase();
     const overlayDetailEditPlacement = (overlayDetail?.rowActions?.editPlacement || 'header').toString().trim().toLowerCase();
+    const overlayDetailModeHelperText = overlayDetailSelectionForGroup
+      ? overlayDetailSelectionForGroup.mode === 'edit'
+        ? resolveLocalizedString(overlayDetail?.body?.edit?.helperText, language, '')
+        : overlayDetailSelectionForGroup.mode === 'view'
+          ? resolveLocalizedString(overlayDetail?.body?.view?.helperText, language, '')
+          : ''
+      : '';
+    const overlayHeaderHelperText = (overlayDetailModeHelperText || overlayHelperText || '').toString().trim();
+    const overlayDetailEditSaveLabel = resolveLocalizedString(
+      overlayDetail?.body?.edit?.saveLabel,
+      language,
+      tSystem('common.saveChanges', language, 'Save')
+    );
     const showOverlayDetailViewInHeader =
       overlayDetailCanView && overlayDetailViewPlacement !== 'hidden' && overlayDetailViewPlacement !== 'body';
     const showOverlayDetailEditInHeader = overlayDetailEditPlacement !== 'hidden' && overlayDetailEditPlacement !== 'body';
@@ -735,15 +751,16 @@ export const SubgroupOverlayPortal: React.FC<SubgroupOverlayPortalProps> = ({
               }}
             >
               <div style={{ flex: '1 1 280px', minWidth: 0, padding: '0 8px', overflowWrap: 'anywhere' }}>
+                {overlayRecordReference ? <div className="ck-record-reference">{overlayRecordReference}</div> : null}
                 {!subHideLabel && overlayHeaderLabel ? (
-                  <div style={{ fontWeight: 600, marginBottom: overlayContextHeader || overlayHelperText ? 6 : 0 }}>
+                  <div style={{ fontWeight: 600, marginTop: overlayRecordReference ? 6 : 0, marginBottom: overlayContextHeader || overlayHeaderHelperText ? 6 : 0 }}>
                     {overlayHeaderLabel}
                   </div>
                 ) : null}
-                {overlayContextHeader ? <div style={{ whiteSpace: 'pre-line' }}>{overlayContextHeader}</div> : null}
-                {overlayHelperText ? (
-                  <div className="muted" style={{ marginTop: overlayContextHeader ? 6 : 0, whiteSpace: 'pre-line' }}>
-                    {overlayHelperText}
+                {overlayContextHeader ? <div style={{ marginTop: (!overlayHeaderLabel || subHideLabel) && overlayRecordReference ? 6 : 0, whiteSpace: 'pre-line' }}>{overlayContextHeader}</div> : null}
+                {overlayHeaderHelperText ? (
+                  <div className="ck-helper-frame" style={{ marginTop: overlayContextHeader || (!subHideLabel && overlayHeaderLabel) || overlayRecordReference ? 6 : 0 }}>
+                    {overlayHeaderHelperText}
                   </div>
                 ) : null}
                 <div style={srOnly}>{subLabel}</div>
@@ -1525,6 +1542,7 @@ export const SubgroupOverlayPortal: React.FC<SubgroupOverlayPortalProps> = ({
                           mode: 'table',
                           tableColumns: Array.isArray(editCfg?.tableColumns) ? editCfg.tableColumns : (overlayDetailSubConfig as any)?.ui?.tableColumns,
                           tableColumnWidths: editCfg?.tableColumnWidths || (overlayDetailSubConfig as any)?.ui?.tableColumnWidths,
+                          rowSort: editCfg?.rowSort || (overlayDetailSubConfig as any)?.ui?.rowSort,
                           ...(overlayDetailCanView ? { addButtonPlacement: 'hidden' } : {})
                         }
                       }
@@ -1648,35 +1666,39 @@ export const SubgroupOverlayPortal: React.FC<SubgroupOverlayPortalProps> = ({
                     };
                     return (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                          {canShowDetailAddButton ? (
+                        <div className="ck-overlay-detail-edit-actions">
+                          <div className="ck-overlay-detail-edit-actions__start">
+                            {canShowDetailAddButton ? (
+                              <button
+                                type="button"
+                                style={withDisabled(buttonStyles.primary, detailLocked || detailMaxRowsReached)}
+                                disabled={detailLocked || detailMaxRowsReached}
+                                onClick={openDetailAddOverlay}
+                              >
+                                <PlusIcon />
+                                {resolveLocalizedString(
+                                  detailGroupCfg?.addButtonLabel,
+                                  language,
+                                  tSystem('lineItems.addLines', language, 'Add lines')
+                                )}
+                              </button>
+                            ) : null}
+                          </div>
+                          <div className="ck-overlay-detail-edit-actions__end">
                             <button
                               type="button"
-                              style={withDisabled(buttonStyles.primary, detailLocked || detailMaxRowsReached)}
-                              disabled={detailLocked || detailMaxRowsReached}
-                              onClick={openDetailAddOverlay}
+                              style={withDisabled(buttonStyles.primary, dedupOverlayActionsDisabled)}
+                              disabled={dedupOverlayActionsDisabled}
+                              onClick={handleDetailSave}
                             >
-                              <PlusIcon />
-                              {resolveLocalizedString(
-                                detailGroupCfg?.addButtonLabel,
-                                language,
-                                tSystem('lineItems.addLines', language, 'Add lines')
-                              )}
+                              {overlayDetailEditSaveLabel}
                             </button>
-                          ) : null}
-                          <button
-                            type="button"
-                            style={withDisabled(buttonStyles.primary, dedupOverlayActionsDisabled)}
-                            disabled={dedupOverlayActionsDisabled}
-                            onClick={handleDetailSave}
-                          >
-                            {tSystem('common.saveChanges', language, 'Save')}
-                          </button>
-                          {!overlayDetailCanView ? (
-                            <button type="button" style={buttonStyles.secondary} onClick={handleDetailCancel}>
-                              {tSystem('common.cancel', language, 'Cancel')}
-                            </button>
-                          ) : null}
+                            {!overlayDetailCanView ? (
+                              <button type="button" style={buttonStyles.secondary} onClick={handleDetailCancel}>
+                                {tSystem('common.cancel', language, 'Cancel')}
+                              </button>
+                            ) : null}
+                          </div>
                         </div>
                         <LineItemGroupQuestion
                           key={detailGroupDef.id}

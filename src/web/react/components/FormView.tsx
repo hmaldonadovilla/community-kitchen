@@ -128,6 +128,10 @@ import {
   type GuidedExternalSyncSignal
 } from '../features/steps/domain/guidedExternalSyncSignal';
 import { resolveGuidedStepIdAfterExternalSync } from '../features/steps/domain/resolveGuidedStepAfterExternalSync';
+import {
+  collectGuidedContextHeaderConfig,
+  resolveGuidedContextHeaderValue
+} from '../features/steps/domain/guidedContextHeader';
 import type { GuidedStepsVirtualState } from '../features/steps/domain/resolveVirtualStepField';
 import { resolveGuidedUiStateAction } from '../features/steps/domain/guidedUiState';
 import { useGuidedStepVisibility } from '../features/steps/hooks/useGuidedStepVisibility';
@@ -152,6 +156,7 @@ import { shouldPreserveLineItemDedupError } from '../features/lineItems/domain/l
 import { useFormLineItemRows } from '../features/lineItems/hooks/useFormLineItemRows';
 import { useFormFieldChangeHandlers } from '../features/formState/hooks/useFormFieldChangeHandlers';
 import { useOverlayOpenActions } from '../features/lineItems/hooks/useOverlayOpenActions';
+import { EMPTY_DISPLAY } from '../utils/valueDisplay';
 import {
   buildGuidedUtilisationManagedRowRemovalFingerprint,
   buildGuidedUtilisationManagedRowRemovalScopes,
@@ -5147,6 +5152,33 @@ const FormView: React.FC<FormViewProps> = ({
     return optionState[optionKey(q.id)] || toOptionSet(q);
   };
 
+  const guidedRecordReferenceText = (() => {
+    if (!guidedEnabled || !guidedStepsCfg || !guidedVisibleSteps.length) return '';
+    const stepCfg =
+      (guidedVisibleSteps.find(step => (step?.id || '').toString() === activeGuidedStepId) || guidedVisibleSteps[0]) as any;
+    const { parts, separator } = collectGuidedContextHeaderConfig(stepCfg?.contextHeader);
+    if (!parts.length) return '';
+    const questionById = new Map<string, WebQuestionDefinition>();
+    definition.questions.forEach(question => {
+      if (question?.id) questionById.set(question.id, question);
+    });
+    return parts
+      .map(part => {
+        const question = questionById.get(part.id) || null;
+        const value = resolveGuidedContextHeaderValue({
+          part,
+          question,
+          raw: values[part.id],
+          values,
+          language,
+          optionSet: question ? renderOptions(question) : undefined
+        });
+        return value && value !== EMPTY_DISPLAY ? value : '';
+      })
+      .filter(Boolean)
+      .join(separator || ' | ');
+  })();
+
   const topLevelGroupProgress = useTopLevelGroupAutoCollapse({
     groupSections,
     values,
@@ -5327,6 +5359,7 @@ const FormView: React.FC<FormViewProps> = ({
       resolveSubgroupDefs={resolveSubgroupDefs}
       definition={definition}
       language={language}
+      recordReference={guidedRecordReferenceText}
       values={values}
       setValues={setValues}
       valuesRef={valuesRef}
@@ -5388,6 +5421,7 @@ const FormView: React.FC<FormViewProps> = ({
       lineItemGroupOverlay={lineItemGroupOverlay}
       definition={definition}
       language={language}
+      recordReference={guidedRecordReferenceText}
       values={values}
       setValues={setValues}
       valuesRef={valuesRef}
@@ -5531,6 +5565,7 @@ const FormView: React.FC<FormViewProps> = ({
         overlay={overlay}
         setOverlay={setOverlay}
         language={language}
+        recordReference={guidedRecordReferenceText}
         submitting={submitting}
         onDiagnostic={onDiagnostic}
         onBack={handleLineSelectOverlayBack}

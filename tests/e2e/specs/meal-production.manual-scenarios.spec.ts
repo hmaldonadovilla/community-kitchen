@@ -299,6 +299,65 @@ test.describe('Meal Production manual script scenarios', () => {
       await cleanupMealProductionRecordInFrameBestEffort(frame, lunchKey);
     }
   });
+
+  test('@regression Scenario 12 - recipe ingredient overlay copy and record identity stay visible', async ({ page }) => {
+    test.setTimeout(180_000);
+    const productionDate = today();
+    const orderKey = {
+      customerValue: mealProductionFixtures.customerValues.hub,
+      service: mealProductionFixtures.services.lunch,
+      date: productionDate
+    };
+    const cleanupFrame = await openMealProductionHome(page);
+    await cleanupMealProductionRecordInFrameBestEffort(cleanupFrame, orderKey);
+
+    const frame = await openNewOrderFromPreset(page, mealProductionFixtures.customers.hub);
+
+    try {
+      await setProductionDate(frame, productionDate);
+      await selectService(frame, mealProductionFixtures.services.lunch);
+      await selectCook(frame, mealProductionFixtures.cooks.akkara);
+      await fillFirstOrderedPortions(frame, '15');
+
+      await clickNext(frame);
+      await waitForLoadingToSettle(frame);
+      await clickNext(frame);
+      await waitForLoadingToSettle(frame);
+
+      await selectFirstAvailableRecipes(frame);
+      await openRecipeEditor(frame, 0);
+
+      const recordReference = frame.locator('.ck-record-reference').filter({ hasText: 'HUB' }).filter({ hasText: 'Lunch' }).first();
+      await expect(recordReference).toBeVisible();
+      await expect(
+        frame.getByText('Review recipe ingredients for today’s dish. Tap “Edit ingredients” to adjust ingredients if needed.')
+      ).toBeVisible();
+      await expect(frame.getByRole('button', { name: 'Edit ingredients' })).toBeVisible();
+
+      await frame.getByRole('button', { name: 'Edit ingredients' }).click();
+      await expect(
+        frame.getByText(
+          'Adjust ingredients to match today’s dish. Add, update, or remove ingredients as needed. At least one ingredient must remain.'
+        )
+      ).toBeVisible();
+      await expect(frame.getByRole('button', { name: 'Add ingredients' })).toBeVisible();
+      await expect(frame.getByRole('button', { name: 'Back to View Recipe' })).toBeVisible();
+
+      await frame.getByRole('button', { name: 'Add ingredients' }).click();
+      await expect(frame.getByText('Search and select ingredients to adjust today’s dish recipe.')).toBeVisible();
+      await expect(frame.getByText('Enter exact ingredient name (example: tomato, not tom).')).toBeVisible();
+      await expect(recordReference).toBeVisible();
+      await frame.getByRole('button', { name: 'Back', exact: true }).first().click();
+
+      await frame.getByRole('button', { name: 'Back to View Recipe' }).click();
+      await expect(
+        frame.getByText('Review recipe ingredients for today’s dish. Tap “Edit ingredients” to adjust ingredients if needed.')
+      ).toBeVisible();
+      await frame.getByRole('button', { name: /Back to Production/i }).click();
+    } finally {
+      await cleanupMealProductionRecordInFrameBestEffort(frame, orderKey);
+    }
+  });
   pendingScenario('04', 'leftovers confirmations, label dialog and return to home');
   pendingScenario('05', 'Hub lunch leftover bank assignment and to-cook adjustments');
   pendingScenario('06', 'customer change destructive reset and applicability filtering');
