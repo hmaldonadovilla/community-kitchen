@@ -412,7 +412,7 @@ describe('staging integrity dialogs and list legend config', () => {
         : [];
       const leftoverBankRows = leftoverDataSourceRows.find((entry: any) => entry?.id === 'leftoverBankRows');
       expect(leftoverBankMeals?.helperText?.en).toBe(
-        'Skip this page if not using leftovers.\nTick the box to use leftovers and adjust quantity if needed.\nFor multi-ingredient leftovers, select Combine or Reheat.\nSingle-ingredient leftovers are combined by default.\nTo remove leftovers, adjust quantity or untick the box.\nClick Next and stay on this screen to save your selection otherwise changes may be lost.'
+        'Skip this page if not using leftovers.\nTick the box to use leftovers and adjust quantity if needed.\nFor multi-ingredient leftovers, select Combine or Reheat.\nSingle-ingredient leftovers are combined by default.\nTo remove leftovers, adjust quantity or untick the box.'
       );
       expect(leftoverBankRows?.presentation).toBe('sourceFirstAllocations');
       expect(leftoverBankRows?.presentationWhen).toEqual({

@@ -24,7 +24,7 @@ import { SearchableSelect } from '../../../components/form/SearchableSelect';
 import { HtmlPreview } from '../../../components/app/HtmlPreview';
 import { buildSelectorOptionSet, resolveSelectorHelperText, resolveSelectorLabel, resolveSelectorPlaceholder } from '../../../components/form/lineItemSelectors';
 import { clearLineItemGroupErrors, toDateInputValue, toUploadItems } from '../../../components/form/utils';
-import { buttonStyles, EyeIcon, PencilIcon, PlusIcon, RequiredStar, srOnly, TrashIcon, withDisabled } from '../../../components/form/ui';
+import { buttonStyles, EyeIcon, InlinePencilText, PencilIcon, PlusIcon, RequiredStar, srOnly, TrashIcon, withDisabled } from '../../../components/form/ui';
 import { resolveFieldLabel, resolveLabel } from '../../../utils/labels';
 import { applyValueMapsToForm } from '../../../components/form/valueMaps';
 import { isPrimaryActionLabel } from '../../../app/buttonTone';
@@ -674,7 +674,7 @@ export const LineItemGroupOverlayPortal: React.FC<LineItemGroupOverlayPortalProp
                 {overlayContextHeader ? <div style={{ marginTop: !overlayHeaderLabel && overlayRecordReference ? 6 : 0, whiteSpace: 'pre-line' }}>{overlayContextHeader}</div> : null}
                 {overlayHeaderHelperText ? (
                   <div className="ck-helper-frame" style={{ marginTop: overlayContextHeader || overlayHeaderLabel || overlayRecordReference ? 6 : 0 }}>
-                    {overlayHeaderHelperText}
+                    <InlinePencilText text={overlayHeaderHelperText} />
                   </div>
                 ) : null}
                 <div style={srOnly}>{title}</div>

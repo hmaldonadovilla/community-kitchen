@@ -1017,7 +1017,7 @@
               },
               "fields": [],
               "helperText": {
-                "en": "Skip this page if not using leftovers.\nTick the box to use leftovers and adjust quantity if needed.\nFor multi-ingredient leftovers, select Combine or Reheat.\nSingle-ingredient leftovers are combined by default.\nTo remove leftovers, adjust quantity or untick the box.\nClick Next and stay on this screen to save your selection otherwise changes may be lost."
+                "en": "Skip this page if not using leftovers.\nTick the box to use leftovers and adjust quantity if needed.\nFor multi-ingredient leftovers, select Combine or Reheat.\nSingle-ingredient leftovers are combined by default.\nTo remove leftovers, adjust quantity or untick the box."
               },
               "rows": {
                 "includeWhen": {
@@ -2392,7 +2392,7 @@
                                 "subGroupId": "MP_INGREDIENTS_LI",
                                 "view": {
                                   "helperText": {
-                                    "en": "Review recipe ingredients for today’s dish. Tap “Edit ingredients” to adjust ingredients if needed."
+                                    "en": "Review recipe ingredients for today's dish. Tap ✏️ to adjust ingredients if needed."
                                   }
                                 },
                                 "edit": {
@@ -5990,7 +5990,7 @@
                     "mode": "html",
                     "templateId": "bundle:mp.ing_recipe.html",
                     "helperText": {
-                      "en": "Review recipe ingredients for today’s dish. Tap “Edit ingredients” to adjust ingredients if needed."
+                      "en": "Review recipe ingredients for today's dish. Tap ✏️ to adjust ingredients if needed."
                     }
                   }
                 },
@@ -9480,7 +9480,7 @@
                       "mode": "html",
                       "templateId": "bundle:mp.ing_recipe.html",
                       "helperText": {
-                        "en": "Review recipe ingredients for today’s dish. Tap “Edit ingredients” to adjust ingredients if needed."
+                        "en": "Review recipe ingredients for today's dish. Tap ✏️ to adjust ingredients if needed."
                       }
                     }
                   },
@@ -11682,7 +11682,7 @@
               },
               "fields": [],
               "helperText": {
-                "en": "Skip this page if not using leftovers.\nTick the box to use leftovers and adjust quantity if needed.\nFor multi-ingredient leftovers, select Combine or Reheat.\nSingle-ingredient leftovers are combined by default.\nTo remove leftovers, adjust quantity or untick the box.\nClick Next and stay on this screen to save your selection otherwise changes may be lost."
+                "en": "Skip this page if not using leftovers.\nTick the box to use leftovers and adjust quantity if needed.\nFor multi-ingredient leftovers, select Combine or Reheat.\nSingle-ingredient leftovers are combined by default.\nTo remove leftovers, adjust quantity or untick the box."
               },
               "rows": {
                 "includeWhen": {
@@ -13056,7 +13056,7 @@
                               "body": {
                                 "view": {
                                   "helperText": {
-                                    "en": "Review recipe ingredients for today’s dish. Tap “Edit ingredients” to adjust ingredients if needed."
+                                    "en": "Review recipe ingredients for today's dish. Tap ✏️ to adjust ingredients if needed."
                                   }
                                 },
                                 "edit": {

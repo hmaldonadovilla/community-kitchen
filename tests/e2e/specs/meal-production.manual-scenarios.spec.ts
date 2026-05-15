@@ -329,9 +329,10 @@ test.describe('Meal Production manual script scenarios', () => {
 
       const recordReference = frame.locator('.ck-record-reference').filter({ hasText: 'HUB' }).filter({ hasText: 'Lunch' }).first();
       await expect(recordReference).toBeVisible();
-      await expect(
-        frame.getByText('Review recipe ingredients for today’s dish. Tap “Edit ingredients” to adjust ingredients if needed.')
-      ).toBeVisible();
+      const viewHelperFrame = frame.locator('.ck-helper-frame').filter({ hasText: "Review recipe ingredients for today's dish." }).first();
+      await expect(viewHelperFrame).toBeVisible();
+      await expect(viewHelperFrame).toContainText('Tap to adjust ingredients if needed.');
+      await expect(viewHelperFrame.locator('.ck-inline-pencil-icon svg')).toBeVisible();
       await expect(frame.getByRole('button', { name: 'Edit ingredients' })).toBeVisible();
 
       await frame.getByRole('button', { name: 'Edit ingredients' }).click();
@@ -342,6 +343,26 @@ test.describe('Meal Production manual script scenarios', () => {
       ).toBeVisible();
       await expect(frame.getByRole('button', { name: 'Add ingredients' })).toBeVisible();
       await expect(frame.getByRole('button', { name: 'Back to View Recipe' })).toBeVisible();
+      const editActions = frame.locator('.ck-overlay-detail-edit-actions').first();
+      const editHeader = frame.locator('.ck-overlay-detail-edit-layout .ck-line-item-table thead th').first();
+      await frame.locator('[data-overlay-scroll-container="true"]').first().evaluate(element => {
+        element.scrollTop = 160;
+        element.dispatchEvent(new Event('scroll', { bubbles: true }));
+      });
+      await expect
+        .poll(
+          async () => {
+            const actionsBox = await editActions.boundingBox();
+            const headerBox = await editHeader.boundingBox();
+            if (!actionsBox || !headerBox) return false;
+            return headerBox.y >= actionsBox.y + actionsBox.height - 1;
+          },
+          {
+            timeout: 10_000,
+            message: 'Expected ingredient table header to remain visible below sticky edit actions.'
+          }
+        )
+        .toBe(true);
 
       await frame.getByRole('button', { name: 'Add ingredients' }).click();
       await expect(frame.getByText('Search and select ingredients to adjust today’s dish recipe.')).toBeVisible();
@@ -350,9 +371,8 @@ test.describe('Meal Production manual script scenarios', () => {
       await frame.getByRole('button', { name: 'Back', exact: true }).first().click();
 
       await frame.getByRole('button', { name: 'Back to View Recipe' }).click();
-      await expect(
-        frame.getByText('Review recipe ingredients for today’s dish. Tap “Edit ingredients” to adjust ingredients if needed.')
-      ).toBeVisible();
+      await expect(viewHelperFrame).toBeVisible();
+      await expect(viewHelperFrame.locator('.ck-inline-pencil-icon svg')).toBeVisible();
       await frame.getByRole('button', { name: /Back to Production/i }).click();
     } finally {
       await cleanupMealProductionRecordInFrameBestEffort(frame, orderKey);

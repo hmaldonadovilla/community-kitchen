@@ -56,6 +56,25 @@ export const FORM_VIEW_STYLES = `
           text-align: left;
           white-space: pre-line;
         }
+        .ck-inline-pencil-icon {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 1.15em;
+          height: 1.15em;
+          margin: 0 0.1em;
+          vertical-align: -0.16em;
+          color: var(--accent);
+        }
+        .ck-inline-pencil-icon svg {
+          width: 100%;
+          height: 100%;
+          stroke: currentColor;
+          stroke-width: 2.2;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+          fill: none;
+        }
         .ck-step-help-text {
           white-space: pre-line;
           margin: 0 0 4px;
@@ -1793,12 +1812,28 @@ export const FORM_VIEW_STYLES = `
           bottom: 0;
         }
         .ck-overlay-detail-edit-actions {
+          position: sticky;
+          top: 0;
+          z-index: 6;
           display: flex;
           gap: 8px;
           justify-content: space-between;
           align-items: center;
           flex-wrap: wrap;
           width: 100%;
+          padding: 8px 0 10px;
+          border-bottom: 1px solid var(--border);
+          background: var(--card);
+        }
+        .ck-overlay-detail-edit-layout {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          --ck-overlay-detail-edit-actions-height: 72px;
+        }
+        .ck-overlay-detail-edit-layout .ck-line-item-table thead th {
+          top: calc(var(--ck-overlay-detail-edit-actions-height, 72px) + 8px);
+          z-index: 5;
         }
         .ck-overlay-detail-edit-actions__start,
         .ck-overlay-detail-edit-actions__end {

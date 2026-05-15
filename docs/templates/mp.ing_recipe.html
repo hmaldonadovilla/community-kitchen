@@ -22,12 +22,21 @@
     margin-top: 4px;
   }
 
-  .ck-tab-list {
-    display: flex;
+  .ck-tab-row {
+    display: grid;
+    grid-template-columns: 1fr 5fr;
     gap: 0;
     margin: 0 0 12px 0;
     padding: 0 0 6px 0;
     border-bottom: 1px solid var(--border);
+    width: 100%;
+  }
+
+  .ck-tab-list {
+    display: grid;
+    grid-template-columns: 2fr 3fr;
+    gap: 0;
+    min-width: 0;
     width: 100%;
   }
 
@@ -40,11 +49,45 @@
     color: inherit;
     cursor: pointer;
     text-align: center;
+    min-height: 44px;
   }
 
   .ck-tab.is-active {
     font-weight: 600;
     border-bottom: 2px solid currentColor;
+  }
+
+  .ck-tab-list .ck-tab {
+    width: 100%;
+  }
+
+  .ck-tab-edit-button {
+    border: 0;
+    background: var(--accent, #0B5ED7);
+    color: var(--accentText, #fff);
+    min-height: 44px;
+    padding: 6px 0;
+    border-radius: var(--radius-control, 8px);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+
+  .ck-tab-edit-button svg {
+    width: 32px;
+    height: 32px;
+    stroke: currentColor;
+    stroke-width: 2.2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    fill: none;
+  }
+
+  .ck-tab-edit-button:focus-visible,
+  .ck-tab:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
   }
 
   .ck-tab-panel {
@@ -53,24 +96,6 @@
 
   .ck-tab-panel.is-active {
     display: block;
-  }
-
-  .ck-panel-actions {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: 18px;
-  }
-
-  .ck-panel-action {
-    border: 1px solid var(--accent);
-    background: var(--accent);
-    padding: 6px 12px;
-    border-radius: var(--radius-control, 8px);
-    font: inherit;
-    font-weight: 600;
-    color: var(--accentText);
-    cursor: pointer;
-    white-space: nowrap;
   }
 
   .ck-ingredients-table {
@@ -134,29 +159,37 @@
 
 <div class="ck-summary-template" data-ck-template="mp.ing_recipe">
   <div class="ck-tabs" data-ck-tabs>
-    <div class="ck-tab-list" role="tablist" aria-label="Recipe details">
-      <button
-        class="ck-tab is-active"
-        type="button"
-        role="tab"
-        aria-selected="true"
-        aria-controls="ck-tab-ingredients"
-        id="ck-tab-btn-ingredients"
-        data-tab-target="ingredients"
-      >
-        Ingredients
+    <div class="ck-tab-row">
+      <button class="ck-tab-edit-button" type="button" data-ck-action="edit" aria-label="Edit ingredients">
+        <svg aria-hidden="true" viewBox="0 0 24 24">
+          <path d="M21.2 8.4 8.6 21H3v-5.6L15.6 2.8a2 2 0 0 1 2.8 0l2.8 2.8a2 2 0 0 1 0 2.8Z"></path>
+          <path d="m14 4 6 6"></path>
+        </svg>
       </button>
-      <button
-        class="ck-tab"
-        type="button"
-        role="tab"
-        aria-selected="false"
-        aria-controls="ck-tab-instructions"
-        id="ck-tab-btn-instructions"
-        data-tab-target="instructions"
-      >
-        Instructions
-      </button>
+      <div class="ck-tab-list" role="tablist" aria-label="Recipe details">
+        <button
+          class="ck-tab is-active"
+          type="button"
+          role="tab"
+          aria-selected="true"
+          aria-controls="ck-tab-ingredients"
+          id="ck-tab-btn-ingredients"
+          data-tab-target="ingredients"
+        >
+          Ingredients
+        </button>
+        <button
+          class="ck-tab ck-tab--instructions"
+          type="button"
+          role="tab"
+          aria-selected="false"
+          aria-controls="ck-tab-instructions"
+          id="ck-tab-btn-instructions"
+          data-tab-target="instructions"
+        >
+          Instructions
+        </button>
+      </div>
     </div>
 
     <div
@@ -189,12 +222,6 @@
           </tr>
         </tbody>
       </table>
-
-      <div class="ck-panel-actions">
-        <button class="ck-panel-action" type="button" data-ck-action="edit" aria-label="Edit ingredients">
-          Edit ingredients
-        </button>
-      </div>
     </div>
 
     <div

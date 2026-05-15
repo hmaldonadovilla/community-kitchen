@@ -30,6 +30,7 @@ import { buildSelectorOptionSet, resolveSelectorHelperText, resolveSelectorLabel
 import {
   buttonStyles,
   EyeIcon,
+  InlinePencilText,
   PencilIcon,
   PlusIcon,
   RequiredStar,
@@ -176,6 +177,60 @@ interface SubgroupOverlayPortalProps {
   resolveRequiredValue: (field: any, value: FieldValue) => FieldValue;
   resolveVisibilityValue: (fieldId: string) => FieldValue;
 }
+
+const StickyOverlayDetailEditLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const rootRef = React.useRef<HTMLDivElement | null>(null);
+  const [actionsHeight, setActionsHeight] = React.useState(72);
+
+  React.useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    const actions = root.querySelector('.ck-overlay-detail-edit-actions') as HTMLElement | null;
+    if (!actions) return;
+
+    let frame = 0;
+    const update = () => {
+      if (frame && typeof globalThis.cancelAnimationFrame === 'function') {
+        globalThis.cancelAnimationFrame(frame);
+      }
+      const run = () => {
+        frame = 0;
+        const next = Math.ceil(actions.getBoundingClientRect().height);
+        if (next > 0) {
+          setActionsHeight(prev => (prev === next ? prev : next));
+        }
+      };
+      if (typeof globalThis.requestAnimationFrame === 'function') {
+        frame = globalThis.requestAnimationFrame(run);
+      } else {
+        run();
+      }
+    };
+
+    update();
+    const resizeObserver = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
+    resizeObserver?.observe(actions);
+    globalThis.addEventListener?.('resize', update);
+
+    return () => {
+      if (frame && typeof globalThis.cancelAnimationFrame === 'function') {
+        globalThis.cancelAnimationFrame(frame);
+      }
+      resizeObserver?.disconnect();
+      globalThis.removeEventListener?.('resize', update);
+    };
+  }, []);
+
+  return (
+    <div
+      ref={rootRef}
+      className="ck-overlay-detail-edit-layout"
+      style={{ '--ck-overlay-detail-edit-actions-height': `${actionsHeight}px` } as React.CSSProperties}
+    >
+      {children}
+    </div>
+  );
+};
 
 export const SubgroupOverlayPortal: React.FC<SubgroupOverlayPortalProps> = ({
   subgroupOverlay,
@@ -760,7 +815,7 @@ export const SubgroupOverlayPortal: React.FC<SubgroupOverlayPortalProps> = ({
                 {overlayContextHeader ? <div style={{ marginTop: (!overlayHeaderLabel || subHideLabel) && overlayRecordReference ? 6 : 0, whiteSpace: 'pre-line' }}>{overlayContextHeader}</div> : null}
                 {overlayHeaderHelperText ? (
                   <div className="ck-helper-frame" style={{ marginTop: overlayContextHeader || (!subHideLabel && overlayHeaderLabel) || overlayRecordReference ? 6 : 0 }}>
-                    {overlayHeaderHelperText}
+                    <InlinePencilText text={overlayHeaderHelperText} />
                   </div>
                 ) : null}
                 <div style={srOnly}>{subLabel}</div>
@@ -1665,7 +1720,7 @@ export const SubgroupOverlayPortal: React.FC<SubgroupOverlayPortalProps> = ({
                       addLineItemRowManual(detailSubKey, undefined, { configOverride: detailGroupCfg });
                     };
                     return (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <StickyOverlayDetailEditLayout>
                         <div className="ck-overlay-detail-edit-actions">
                           <div className="ck-overlay-detail-edit-actions__start">
                             {canShowDetailAddButton ? (
@@ -1709,7 +1764,7 @@ export const SubgroupOverlayPortal: React.FC<SubgroupOverlayPortalProps> = ({
                             submitting: submitting || isFieldLockedByDedup(parsed?.rootGroupId || subKey)
                           })}
                         />
-                      </div>
+                      </StickyOverlayDetailEditLayout>
                     );
                   })()
                 )}

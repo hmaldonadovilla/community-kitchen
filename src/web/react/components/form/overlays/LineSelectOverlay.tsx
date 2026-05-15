@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 
-import { buttonStyles, withDisabled } from '../ui';
+import { buttonStyles, InlinePencilText, withDisabled } from '../ui';
 import { matchesQueryTokens } from '../searchUtils';
 import type { LangCode } from '../../../../types';
 import type { LineItemAddResult } from '../../../types';
@@ -125,7 +125,7 @@ export const LineSelectOverlay: React.FC<{
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {showHelper ? (
             <div id={helpId} className="ck-helper-frame">
-              {helperText}
+              <InlinePencilText text={helperText} />
             </div>
           ) : null}
           <input

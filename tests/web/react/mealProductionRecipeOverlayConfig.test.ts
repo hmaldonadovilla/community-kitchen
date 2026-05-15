@@ -4,8 +4,9 @@ import path from 'path';
 const root = path.resolve(__dirname, '../../..');
 const configPath = path.join(root, 'docs/config/exports/staging/config_meal_production.json');
 const templatePath = path.join(root, 'docs/templates/mp.ing_recipe.html');
+const formStylesPath = path.join(root, 'src/web/react/components/form/styles.ts');
 
-const viewHelper = 'Review recipe ingredients for today’s dish. Tap “Edit ingredients” to adjust ingredients if needed.';
+const viewHelper = "Review recipe ingredients for today's dish. Tap ✏️ to adjust ingredients if needed.";
 const editHelper =
   'Adjust ingredients to match today’s dish. Add, update, or remove ingredients as needed. At least one ingredient must remain.';
 
@@ -74,10 +75,27 @@ describe('meal production recipe ingredient overlay configuration', () => {
     });
   });
 
-  test('keeps the edit ingredients action below the ingredient table', () => {
+  test('embeds the edit ingredients action in the ingredient tab', () => {
     const template = fs.readFileSync(templatePath, 'utf8');
     expect(template.indexOf('class="ck-ingredients-table"')).toBeGreaterThan(-1);
-    expect(template.indexOf('data-ck-action="edit"')).toBeGreaterThan(template.indexOf('</table>'));
-    expect(template).toContain('margin-top: 18px;');
+    expect(template).toContain('class="ck-tab-row"');
+    expect(template).toContain('grid-template-columns: 1fr 5fr;');
+    expect(template).toContain('grid-template-columns: 2fr 3fr;');
+    expect(template).toContain('class="ck-tab-edit-button"');
+    expect(template).toContain('data-ck-action="edit"');
+    expect(template).toContain('aria-label="Edit ingredients"');
+    expect(template).toContain('background: var(--accent, #0B5ED7);');
+    expect(template).toContain('color: var(--accentText, #fff);');
+    expect(template.indexOf('data-ck-action="edit"')).toBeLessThan(template.indexOf('id="ck-tab-btn-ingredients"'));
+    expect(template).not.toContain('class="ck-panel-actions"');
+  });
+
+  test('keeps recipe edit controls sticky above long ingredient tables', () => {
+    const formStyles = fs.readFileSync(formStylesPath, 'utf8');
+    expect(formStyles).toContain('.ck-overlay-detail-edit-actions {');
+    expect(formStyles).toContain('position: sticky;');
+    expect(formStyles).toContain('.ck-overlay-detail-edit-layout .ck-line-item-table thead th');
+    expect(formStyles).toContain('top: calc(var(--ck-overlay-detail-edit-actions-height, 72px) + 8px);');
+    expect(formStyles).toContain('.ck-inline-pencil-icon svg');
   });
 });

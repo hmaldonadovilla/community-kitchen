@@ -112,6 +112,28 @@ export const PencilIcon: React.FC<{ size?: number; style?: React.CSSProperties; 
   </svg>
 );
 
+const HelperPencilIcon: React.FC = () => (
+  <span className="ck-inline-pencil-icon" role="img" aria-label="pencil icon">
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path d="M21.2 8.4 8.6 21H3v-5.6L15.6 2.8a2 2 0 0 1 2.8 0l2.8 2.8a2 2 0 0 1 0 2.8Z" />
+      <path d="m14 4 6 6" />
+    </svg>
+  </span>
+);
+
+export const InlinePencilText: React.FC<{ text: string }> = ({ text }) => {
+  const value = (text || '').toString();
+  const parts = value.split(/(✏️|✏)/gu);
+  if (parts.length <= 1) return <>{value}</>;
+  return (
+    <>
+      {parts.map((part, index) =>
+        part === '✏️' || part === '✏' ? <HelperPencilIcon key={`pencil-${index}`} /> : <React.Fragment key={index}>{part}</React.Fragment>
+      )}
+    </>
+  );
+};
+
 export const CheckIcon: React.FC<{ size?: number; style?: React.CSSProperties; className?: string }> = ({
   size = 22,
   style,
