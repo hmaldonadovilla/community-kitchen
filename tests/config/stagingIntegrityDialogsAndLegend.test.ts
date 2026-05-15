@@ -243,10 +243,10 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(ingredientQty?.validationRules?.[0]?.then).toEqual({
         fieldId: 'QTY',
         required: true,
-        greaterThan: 0
+        min: 0
       });
       expect(ingredientQty?.validationRules?.[0]?.message).toEqual({
-        en: 'Enter a quantity > 0'
+        en: 'Enter the quantity'
       });
       expect(recipe?.changeDialog?.when).toEqual({
         any: [
