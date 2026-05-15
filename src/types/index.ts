@@ -5568,7 +5568,69 @@ export interface AnalyticsRecordTablePipelineConfig {
   report: AnalyticsRecordTableReportConfig;
 }
 
-export type AnalyticsPipelineConfig = AnalyticsIngredientUsagePipelineConfig | AnalyticsRecordTablePipelineConfig;
+export interface AnalyticsGeneratedBankReportConfig {
+  /**
+   * Top-level source record date field used to filter records.
+   */
+  dateFieldId: string;
+  statusFieldId?: string;
+  includeStatuses?: string[];
+  /**
+   * Related bank form and linkage fields written on generated bank records.
+   */
+  bankFormKey: string;
+  bankSourceRecordIdFieldId: string;
+  bankSourceRowIdFieldId: string;
+  bankKindFieldId: string;
+  multiIngredientKindValues?: string[];
+  singleIngredientKindValues?: string[];
+  /**
+   * Source line-item structure used to find the original cook row for multi-item leftovers.
+   */
+  mealGroupId: string;
+  prepGroupId: string;
+  prepTypeFieldId: string;
+  cookPrepTypeValue?: string;
+  customerFieldId: string;
+  customerDisplayField?: string;
+  serviceFieldId: string;
+  cookFieldId: string;
+  dietaryFieldId: string;
+  originalRecipeFieldId: string;
+  orderedPortionsFieldId: string;
+  toCookPortionsFieldId: string;
+  deliveredPortionsFieldId: string;
+  multiLeftoverNameFieldId: string;
+  multiLeftoverPortionsFieldId: string;
+  singleLeftoverNameFieldId: string;
+  singleLeftoverQuantityFieldId: string;
+  singleLeftoverUnitFieldId: string;
+  storageFieldId: string;
+  frozenStorageValue?: string;
+  yesLabel?: string;
+  noLabel?: string;
+  multiSheetName?: string;
+  singleSheetName?: string;
+}
+
+export interface AnalyticsGeneratedBankReportPipelineConfig {
+  id: string;
+  type: 'generatedBankReport';
+  order?: number;
+  sourceFormKey?: string;
+  title?: LocalizedString | string;
+  description?: LocalizedString | string;
+  placements?: AnalyticsPlacement[];
+  ui?: AnalyticsPipelineUiConfig;
+  email: AnalyticsPipelineEmailConfig;
+  attachment?: AnalyticsPipelineAttachmentConfig;
+  report: AnalyticsGeneratedBankReportConfig;
+}
+
+export type AnalyticsPipelineConfig =
+  | AnalyticsIngredientUsagePipelineConfig
+  | AnalyticsRecordTablePipelineConfig
+  | AnalyticsGeneratedBankReportPipelineConfig;
 
 export interface AnalyticsAggregateCalculation {
   /**

@@ -651,14 +651,11 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       - Custom scripts must be named server functions with prefix `analytics_` (for example `analytics_mealKpi`).
       - Trigger policy: recompute on save/edit/follow-up actions + daily reconciliation trigger (`runDailyAnalyticsRecompute`).
       - Legacy `listView.metric` / `listViewMetric` are still runtime-compatible but deprecated.
-      - `analytics.pipelines` can add fire-and-forget export actions to the centralized analytics page. The current reusable pipeline type is `ingredientUsageReport`, which:
-        - accepts a past start date from the analytics page UI
-        - filters closed source records between that date and today
-        - aggregates nested ingredient rows by ingredient + unit
-        - can convert `Tbsp` to `gr` with `report.tablespoonGramsLookupColumn`, then converts `gr` to `kg` when the quantity is greater than 1000
-        - exports the results as `.xlsx`
-        - queues the work server-side and emails the attachment to the configured recipients
-        - resolves `{{START_DATE}}` and `{{END_DATE}}` in email/file templates as `EEE,dd-mmm-yyyy`; use `{{START_DATE_ISO}}` / `{{END_DATE_ISO}}` for ISO dates
+      - `analytics.pipelines` can add fire-and-forget export actions to the centralized analytics page. Reusable pipeline types include:
+        - `ingredientUsageReport`: accepts a past start date, filters closed source records between that date and today, aggregates nested ingredient rows by ingredient + unit, can convert `Tbsp` to `gr` with `report.tablespoonGramsLookupColumn`, then converts `gr` to `kg` when the quantity is greater than 1000.
+        - `recordTableReport`: accepts a past start date and exports configured record-level columns from matching source records.
+        - `generatedBankReport`: accepts a past start date and exports multi-tab `.xlsx` workbooks for records generated into a shared bank/repository while preserving source record and source row linkage fields.
+        - All pipeline types queue the work server-side, email the attachment to the configured recipients, and resolve `{{START_DATE}}` and `{{END_DATE}}` in email/file templates as `EEE,dd-mmm-yyyy`; use `{{START_DATE_ISO}}` / `{{END_DATE_ISO}}` for ISO dates.
 
       Example:
 

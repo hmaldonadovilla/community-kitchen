@@ -3452,9 +3452,85 @@
           }
         },
         {
+          "id": "leftover_generation",
+          "type": "generatedBankReport",
+          "order": 30,
+          "sourceFormKey": "Config: Meal Production",
+          "title": "Leftover generation",
+          "description": "Select a start date. We’ll email the list of generated leftovers since then.",
+          "placements": [
+            "analyticsPage"
+          ],
+          "ui": {
+            "dateLabel": "Date",
+            "submitLabel": "Send report",
+            "pendingLabel": "Sending...",
+            "queuedNotice": "Report request sent. We'll email it to the Operations Manager."
+          },
+          "email": {
+            "recipients": [
+              "hmaldonadovilla@outlook.com",
+              "que0106@gmail.com"
+            ],
+            "from": "operations@communitykitchen.be",
+            "fromName": "Community Kitchen Operations",
+            "subject": "Leftover generation report since {{START_DATE}}",
+            "message": "Please find attached the Leftover generation report since {{START_DATE}}."
+          },
+          "attachment": {
+            "format": "xlsx",
+            "fileNameTemplate": "Leftover generation report since {{START_DATE}}.xlsx",
+            "folderId": "1PEV18PYv28uOTVZ_rui0noR5pE1dkHZF"
+          },
+          "report": {
+            "dateFieldId": "MP_PREP_DATE",
+            "statusFieldId": "Status",
+            "includeStatuses": [
+              "Final report emailed",
+              "Closed"
+            ],
+            "bankFormKey": "Config: Leftover Bank",
+            "bankSourceRecordIdFieldId": "LEFTOVER_SOURCE_RECORD_ID",
+            "bankSourceRowIdFieldId": "LEFTOVER_SOURCE_ROW_ID",
+            "bankKindFieldId": "LEFTOVER_KIND",
+            "multiIngredientKindValues": [
+              "Multi-ingredient",
+              "Entire dish"
+            ],
+            "singleIngredientKindValues": [
+              "Single-ingredient",
+              "Part dish"
+            ],
+            "mealGroupId": "MP_MEALS_REQUEST",
+            "prepGroupId": "MP_TYPE_LI",
+            "prepTypeFieldId": "PREP_TYPE",
+            "cookPrepTypeValue": "Cook",
+            "customerFieldId": "MP_DISTRIBUTOR",
+            "customerDisplayField": "DIST_NAME",
+            "serviceFieldId": "MP_SERVICE",
+            "cookFieldId": "MP_COOK_NAME",
+            "dietaryFieldId": "MEAL_TYPE",
+            "originalRecipeFieldId": "RECIPE",
+            "orderedPortionsFieldId": "ORD_QTY",
+            "toCookPortionsFieldId": "MP_TO_COOK",
+            "deliveredPortionsFieldId": "FINAL_QTY",
+            "multiLeftoverNameFieldId": "LEFTOVER_RECIPE",
+            "multiLeftoverPortionsFieldId": "LEFTOVER_PORTIONS",
+            "singleLeftoverNameFieldId": "LEFTOVER_INGREDIENT",
+            "singleLeftoverQuantityFieldId": "LEFTOVER_QTY",
+            "singleLeftoverUnitFieldId": "LEFTOVER_UNIT",
+            "storageFieldId": "LEFTOVER_STORAGE",
+            "frozenStorageValue": "Frozen",
+            "yesLabel": "YES",
+            "noLabel": "NO",
+            "multiSheetName": "Generated MI leftovers",
+            "singleSheetName": "Generated SI leftovers"
+          }
+        },
+        {
           "id": "meal_productions_incomplete",
           "type": "recordTableReport",
-          "order": 30,
+          "order": 40,
           "sourceFormKey": "Config: Meal Production",
           "title": "Meal productions with incomplete status",
           "description": "Select a start date. We’ll email the list of incomplete meal productions since then.",
@@ -3636,7 +3712,7 @@
         {
           "id": "cleaning_storage_checks",
           "type": "recordTableReport",
-          "order": 40,
+          "order": 50,
           "sourceFormKey": "Config: Checklist",
           "title": "Cleaning and storage checks",
           "description": "Select a start date. We’ll email the list of checks since then.",

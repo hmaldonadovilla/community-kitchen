@@ -137,6 +137,184 @@ const buildReportPlaceholders = args => ({
   '{{SOURCE_FORM}}': args.sourceForm || ''
 });
 
+const GENERATED_BANK_MI_HEADERS = [
+  'Meal Production date',
+  'Customer',
+  'Service',
+  'Responsible cook',
+  'Dietary Category',
+  'Recipe',
+  'Ordered portions',
+  'To cook portions',
+  'Delivered portions',
+  'Leftover used',
+  'MI leftover name',
+  'MI leftover portions',
+  'Frozen'
+];
+
+const GENERATED_BANK_SI_HEADERS = [
+  'Meal Production date',
+  'Customer',
+  'Service',
+  'Responsible cook',
+  'SI leftover name',
+  'SI leftover quantity',
+  'SI leftover unit',
+  'Frozen'
+];
+
+const rowId = row => toText((row && row.__ckRowId) || (row && row.id));
+
+const valueByField = (values, fieldId) => {
+  const id = toText(fieldId);
+  if (!id || !values) return '';
+  return Object.prototype.hasOwnProperty.call(values, id) ? values[id] : '';
+};
+
+const displayValue = (values, fieldId, displayFieldId) => {
+  const raw = valueByField(values, fieldId);
+  const displayField = toText(displayFieldId);
+  if (displayField && raw && typeof raw === 'object' && !Array.isArray(raw)) {
+    const display = raw[displayField];
+    if (display !== undefined && display !== null && toText(display)) return display;
+  }
+  return raw;
+};
+
+const generatedBankSourceRecordIncluded = (record, report, startDate, endDate) => {
+  const recordDate = normalizeToIsoDate((record.values || {})[report.dateFieldId]);
+  if (!recordDate || recordDate < startDate || recordDate > endDate) return false;
+  const statuses = normalizeStringList(report.includeStatuses).map(normalizeStatusToken);
+  if (!statuses.length) return true;
+  const statusFieldId = toText(report.statusFieldId);
+  const rawStatus =
+    statusFieldId && Object.prototype.hasOwnProperty.call(record.values || {}, statusFieldId)
+      ? (record.values || {})[statusFieldId]
+      : record.status;
+  return statuses.includes(normalizeStatusToken(rawStatus));
+};
+
+const generatedBankKindMatches = (bankValues, report, kinds) => {
+  const kind = normalizeStatusToken(valueByField(bankValues, report.bankKindFieldId));
+  const allowed = normalizeStringList(kinds).map(normalizeStatusToken);
+  return !!kind && allowed.includes(kind);
+};
+
+const findGeneratedBankCookPrepContext = (record, sourceRowId, report) => {
+  const cookValue = normalizeStatusToken(report.cookPrepTypeValue || 'Cook');
+  for (const mealRow of parseLineItemRows((record.values || {})[report.mealGroupId])) {
+    const siblingPrepRows = parseLineItemRows(mealRow[report.prepGroupId]);
+    const prepRow = siblingPrepRows.find(row => rowId(row) === sourceRowId);
+    if (!prepRow) continue;
+    if (normalizeStatusToken(prepRow[report.prepTypeFieldId]) !== cookValue) return null;
+    return { mealRow, prepRow, siblingPrepRows };
+  }
+  return null;
+};
+
+const generatedBankHasLeftoverSibling = (context, report) => {
+  const cookValue = normalizeStatusToken(report.cookPrepTypeValue || 'Cook');
+  return context.siblingPrepRows.some(row => {
+    const prepType = normalizeStatusToken(row[report.prepTypeFieldId]);
+    return !!prepType && prepType !== cookValue;
+  });
+};
+
+const generatedBankFrozenLabel = (bankValues, report) =>
+  normalizeStatusToken(valueByField(bankValues, report.storageFieldId)) === normalizeStatusToken(report.frozenStorageValue || 'Frozen')
+    ? report.yesLabel || 'YES'
+    : report.noLabel || 'NO';
+
+const sortGeneratedBankRows = rows =>
+  rows.slice().sort((left, right) => {
+    for (let index = 0; index < Math.min(5, left.length, right.length); index += 1) {
+      const result = toText(left[index]).localeCompare(toText(right[index]));
+      if (result !== 0) return result;
+    }
+    return 0;
+  });
+
+const aggregateGeneratedBankReport = ({ sourceRecords, bankRecords, report, startDate, endDate }) => {
+  const sourceRecordsById = new Map();
+  (Array.isArray(sourceRecords) ? sourceRecords : []).forEach(record => {
+    const recordId = toText(record && record.id);
+    if (!recordId || !generatedBankSourceRecordIncluded(record, report, startDate, endDate)) return;
+    sourceRecordsById.set(recordId, record);
+  });
+
+  const multiKinds = normalizeStringList(report.multiIngredientKindValues || ['Multi-ingredient', 'Entire dish']);
+  const singleKinds = normalizeStringList(report.singleIngredientKindValues || ['Single-ingredient', 'Part dish']);
+  const includedRecordIds = new Set();
+  const miRows = [];
+  const siRows = [];
+
+  (Array.isArray(bankRecords) ? bankRecords : []).forEach(bankRecord => {
+    const bankValues = (bankRecord && bankRecord.values) || {};
+    const sourceRecordId = toText(valueByField(bankValues, report.bankSourceRecordIdFieldId));
+    const sourceRecord = sourceRecordsById.get(sourceRecordId);
+    if (!sourceRecord) return;
+    const sourceValues = sourceRecord.values || {};
+    const baseCells = [
+      formatReportDateToken(normalizeToIsoDate(sourceValues[report.dateFieldId])),
+      displayValue(sourceValues, report.customerFieldId, report.customerDisplayField),
+      valueByField(sourceValues, report.serviceFieldId),
+      valueByField(sourceValues, report.cookFieldId)
+    ];
+
+    if (generatedBankKindMatches(bankValues, report, multiKinds)) {
+      const context = findGeneratedBankCookPrepContext(
+        sourceRecord,
+        toText(valueByField(bankValues, report.bankSourceRowIdFieldId)),
+        report
+      );
+      if (!context) return;
+      includedRecordIds.add(sourceRecordId);
+      miRows.push([
+        ...baseCells,
+        valueByField(context.mealRow, report.dietaryFieldId),
+        valueByField(context.prepRow, report.originalRecipeFieldId),
+        valueByField(context.mealRow, report.orderedPortionsFieldId),
+        valueByField(context.mealRow, report.toCookPortionsFieldId),
+        valueByField(context.mealRow, report.deliveredPortionsFieldId),
+        generatedBankHasLeftoverSibling(context, report) ? report.yesLabel || 'YES' : report.noLabel || 'NO',
+        valueByField(bankValues, report.multiLeftoverNameFieldId),
+        valueByField(bankValues, report.multiLeftoverPortionsFieldId),
+        generatedBankFrozenLabel(bankValues, report)
+      ]);
+      return;
+    }
+
+    if (generatedBankKindMatches(bankValues, report, singleKinds)) {
+      includedRecordIds.add(sourceRecordId);
+      siRows.push([
+        ...baseCells,
+        valueByField(bankValues, report.singleLeftoverNameFieldId),
+        valueByField(bankValues, report.singleLeftoverQuantityFieldId),
+        valueByField(bankValues, report.singleLeftoverUnitFieldId),
+        generatedBankFrozenLabel(bankValues, report)
+      ]);
+    }
+  });
+
+  const sortedMiRows = sortGeneratedBankRows(miRows);
+  const sortedSiRows = sortGeneratedBankRows(siRows);
+  return {
+    recordCount: includedRecordIds.size,
+    rowCount: sortedMiRows.length + sortedSiRows.length,
+    sheets: [
+      {
+        name: report.multiSheetName || 'Generated MI leftovers',
+        values: [GENERATED_BANK_MI_HEADERS, ...sortedMiRows]
+      },
+      {
+        name: report.singleSheetName || 'Generated SI leftovers',
+        values: [GENERATED_BANK_SI_HEADERS, ...sortedSiRows]
+      }
+    ]
+  };
+};
+
 const isTablespoonUnit = unit => {
   const normalized = toText(unit).toLowerCase();
   return normalized === 'tbsp' || normalized === 'tablespoon' || normalized === 'tablespoons';
@@ -246,12 +424,28 @@ class AnalyticsPipelineRepository {
       : Array.isArray(sourceEntry.definition.questions)
         ? sourceEntry.definition.questions
         : [];
+    const relatedEntries = {};
+    const bankFormKey = toText(pipeline && pipeline.report && pipeline.report.bankFormKey);
+    if (bankFormKey && bankFormKey !== sourceFormKey) {
+      const bankEntry = this.findEntry(bankFormKey);
+      if (bankEntry) {
+        relatedEntries[bankFormKey] = {
+          form: bankEntry.form,
+          questions: Array.isArray(bankEntry.config.questions) && bankEntry.config.questions.length
+            ? bankEntry.config.questions
+            : Array.isArray(bankEntry.definition.questions)
+              ? bankEntry.definition.questions
+              : []
+        };
+      }
+    }
     return {
       ownerEntry,
       sourceEntry,
       ownerForm: ownerEntry.form,
       sourceForm: sourceEntry.form,
       sourceQuestions: questions,
+      relatedEntries,
       pipeline
     };
   }
@@ -372,6 +566,7 @@ class AnalyticsPipelineRepository {
       ownerForm: context.ownerForm,
       sourceForm: context.sourceForm,
       sourceQuestions: context.sourceQuestions,
+      relatedEntries: context.relatedEntries,
       pipeline: context.pipeline,
       startDate: startDateRaw
     });
@@ -419,14 +614,36 @@ class AnalyticsPipelineRepository {
           defaultSheetName: 'Report'
         };
       }
+      if (args.pipeline.type === 'generatedBankReport') {
+        const bankFormKey = toText(args.pipeline.report && args.pipeline.report.bankFormKey);
+        const bankContext = bankFormKey && args.relatedEntries ? args.relatedEntries[bankFormKey] : null;
+        if (!bankContext) return { message: `Unknown generated bank report form: ${bankFormKey || '(blank)'}` };
+        const sourceRecords = await this.loadAllRecords(args.sourceForm);
+        const bankRecords = await this.loadAllRecords(bankContext.form);
+        const aggregation = aggregateGeneratedBankReport({
+          sourceRecords,
+          bankRecords,
+          report: args.pipeline.report,
+          startDate,
+          endDate
+        });
+        return {
+          recordCount: aggregation.recordCount,
+          rowCount: aggregation.rowCount,
+          sheets: aggregation.sheets,
+          defaultSheetName: 'Generated bank records'
+        };
+      }
       return null;
     })();
 
+    if (built && built.message) return { success: false, message: built.message };
     if (!built) return { success: false, message: `Unsupported report pipeline type: ${args.pipeline.type}` };
     const artifact = await this.buildSpreadsheetArtifact({
       sourceForm: args.sourceForm,
       pipeline: args.pipeline,
       values: built.values,
+      sheets: built.sheets,
       startDate,
       endDate,
       recordCount: built.recordCount,
@@ -830,30 +1047,59 @@ class AnalyticsPipelineRepository {
       recordCount: args.recordCount,
       rowCount: args.rowCount
     });
-    const sheetName = toText(args.pipeline.attachment && args.pipeline.attachment.sheetName) || args.defaultSheetName || 'Report';
-    const values = args.values && args.values.length ? args.values : [['No data']];
-    const width = Math.max(1, ...values.map(row => (Array.isArray(row) ? row.length : 0)));
-    const normalizedValues = values.map(row => {
-      const next = Array.isArray(row) ? row.slice() : [];
-      while (next.length < width) next.push('');
-      return next;
-    });
-    const created = await this.sheetsClient.createSpreadsheet(fileName.replace(/\.xlsx$/i, ''), { sheetName });
+    const workbookSheets =
+      Array.isArray(args.sheets) && args.sheets.length
+        ? args.sheets
+        : [
+            {
+              name: toText(args.pipeline.attachment && args.pipeline.attachment.sheetName) || args.defaultSheetName || 'Report',
+              values: args.values
+            }
+          ];
+    const firstSheetName = toText(workbookSheets[0] && workbookSheets[0].name) || args.defaultSheetName || 'Report';
+    const created = await this.sheetsClient.createSpreadsheet(fileName.replace(/\.xlsx$/i, ''), { sheetName: firstSheetName });
     const tempId = toText(created && created.spreadsheetId);
     if (!tempId) throw new Error('Google Sheets create did not return spreadsheetId.');
     try {
-      await this.sheetsClient.updateValuesRange(tempId, `${escapeSheetName(sheetName)}!A1:${columnName(width)}${normalizedValues.length}`, normalizedValues);
-      const sheetId = created && created.sheets && created.sheets[0] && created.sheets[0].properties && created.sheets[0].properties.sheetId;
-      if (sheetId !== undefined && typeof this.sheetsClient.batchUpdate === 'function') {
-        await this.sheetsClient.batchUpdate(tempId, [
-          {
+      const boldRequests = [];
+      for (let index = 0; index < workbookSheets.length; index += 1) {
+        const entry = workbookSheets[index] || {};
+        const sheetName = toText(entry.name) || `Report ${index + 1}`;
+        let sheetId =
+          index === 0
+            ? created && created.sheets && created.sheets[0] && created.sheets[0].properties && created.sheets[0].properties.sheetId
+            : undefined;
+        if (index > 0) {
+          if (typeof this.sheetsClient.addSheet !== 'function') throw new Error('Google Sheets addSheet is required for multi-tab reports.');
+          const added = await this.sheetsClient.addSheet(tempId, sheetName);
+          sheetId =
+            added &&
+            added.replies &&
+            added.replies[0] &&
+            added.replies[0].addSheet &&
+            added.replies[0].addSheet.properties &&
+            added.replies[0].addSheet.properties.sheetId;
+        }
+        const values = entry.values && entry.values.length ? entry.values : [['No data']];
+        const width = Math.max(1, ...values.map(row => (Array.isArray(row) ? row.length : 0)));
+        const normalizedValues = values.map(row => {
+          const next = Array.isArray(row) ? row.slice() : [];
+          while (next.length < width) next.push('');
+          return next;
+        });
+        await this.sheetsClient.updateValuesRange(tempId, `${escapeSheetName(sheetName)}!A1:${columnName(width)}${normalizedValues.length}`, normalizedValues);
+        if (sheetId !== undefined) {
+          boldRequests.push({
             repeatCell: {
               range: { sheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: width },
               cell: { userEnteredFormat: { textFormat: { bold: true } } },
               fields: 'userEnteredFormat.textFormat.bold'
             }
-          }
-        ]);
+          });
+        }
+      }
+      if (boldRequests.length && typeof this.sheetsClient.batchUpdate === 'function') {
+        await this.sheetsClient.batchUpdate(tempId, boldRequests);
       }
       const buffer = await this.driveClient.exportFile(tempId, XLSX_MIME_TYPE);
       const folderId =

@@ -475,6 +475,42 @@ describe('Dashboard', () => {
                 { header: 'Number of portions delivered', source: 'lineItemField', fieldId: 'FINAL_QTY' }
               ]
             }
+          },
+          {
+            id: 'leftover_generation',
+            type: 'generatedBankReport',
+            order: 30,
+            title: 'Leftover generation',
+            email: {
+              recipients: ['ops@example.com']
+            },
+            report: {
+              dateFieldId: 'MP_PREP_DATE',
+              includeStatuses: ['Closed'],
+              bankFormKey: 'Config: Leftover Bank',
+              bankSourceRecordIdFieldId: 'LEFTOVER_SOURCE_RECORD_ID',
+              bankSourceRowIdFieldId: 'LEFTOVER_SOURCE_ROW_ID',
+              bankKindFieldId: 'LEFTOVER_KIND',
+              mealGroupId: 'MP_MEALS_REQUEST',
+              prepGroupId: 'MP_TYPE_LI',
+              prepTypeFieldId: 'PREP_TYPE',
+              customerFieldId: 'MP_DISTRIBUTOR',
+              serviceFieldId: 'MP_SERVICE',
+              cookFieldId: 'MP_COOK_NAME',
+              dietaryFieldId: 'MEAL_TYPE',
+              originalRecipeFieldId: 'RECIPE',
+              orderedPortionsFieldId: 'ORD_QTY',
+              toCookPortionsFieldId: 'MP_TO_COOK',
+              deliveredPortionsFieldId: 'FINAL_QTY',
+              multiLeftoverNameFieldId: 'LEFTOVER_RECIPE',
+              multiLeftoverPortionsFieldId: 'LEFTOVER_PORTIONS',
+              singleLeftoverNameFieldId: 'LEFTOVER_INGREDIENT',
+              singleLeftoverQuantityFieldId: 'LEFTOVER_QTY',
+              singleLeftoverUnitFieldId: 'LEFTOVER_UNIT',
+              storageFieldId: 'LEFTOVER_STORAGE',
+              multiSheetName: 'Generated MI leftovers',
+              singleSheetName: 'Generated SI leftovers'
+            }
           }
         ]
       }
@@ -545,6 +581,43 @@ describe('Dashboard', () => {
               { header: 'Date', source: 'recordField', fieldId: 'MP_PREP_DATE' },
               { header: 'Number of portions delivered', source: 'lineItemField', fieldId: 'FINAL_QTY' }
             ]
+          }
+        },
+        {
+          id: 'leftover_generation',
+          type: 'generatedBankReport',
+          order: 30,
+          title: 'Leftover generation',
+          placements: ['analyticsPage'],
+          email: {
+            recipients: ['ops@example.com']
+          },
+          report: {
+            dateFieldId: 'MP_PREP_DATE',
+            includeStatuses: ['Closed'],
+            bankFormKey: 'Config: Leftover Bank',
+            bankSourceRecordIdFieldId: 'LEFTOVER_SOURCE_RECORD_ID',
+            bankSourceRowIdFieldId: 'LEFTOVER_SOURCE_ROW_ID',
+            bankKindFieldId: 'LEFTOVER_KIND',
+            mealGroupId: 'MP_MEALS_REQUEST',
+            prepGroupId: 'MP_TYPE_LI',
+            prepTypeFieldId: 'PREP_TYPE',
+            customerFieldId: 'MP_DISTRIBUTOR',
+            serviceFieldId: 'MP_SERVICE',
+            cookFieldId: 'MP_COOK_NAME',
+            dietaryFieldId: 'MEAL_TYPE',
+            originalRecipeFieldId: 'RECIPE',
+            orderedPortionsFieldId: 'ORD_QTY',
+            toCookPortionsFieldId: 'MP_TO_COOK',
+            deliveredPortionsFieldId: 'FINAL_QTY',
+            multiLeftoverNameFieldId: 'LEFTOVER_RECIPE',
+            multiLeftoverPortionsFieldId: 'LEFTOVER_PORTIONS',
+            singleLeftoverNameFieldId: 'LEFTOVER_INGREDIENT',
+            singleLeftoverQuantityFieldId: 'LEFTOVER_QTY',
+            singleLeftoverUnitFieldId: 'LEFTOVER_UNIT',
+            storageFieldId: 'LEFTOVER_STORAGE',
+            multiSheetName: 'Generated MI leftovers',
+            singleSheetName: 'Generated SI leftovers'
           }
         }
       ]

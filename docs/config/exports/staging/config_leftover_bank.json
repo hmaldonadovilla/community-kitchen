@@ -140,7 +140,7 @@
     {
       "id": "LEFTOVER_RECIPE",
       "type": "CHOICE",
-      "qEn": "Recipe",
+      "qEn": "MI Leftover name",
       "required": false,
       "listView": false,
       "options": [],
@@ -197,7 +197,7 @@
     {
       "id": "LEFTOVER_INGREDIENT",
       "type": "CHOICE",
-      "qEn": "Ingredient",
+      "qEn": "SI Leftover name",
       "required": false,
       "listView": false,
       "ui": {
@@ -758,7 +758,7 @@
       {
         "id": "LEFTOVER_RECIPE",
         "type": "CHOICE",
-        "qEn": "Recipe",
+        "qEn": "MI Leftover name",
         "required": false,
         "listView": false,
         "options": [],
@@ -815,7 +815,7 @@
       {
         "id": "LEFTOVER_INGREDIENT",
         "type": "CHOICE",
-        "qEn": "Ingredient",
+        "qEn": "SI Leftover name",
         "required": false,
         "listView": false,
         "ui": {

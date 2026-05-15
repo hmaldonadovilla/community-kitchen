@@ -1261,6 +1261,7 @@ export class WebFormService {
           ownerForm: context.ownerForm,
           sourceForm: context.sourceForm,
           sourceQuestions: context.sourceQuestions,
+          relatedForms: context.relatedForms,
           pipeline: context.pipeline,
           startDate: job.startDate
         });
@@ -7216,6 +7217,7 @@ export class WebFormService {
     ownerForm: FormConfig;
     sourceForm: FormConfig;
     sourceQuestions: QuestionConfig[];
+    relatedForms?: Record<string, { form: FormConfig; questions: QuestionConfig[] }>;
     pipeline: any;
   } | null {
     const ownerKey = (ownerFormKey || '').toString().trim();
@@ -7228,10 +7230,18 @@ export class WebFormService {
     if (!pipeline) return null;
     const sourceFormKey = (pipeline.sourceFormKey || ownerKey).toString().trim() || ownerKey;
     const { form: sourceForm, questions: sourceQuestions } = this.getFormContextLite(sourceFormKey);
+    const relatedForms: Record<string, { form: FormConfig; questions: QuestionConfig[] }> = {};
+    const bankFormKey =
+      pipeline.report && 'bankFormKey' in pipeline.report ? (pipeline.report.bankFormKey || '').toString().trim() : '';
+    if (bankFormKey && bankFormKey !== sourceFormKey) {
+      const { form, questions } = this.getFormContextLite(bankFormKey);
+      relatedForms[bankFormKey] = { form, questions };
+    }
     return {
       ownerForm,
       sourceForm,
       sourceQuestions,
+      relatedForms,
       pipeline
     };
   }

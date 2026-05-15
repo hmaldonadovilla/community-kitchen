@@ -6485,9 +6485,163 @@ components:
           $ref: '#/components/schemas/AnalyticsIngredientUsagePipelineReportConfig'
       required: [id, type, email, report]
 
+    AnalyticsGeneratedBankReportConfig:
+      type: object
+      description: |
+        Builds a multi-tab XLSX report for records generated into a shared bank from a source form.
+        Use this for bank/repository records that preserve source record and source row linkage fields.
+      properties:
+        dateFieldId:
+          type: string
+          description: Source record date field used to filter records.
+        statusFieldId:
+          type: string
+          description: Optional source record status field used with `includeStatuses`.
+        includeStatuses:
+          type: array
+          items:
+            type: string
+          description: Optional source record statuses to include.
+        bankFormKey:
+          type: string
+          description: Form key of the generated bank records.
+        bankSourceRecordIdFieldId:
+          type: string
+          description: Bank field containing the source record id.
+        bankSourceRowIdFieldId:
+          type: string
+          description: Bank field containing the source line-item row id.
+        bankKindFieldId:
+          type: string
+          description: Bank field identifying the generated record kind.
+        multiIngredientKindValues:
+          type: array
+          items:
+            type: string
+          description: Bank kind values treated as multi-item generated records.
+        singleIngredientKindValues:
+          type: array
+          items:
+            type: string
+          description: Bank kind values treated as single-item generated records.
+        mealGroupId:
+          type: string
+          description: Source top-level line-item group id.
+        prepGroupId:
+          type: string
+          description: Source nested line-item group id containing preparation rows.
+        prepTypeFieldId:
+          type: string
+          description: Source preparation-row field identifying the preparation type.
+        cookPrepTypeValue:
+          type: string
+          description: Preparation type value identifying cook rows. Defaults to `Cook`.
+        customerFieldId:
+          type: string
+        customerDisplayField:
+          type: string
+          description: Optional display field when the customer value is stored as a datasource object.
+        serviceFieldId:
+          type: string
+        cookFieldId:
+          type: string
+        dietaryFieldId:
+          type: string
+        originalRecipeFieldId:
+          type: string
+          description: Field on the source cook row containing the original recipe name.
+        orderedPortionsFieldId:
+          type: string
+        toCookPortionsFieldId:
+          type: string
+        deliveredPortionsFieldId:
+          type: string
+        multiLeftoverNameFieldId:
+          type: string
+        multiLeftoverPortionsFieldId:
+          type: string
+        singleLeftoverNameFieldId:
+          type: string
+        singleLeftoverQuantityFieldId:
+          type: string
+        singleLeftoverUnitFieldId:
+          type: string
+        storageFieldId:
+          type: string
+        frozenStorageValue:
+          type: string
+          description: Storage value rendered as `YES` in the Frozen column. Defaults to `Frozen`.
+        yesLabel:
+          type: string
+          description: Optional positive label. Defaults to `YES`.
+        noLabel:
+          type: string
+          description: Optional negative label. Defaults to `NO`.
+        multiSheetName:
+          type: string
+          description: Optional first tab name. Defaults to `Generated MI leftovers`.
+        singleSheetName:
+          type: string
+          description: Optional second tab name. Defaults to `Generated SI leftovers`.
+      required:
+        - dateFieldId
+        - bankFormKey
+        - bankSourceRecordIdFieldId
+        - bankSourceRowIdFieldId
+        - bankKindFieldId
+        - mealGroupId
+        - prepGroupId
+        - prepTypeFieldId
+        - customerFieldId
+        - serviceFieldId
+        - cookFieldId
+        - dietaryFieldId
+        - originalRecipeFieldId
+        - orderedPortionsFieldId
+        - toCookPortionsFieldId
+        - deliveredPortionsFieldId
+        - multiLeftoverNameFieldId
+        - multiLeftoverPortionsFieldId
+        - singleLeftoverNameFieldId
+        - singleLeftoverQuantityFieldId
+        - singleLeftoverUnitFieldId
+        - storageFieldId
+
+    AnalyticsGeneratedBankReportPipelineConfig:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Stable pipeline id.
+        type:
+          type: string
+          enum: [generatedBankReport]
+        title:
+          $ref: '#/components/schemas/LocalizedString'
+        description:
+          $ref: '#/components/schemas/LocalizedString'
+        placements:
+          type: array
+          items:
+            $ref: '#/components/schemas/AnalyticsPlacement'
+          description: Defaults to `["analyticsPage"]` when omitted.
+        sourceFormKey:
+          type: string
+          description: Source form key. Defaults to the form that owns the config.
+        ui:
+          $ref: '#/components/schemas/AnalyticsPipelineUiConfig'
+        email:
+          $ref: '#/components/schemas/AnalyticsPipelineEmailConfig'
+        attachment:
+          $ref: '#/components/schemas/AnalyticsPipelineAttachmentConfig'
+        report:
+          $ref: '#/components/schemas/AnalyticsGeneratedBankReportConfig'
+      required: [id, type, email, report]
+
     AnalyticsPipelineConfig:
       oneOf:
         - $ref: '#/components/schemas/AnalyticsIngredientUsagePipelineConfig'
+        - $ref: '#/components/schemas/AnalyticsGeneratedBankReportPipelineConfig'
 
     AnalyticsConfig:
       type: object

@@ -20,6 +20,7 @@ import { normalizeToIsoDate } from '../followup/utils';
 import { SubmissionService } from '../submissions';
 import { DataSourceService } from '../dataSources';
 import { buildRecordVisibilityContext, buildRowVisibilityContext } from '../updateRecordDependencies';
+import { aggregateGeneratedBankReport, type GeneratedBankReportSheet } from './generatedBankReport';
 import {
   buildAnalyticsReportTemplatePlaceholders,
   normalizeIngredientUsageQuantity
@@ -321,6 +322,7 @@ export class AnalyticsPipelineService {
     ownerForm: FormConfig;
     sourceForm: FormConfig;
     sourceQuestions: QuestionConfig[];
+    relatedForms?: Record<string, { form: FormConfig; questions: QuestionConfig[] }>;
     pipeline: AnalyticsPipelineConfig;
     startDate: string;
   }): { success: boolean; message?: string; summary?: AnalyticsPipelineExecutionSummary } {
@@ -380,11 +382,47 @@ export class AnalyticsPipelineService {
         };
       }
 
+      if (args.pipeline.type === 'generatedBankReport') {
+        const bankFormKey = (args.pipeline.report.bankFormKey || '').toString().trim();
+        const bankContext = bankFormKey ? args.relatedForms?.[bankFormKey] : undefined;
+        if (!bankContext) {
+          return {
+            error: `Unknown generated bank report form: ${bankFormKey || '(blank)'}`
+          };
+        }
+        const sourceRecords = this.loadAllRecords(args.sourceForm, args.sourceQuestions);
+        const bankRecords = this.loadAllRecords(bankContext.form, bankContext.questions);
+        const aggregation = aggregateGeneratedBankReport({
+          sourceRecords,
+          bankRecords,
+          report: args.pipeline.report,
+          startDate,
+          endDate
+        });
+        return {
+          recordCount: aggregation.recordCount,
+          rowCount: aggregation.rowCount,
+          artifact: this.buildSpreadsheetArtifact({
+            sourceForm: args.sourceForm,
+            pipeline: args.pipeline,
+            sheets: aggregation.sheets,
+            startDate,
+            endDate,
+            recordCount: aggregation.recordCount,
+            rowCount: aggregation.rowCount,
+            defaultSheetName: 'Generated bank records'
+          })
+        };
+      }
+
       return null;
     })();
 
     if (!built) {
       return { success: false, message: `Unsupported report pipeline type: ${(args.pipeline as any).type}` };
+    }
+    if ('error' in built) {
+      return { success: false, message: built.error };
     }
 
     this.sendPipelineEmail({
@@ -928,7 +966,8 @@ export class AnalyticsPipelineService {
   private buildSpreadsheetArtifact(args: {
     sourceForm: FormConfig;
     pipeline: AnalyticsPipelineConfig;
-    values: any[][];
+    values?: any[][];
+    sheets?: GeneratedBankReportSheet[];
     startDate: string;
     endDate: string;
     recordCount: number;
@@ -949,23 +988,34 @@ export class AnalyticsPipelineService {
     const tempId = temp.getId();
 
     try {
-      const sheet = temp.getSheets()[0] || temp.insertSheet('Report');
-      const sheetName = (args.pipeline.attachment?.sheetName || args.defaultSheetName || 'Report').toString().trim();
-      if (sheetName && typeof sheet.setName === 'function') {
-        try {
-          sheet.setName(sheetName.slice(0, 99));
-        } catch {
-          // keep the default name when renaming fails
+      const workbookSheets =
+        Array.isArray(args.sheets) && args.sheets.length
+          ? args.sheets
+          : [
+              {
+                name: (args.pipeline.attachment?.sheetName || args.defaultSheetName || 'Report').toString().trim(),
+                values: Array.isArray(args.values) ? args.values : []
+              }
+            ];
+      workbookSheets.forEach((entry, index) => {
+        const sheet = index === 0 ? temp.getSheets()[0] || temp.insertSheet('Report') : temp.insertSheet((entry.name || `Report ${index + 1}`).slice(0, 99));
+        const sheetName = (entry.name || args.defaultSheetName || `Report ${index + 1}`).toString().trim() || `Report ${index + 1}`;
+        if (index === 0 && sheetName && typeof sheet.setName === 'function') {
+          try {
+            sheet.setName(sheetName.slice(0, 99));
+          } catch {
+            // keep the default name when renaming fails
+          }
         }
-      }
-      const values = args.values.length ? args.values : [['No data']];
-      sheet.getRange(1, 1, values.length, values[0].length).setValues(values);
-      sheet.getRange(1, 1, 1, values[0].length).setFontWeight('bold');
+        const values = entry.values.length ? entry.values : [['No data']];
+        sheet.getRange(1, 1, values.length, values[0].length).setValues(values);
+        sheet.getRange(1, 1, 1, values[0].length).setFontWeight('bold');
 
-      this.waitForWorkbookContentToPersist({
-        spreadsheetId: tempId,
-        sheetName,
-        verificationRows: values.slice(0, Math.min(values.length, 2))
+        this.waitForWorkbookContentToPersist({
+          spreadsheetId: tempId,
+          sheetName,
+          verificationRows: values.slice(0, Math.min(values.length, 2))
+        });
       });
       const exported = this.exportWorkbookBlob(tempId);
       if (!exported) {

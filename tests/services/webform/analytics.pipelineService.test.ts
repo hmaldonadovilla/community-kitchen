@@ -529,6 +529,255 @@ describe('AnalyticsPipelineService', () => {
     expect(options.attachments[0].getName()).toBe('Meals produced and delivered report since Mon,20-Apr-2026.xlsx');
   });
 
+  test('runPipeline exports generated bank reports as multi-tab workbooks', () => {
+    jest.setSystemTime(new Date('2026-05-15T10:00:00.000Z'));
+    const blob: any = {
+      name: '',
+      setName(nextName: string) {
+        this.name = nextName;
+        return this;
+      },
+      getName() {
+        return this.name;
+      },
+      getBytes() {
+        return [1, 2, 3];
+      },
+      getContentType() {
+        return 'application/octet-stream';
+      }
+    };
+    (exportDriveApiFile as jest.Mock).mockReturnValue(blob);
+    const createFile = jest.fn(() => ({ fileId: 'leftovers-xlsx-1', url: 'https://example.test/leftovers-xlsx-1' }));
+    (resolveOutputTarget as jest.Mock).mockReturnValue({ createFile });
+
+    let persistedVisible = false;
+    const writtenBySheet: Record<string, any[][]> = {};
+    const sheetsByName: Record<string, any> = {};
+    const makeSheet = (initialName: string) => {
+      let currentName = initialName;
+      const sheet: any = {
+        setName: jest.fn((nextName: string) => {
+          delete sheetsByName[currentName];
+          currentName = nextName;
+          sheetsByName[currentName] = sheet;
+          return sheet;
+        }),
+        getRange: jest.fn((row: number, col: number, numRows: number, numCols: number) => {
+          type MockRange = {
+            setValues: jest.Mock<MockRange, [any[][]]>;
+            setFontWeight: jest.Mock<MockRange, []>;
+            getValues: jest.Mock<any[][], []>;
+          };
+          const range: MockRange = {
+            setValues: jest.fn<MockRange, [any[][]]>((vals: any[][]) => {
+              writtenBySheet[currentName] = vals.map(entry => entry.slice());
+              return range;
+            }),
+            setFontWeight: jest.fn<MockRange, []>(() => range),
+            getValues: jest.fn<any[][], []>(() => {
+              if (!persistedVisible) {
+                return Array.from({ length: numRows }, () => Array.from({ length: numCols }, () => ''));
+              }
+              const written = writtenBySheet[currentName] || [];
+              return Array.from({ length: numRows }, (_, rowOffset) =>
+                Array.from({ length: numCols }, (_, colOffset) => written[row - 1 + rowOffset]?.[col - 1 + colOffset] ?? '')
+              );
+            })
+          };
+          return range;
+        })
+      };
+      sheetsByName[currentName] = sheet;
+      return sheet;
+    };
+    const firstSheet = makeSheet('Sheet1');
+    const tempSpreadsheet = {
+      getId: () => 'temp-leftover-generation-id',
+      getSheets: () => [firstSheet],
+      getSheetByName: (name: string) => sheetsByName[name] || null,
+      insertSheet: jest.fn((name: string) => makeSheet(name))
+    };
+    (global as any).SpreadsheetApp.create = jest.fn(() => tempSpreadsheet);
+    (global as any).SpreadsheetApp.openById = jest.fn(() => tempSpreadsheet);
+    (global as any).SpreadsheetApp.flush = jest.fn();
+    (global as any).DriveApp.getFileById = jest.fn(() => ({ setTrashed: jest.fn() }));
+    (global as any).Utilities.sleep.mockImplementation(() => {
+      persistedVisible = true;
+    });
+
+    const sourceRecords = [
+      {
+        formKey: 'Config: Meal Production',
+        language: 'EN',
+        id: 'mp-1',
+        status: 'Closed',
+        values: {
+          MP_PREP_DATE: '2026-05-11',
+          MP_DISTRIBUTOR: { DIST_NAME: 'HUB' },
+          MP_SERVICE: 'Lunch',
+          MP_COOK_NAME: 'Akkara',
+          MP_MEALS_REQUEST: [
+            {
+              __ckRowId: 'meal-veg',
+              MEAL_TYPE: 'Vegetarian',
+              ORD_QTY: 450,
+              MP_TO_COOK: 430,
+              FINAL_QTY: 420,
+              MP_TYPE_LI: [
+                { __ckRowId: 'cook-veg', PREP_TYPE: 'Cook', RECIPE: 'Tajine' },
+                { __ckRowId: 'leftover-used', PREP_TYPE: 'Single-ingredient' }
+              ]
+            }
+          ]
+        }
+      }
+    ];
+    const bankRecords = [
+      {
+        formKey: 'Config: Leftover Bank',
+        language: 'EN',
+        id: 'leftover-mi-1',
+        status: 'available',
+        values: {
+          LEFTOVER_KIND: 'Multi-ingredient',
+          LEFTOVER_SOURCE_RECORD_ID: 'mp-1',
+          LEFTOVER_SOURCE_ROW_ID: 'cook-veg',
+          LEFTOVER_RECIPE: 'Tajine with chickpeas',
+          LEFTOVER_PORTIONS: 12,
+          LEFTOVER_STORAGE: 'Frozen'
+        }
+      },
+      {
+        formKey: 'Config: Leftover Bank',
+        language: 'EN',
+        id: 'leftover-si-1',
+        status: 'available',
+        values: {
+          LEFTOVER_KIND: 'Single-ingredient',
+          LEFTOVER_SOURCE_RECORD_ID: 'mp-1',
+          LEFTOVER_SOURCE_ROW_ID: 'single-1',
+          LEFTOVER_INGREDIENT: 'Rice',
+          LEFTOVER_QTY: 3,
+          LEFTOVER_UNIT: 'kg',
+          LEFTOVER_STORAGE: 'Chilled'
+        }
+      }
+    ];
+    const submissions = {
+      ensureDestination: jest.fn((destinationName: string) => {
+        const records = destinationName === 'Leftover Bank Data' ? bankRecords : sourceRecords;
+        return {
+          sheet: {
+            getLastRow: () => records.length + 1,
+            getRange: () => ({
+              getValues: () => records.map((_record, index) => [index])
+            })
+          },
+          headers: ['RID'],
+          columns: {}
+        };
+      }),
+      buildSubmissionRecord: jest.fn((formKey: string, _questions: any[], _columns: any, row: any[]) =>
+        formKey === 'Config: Leftover Bank' ? bankRecords[row[0]] : sourceRecords[row[0]]
+      )
+    };
+
+    const service = new AnalyticsPipelineService({ getId: () => 'active-spreadsheet-id' } as any, submissions as any, {} as any);
+    const sourceForm = {
+      title: 'Meal Production',
+      configSheet: 'Config: Meal Production',
+      destinationTab: 'Meal Production Data',
+      followupConfig: {}
+    };
+    const bankForm = {
+      title: 'Leftover Bank',
+      configSheet: 'Config: Leftover Bank',
+      destinationTab: 'Leftover Bank Data',
+      followupConfig: {}
+    };
+    const pipeline = {
+      id: 'leftover_generation',
+      type: 'generatedBankReport',
+      title: 'Leftover generation',
+      email: {
+        recipients: ['ops@example.com'],
+        subject: 'Leftover generation report since {{START_DATE}}',
+        message: 'Please find attached the Leftover generation report since {{START_DATE}}.'
+      },
+      attachment: {
+        fileNameTemplate: 'Leftover generation report since {{START_DATE}}.xlsx'
+      },
+      report: {
+        dateFieldId: 'MP_PREP_DATE',
+        statusFieldId: 'Status',
+        includeStatuses: ['Closed'],
+        bankFormKey: 'Config: Leftover Bank',
+        bankSourceRecordIdFieldId: 'LEFTOVER_SOURCE_RECORD_ID',
+        bankSourceRowIdFieldId: 'LEFTOVER_SOURCE_ROW_ID',
+        bankKindFieldId: 'LEFTOVER_KIND',
+        mealGroupId: 'MP_MEALS_REQUEST',
+        prepGroupId: 'MP_TYPE_LI',
+        prepTypeFieldId: 'PREP_TYPE',
+        customerFieldId: 'MP_DISTRIBUTOR',
+        customerDisplayField: 'DIST_NAME',
+        serviceFieldId: 'MP_SERVICE',
+        cookFieldId: 'MP_COOK_NAME',
+        dietaryFieldId: 'MEAL_TYPE',
+        originalRecipeFieldId: 'RECIPE',
+        orderedPortionsFieldId: 'ORD_QTY',
+        toCookPortionsFieldId: 'MP_TO_COOK',
+        deliveredPortionsFieldId: 'FINAL_QTY',
+        multiLeftoverNameFieldId: 'LEFTOVER_RECIPE',
+        multiLeftoverPortionsFieldId: 'LEFTOVER_PORTIONS',
+        singleLeftoverNameFieldId: 'LEFTOVER_INGREDIENT',
+        singleLeftoverQuantityFieldId: 'LEFTOVER_QTY',
+        singleLeftoverUnitFieldId: 'LEFTOVER_UNIT',
+        storageFieldId: 'LEFTOVER_STORAGE'
+      }
+    };
+
+    const result = service.runPipeline({
+      ownerForm: sourceForm as any,
+      sourceForm: sourceForm as any,
+      sourceQuestions: [],
+      relatedForms: {
+        'Config: Leftover Bank': { form: bankForm as any, questions: [] }
+      },
+      pipeline: pipeline as any,
+      startDate: '2026-05-01'
+    });
+
+    expect(result).toEqual(expect.objectContaining({ success: true }));
+    expect(result.summary).toMatchObject({
+      recordCount: 1,
+      rowCount: 2,
+      attachmentName: 'Leftover generation report since Fri,01-May-2026.xlsx'
+    });
+    expect(writtenBySheet['Generated MI leftovers']).toEqual([
+      [
+        'Meal Production date',
+        'Customer',
+        'Service',
+        'Responsible cook',
+        'Dietary Category',
+        'Recipe',
+        'Ordered portions',
+        'To cook portions',
+        'Delivered portions',
+        'Leftover used',
+        'MI leftover name',
+        'MI leftover portions',
+        'Frozen'
+      ],
+      ['Mon,11-May-2026', 'HUB', 'Lunch', 'Akkara', 'Vegetarian', 'Tajine', 450, 430, 420, 'YES', 'Tajine with chickpeas', 12, 'YES']
+    ]);
+    expect(writtenBySheet['Generated SI leftovers']).toEqual([
+      ['Meal Production date', 'Customer', 'Service', 'Responsible cook', 'SI leftover name', 'SI leftover quantity', 'SI leftover unit', 'Frozen'],
+      ['Mon,11-May-2026', 'HUB', 'Lunch', 'Akkara', 'Rice', 3, 'kg', 'NO']
+    ]);
+  });
+
   test('runPipeline adds missing expected cleaning and storage check rows', () => {
     const blob: any = {
       name: '',

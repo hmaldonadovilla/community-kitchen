@@ -3383,18 +3383,78 @@ export class Dashboard {
       return out;
     };
 
+    const normalizeGeneratedBankReport = (raw: any): any => {
+      if (!raw || typeof raw !== 'object') return undefined;
+      const requiredStringFields = [
+        'dateFieldId',
+        'bankFormKey',
+        'bankSourceRecordIdFieldId',
+        'bankSourceRowIdFieldId',
+        'bankKindFieldId',
+        'mealGroupId',
+        'prepGroupId',
+        'prepTypeFieldId',
+        'customerFieldId',
+        'serviceFieldId',
+        'cookFieldId',
+        'dietaryFieldId',
+        'originalRecipeFieldId',
+        'orderedPortionsFieldId',
+        'toCookPortionsFieldId',
+        'deliveredPortionsFieldId',
+        'multiLeftoverNameFieldId',
+        'multiLeftoverPortionsFieldId',
+        'singleLeftoverNameFieldId',
+        'singleLeftoverQuantityFieldId',
+        'singleLeftoverUnitFieldId',
+        'storageFieldId'
+      ];
+      const out: Record<string, any> = {};
+      requiredStringFields.forEach(fieldId => {
+        const value = normalizeTextValue((raw as any)[fieldId]);
+        if (value) out[fieldId] = value;
+      });
+      if (requiredStringFields.some(fieldId => !out[fieldId])) return undefined;
+      [
+        'statusFieldId',
+        'cookPrepTypeValue',
+        'customerDisplayField',
+        'frozenStorageValue',
+        'yesLabel',
+        'noLabel',
+        'multiSheetName',
+        'singleSheetName'
+      ].forEach(fieldId => {
+        const value = normalizeTextValue((raw as any)[fieldId]);
+        if (value) out[fieldId] = value;
+      });
+      (
+        [
+          ['includeStatuses', (raw as any).includeStatuses],
+          ['multiIngredientKindValues', (raw as any).multiIngredientKindValues],
+          ['singleIngredientKindValues', (raw as any).singleIngredientKindValues]
+        ] as Array<[string, any]>
+      ).forEach(([fieldId, value]) => {
+        const list = normalizeTextList(value);
+        if (list.length) out[fieldId] = Array.from(new Set(list));
+      });
+      return out;
+    };
+
     const normalizePipeline = (entry: any): any | null => {
       if (!entry || typeof entry !== 'object') return null;
       const typeRaw = (entry as any).type ?? (entry as any).kind ?? 'ingredientUsageReport';
       const type = typeRaw !== undefined && typeRaw !== null ? typeRaw.toString().trim() : '';
-      if (type !== 'ingredientUsageReport' && type !== 'recordTableReport') return null;
+      if (type !== 'ingredientUsageReport' && type !== 'recordTableReport' && type !== 'generatedBankReport') return null;
       const idRaw = (entry as any).id ?? (entry as any).key ?? (entry as any).name;
       const id = idRaw !== undefined && idRaw !== null ? idRaw.toString().trim() : '';
       if (!id) return null;
       const report =
         type === 'ingredientUsageReport'
           ? normalizeIngredientUsageReport((entry as any).report ?? (entry as any).config ?? entry)
-          : normalizeRecordTableReport((entry as any).report ?? (entry as any).config ?? entry);
+          : type === 'recordTableReport'
+            ? normalizeRecordTableReport((entry as any).report ?? (entry as any).config ?? entry)
+            : normalizeGeneratedBankReport((entry as any).report ?? (entry as any).config ?? entry);
       const email = normalizePipelineEmail((entry as any).email);
       if (!report || !email) return null;
       const out: Record<string, any> = {

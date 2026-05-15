@@ -1060,5 +1060,27 @@ describe('staging integrity dialogs and list legend config', () => {
     expect(findPipeline('ingredients_used')?.report?.closedStatuses).toEqual(expectedStatuses);
     expect(findPipeline('meals_produced_delivered')?.report?.includeStatuses).toEqual(expectedStatuses);
     expect(findPipeline('meals_produced_delivered')?.report?.completedStatuses).toEqual(expectedStatuses);
+    expect(findPipeline('leftover_generation')).toMatchObject({
+      type: 'generatedBankReport',
+      title: 'Leftover generation',
+      report: expect.objectContaining({
+        bankFormKey: 'Config: Leftover Bank',
+        includeStatuses: expectedStatuses,
+        multiSheetName: 'Generated MI leftovers',
+        singleSheetName: 'Generated SI leftovers'
+      })
+    });
+  });
+
+  test('leftover bank labels distinguish multi- and single-ingredient names', () => {
+    const cfg = readConfig('config_leftover_bank.json');
+    const questions = cfg.questions || [];
+    const definitionQuestions = cfg.definition?.questions || [];
+    const field = (list: any[], id: string) => list.find(entry => entry?.id === id);
+
+    expect(field(questions, 'LEFTOVER_RECIPE')?.qEn).toBe('MI Leftover name');
+    expect(field(definitionQuestions, 'LEFTOVER_RECIPE')?.qEn).toBe('MI Leftover name');
+    expect(field(questions, 'LEFTOVER_INGREDIENT')?.qEn).toBe('SI Leftover name');
+    expect(field(definitionQuestions, 'LEFTOVER_INGREDIENT')?.qEn).toBe('SI Leftover name');
   });
 });
