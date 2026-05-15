@@ -1754,6 +1754,13 @@ components:
             - `auto`: NUMBER fields sort numerically; other fields sort as text.
             - `text`: force text comparison.
             - `number`: force numeric comparison before text fallback.
+        newRows:
+          type: string
+          enum: [sort, firstUntilSave]
+          description: |
+            Optional handling for rows created in the current edit session.
+            - `sort`: sort all rows normally (default).
+            - `firstUntilSave`: keep newly added local rows first until the overlay edit is saved.
 
     ClearOnChangeConfig:
       type: object
@@ -3797,6 +3804,10 @@ components:
             - Default: `true`
             - When `false`, the sidebar is hidden for normal users.
             - Adding `?dev-mode=true` to the form URL still enables the sidebar for troubleshooting.
+        hideAutoSaveNotices:
+          type: boolean
+          description: |
+            When true, hide top-right autosave notices while keeping other header status such as the environment tag.
       additionalProperties: false
 
     GroupBehaviorConfig:

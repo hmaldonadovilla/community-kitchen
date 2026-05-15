@@ -50,7 +50,7 @@ describe('meal production recipe ingredient overlay configuration', () => {
       expect(body.view.helperText.en).toBe(viewHelper);
       expect(body.edit.helperText.en).toBe(editHelper);
       expect(body.edit.saveLabel.en).toBe('Back to View Recipe');
-      expect(body.edit.rowSort).toEqual({ fieldId: 'ING', direction: 'asc', mode: 'text' });
+      expect(body.edit.rowSort).toEqual({ fieldId: 'ING', direction: 'asc', mode: 'text', newRows: 'firstUntilSave' });
     });
   });
 
@@ -67,7 +67,7 @@ describe('meal production recipe ingredient overlay configuration', () => {
 
     expect(ingredientGroups).toHaveLength(2);
     ingredientGroups.forEach(group => {
-      expect(group.ui.rowSort).toEqual({ fieldId: 'ING', direction: 'asc', mode: 'text' });
+      expect(group.ui.rowSort).toEqual({ fieldId: 'ING', direction: 'asc', mode: 'text', newRows: 'firstUntilSave' });
       expect(group.addButtonLabel.en).toBe('Add ingredients');
       expect(group.addOverlay.title.en).toBe('Add ingredients');
       expect(group.addOverlay.helperText.en).toBe('Search and select ingredients to adjust today’s dish recipe.');

@@ -911,7 +911,8 @@
     },
     "appHeader": {
       "logoUrl": "https://drive.google.com/uc?export=view&id=11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K",
-      "sidebarEnabled": false
+      "sidebarEnabled": false,
+      "hideAutoSaveNotices": true
     },
     "groupBehavior": {
       "autoCollapseOnComplete": true,
@@ -2444,7 +2445,8 @@
                                   "rowSort": {
                                     "fieldId": "ING",
                                     "direction": "asc",
-                                    "mode": "text"
+                                    "mode": "text",
+                                    "newRows": "firstUntilSave"
                                   }
                                 }
                               }
@@ -6098,7 +6100,8 @@
                     "rowSort": {
                       "fieldId": "ING",
                       "direction": "asc",
-                      "mode": "text"
+                      "mode": "text",
+                      "newRows": "firstUntilSave"
                     }
                   },
                   "view": {
@@ -6333,7 +6336,8 @@
                   "rowSort": {
                     "fieldId": "ING",
                     "direction": "asc",
-                    "mode": "text"
+                    "mode": "text",
+                    "newRows": "firstUntilSave"
                   }
                 },
                 "minRows": 0,
@@ -9588,7 +9592,8 @@
                       "rowSort": {
                         "fieldId": "ING",
                         "direction": "asc",
-                        "mode": "text"
+                        "mode": "text",
+                        "newRows": "firstUntilSave"
                       }
                     },
                     "view": {
@@ -9823,7 +9828,8 @@
                     "rowSort": {
                       "fieldId": "ING",
                       "direction": "asc",
-                      "mode": "text"
+                      "mode": "text",
+                      "newRows": "firstUntilSave"
                     }
                   },
                   "minRows": 0,
@@ -11690,7 +11696,8 @@
     },
     "appHeader": {
       "logoUrl": "https://drive.google.com/uc?export=view&id=11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K",
-      "sidebarEnabled": false
+      "sidebarEnabled": false,
+      "hideAutoSaveNotices": true
     },
     "groupBehavior": {
       "autoCollapseOnComplete": true,
@@ -13223,7 +13230,8 @@
                                   "rowSort": {
                                     "fieldId": "ING",
                                     "direction": "asc",
-                                    "mode": "text"
+                                    "mode": "text",
+                                    "newRows": "firstUntilSave"
                                   }
                                 },
                                 "subGroupId": "MP_INGREDIENTS_LI"

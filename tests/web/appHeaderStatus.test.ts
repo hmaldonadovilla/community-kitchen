@@ -87,6 +87,31 @@ describe('AppHeaderStatus', () => {
         isClosedRecord: true
       })
     ).toBe(false);
+    expect(
+      shouldRenderAppHeaderSaveNotice({
+        view: 'form',
+        autoSaveEnabled: true,
+        draftSavePhase: 'saving',
+        isClosedRecord: false,
+        hideAutoSaveNotices: true
+      })
+    ).toBe(false);
+  });
+
+  it('keeps the environment tag visible when autosave notices are hidden', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AppHeaderStatus, {
+        ...baseProps,
+        envTag: 'staging',
+        draftSavePhase: 'saving',
+        hideAutoSaveNotices: true
+      })
+    );
+
+    expect(html).toContain('ck-env-tag');
+    expect(html).toContain('Environment: staging');
+    expect(html).not.toContain('ck-app-save-status');
+    expect(html).not.toContain('Saving');
   });
 
   it('renders no markup when there is no header status', () => {

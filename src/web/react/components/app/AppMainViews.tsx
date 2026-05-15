@@ -87,6 +87,8 @@ interface AppMainViewsProps {
   handleRecordSelect: any;
   handleReadListViewDateSearchCache: any;
   handleListViewCache: any;
+  preservedListSearchState: { inputValue?: string; queryValue?: string } | null;
+  handlePreservedListSearchStateChange: (state: { inputValue: string; queryValue: string } | null) => void;
   logEvent: (event: string, payload?: Record<string, unknown>) => void;
 }
 
@@ -170,6 +172,8 @@ export const AppMainViews: React.FC<AppMainViewsProps> = ({
   handleRecordSelect,
   handleReadListViewDateSearchCache,
   handleListViewCache,
+  preservedListSearchState,
+  handlePreservedListSearchStateChange,
   logEvent
 }) => (
   <>
@@ -292,6 +296,8 @@ export const AppMainViews: React.FC<AppMainViewsProps> = ({
         legendColumnWidths={listLegendColumnWidths}
         onReadDateSearchCache={handleReadListViewDateSearchCache}
         onCache={handleListViewCache}
+        preservedSearchState={preservedListSearchState}
+        onPreservedSearchStateChange={handlePreservedListSearchStateChange}
         onSelect={handleRecordSelect}
       />
     )}

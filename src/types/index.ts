@@ -2295,6 +2295,12 @@ export interface LineItemRowSortConfig {
    * - number: force numeric comparison before text fallback
    */
   mode?: 'auto' | 'text' | 'number';
+  /**
+   * Optional handling for rows created in the current edit session.
+   * - sort: sort all rows normally (default)
+   * - firstUntilSave: keep newly added local rows first until the overlay edit is saved
+   */
+  newRows?: 'sort' | 'firstUntilSave';
 }
 
 export interface CompactRowPartConfig {
@@ -3893,6 +3899,10 @@ export interface AppHeaderConfig {
    * Adding `?dev-mode=true` to the form URL still enables the sidebar for troubleshooting.
    */
   sidebarEnabled?: boolean;
+  /**
+   * When true, hide top-right autosave notices while keeping other header status such as the environment tag.
+   */
+  hideAutoSaveNotices?: boolean;
 }
 
 export interface GroupBehaviorConfig {

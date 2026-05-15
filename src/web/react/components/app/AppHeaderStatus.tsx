@@ -10,7 +10,9 @@ export const shouldRenderAppHeaderSaveNotice = (args: {
   autoSaveEnabled: boolean;
   draftSavePhase: HeaderDraftSavePhase;
   isClosedRecord: boolean;
+  hideAutoSaveNotices?: boolean;
 }): boolean => {
+  if (args.hideAutoSaveNotices) return false;
   if (args.isClosedRecord) return false;
   if (!args.autoSaveEnabled) return false;
   if (args.draftSavePhase === 'idle') return false;
@@ -31,7 +33,8 @@ export const AppHeaderStatus: React.FC<{
   draftSavePhase: HeaderDraftSavePhase;
   draftSaveMessage?: string | null;
   isClosedRecord: boolean;
-}> = ({ envTag, language, view, autoSaveEnabled, draftSavePhase, draftSaveMessage, isClosedRecord }) => {
+  hideAutoSaveNotices?: boolean;
+}> = ({ envTag, language, view, autoSaveEnabled, draftSavePhase, draftSaveMessage, isClosedRecord, hideAutoSaveNotices }) => {
   const saveIndicator = useMemo(() => {
     const showForView = view === 'form' || (autoSaveEnabled && draftSavePhase === 'saving');
     if (!showForView) return null;
@@ -44,7 +47,7 @@ export const AppHeaderStatus: React.FC<{
       );
     }
 
-    if (!shouldRenderAppHeaderSaveNotice({ view, autoSaveEnabled, draftSavePhase, isClosedRecord })) return null;
+    if (!shouldRenderAppHeaderSaveNotice({ view, autoSaveEnabled, draftSavePhase, isClosedRecord, hideAutoSaveNotices })) return null;
 
     const byPhase: Partial<Record<HeaderDraftSavePhase, { key: string; fallback: string; tone: string }>> = {
       saving: { key: 'draft.savingShort', fallback: 'Saving…', tone: 'saving' },
@@ -62,7 +65,7 @@ export const AppHeaderStatus: React.FC<{
         {text}
       </output>
     );
-  }, [autoSaveEnabled, draftSaveMessage, draftSavePhase, isClosedRecord, language, view]);
+  }, [autoSaveEnabled, draftSaveMessage, draftSavePhase, hideAutoSaveNotices, isClosedRecord, language, view]);
 
   const envStatus = useMemo(() => {
     const trimmed = (envTag || '').toString().trim();

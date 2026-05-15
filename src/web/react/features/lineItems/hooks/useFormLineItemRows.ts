@@ -209,7 +209,8 @@ export function useFormLineItemRows({
           id: rowId,
           values: rowValues,
           parentId: subgroupInfo?.parentRowId,
-          parentGroupId: subgroupInfo?.parentGroupKey
+          parentGroupId: subgroupInfo?.parentGroupKey,
+          localAddedAtMs: Date.now()
         };
         let nextWithRow: LineItemState = { ...prev, [groupId]: [row, ...current] };
         if (subgroupInfo?.subGroupId === 'MP_INGREDIENTS_LI') {

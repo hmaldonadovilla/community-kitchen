@@ -95,6 +95,16 @@ export const shouldHideBaseItemsForServerDateSearch = (args: {
   return serverQueryDate !== queryDate || !args.hasServerResponse;
 };
 
+export const resolvePreservedInlineListSearchState = (
+  inputValue: string | null | undefined,
+  queryValue: string | null | undefined
+): { inputValue: string; queryValue: string } | null => {
+  const input = (inputValue || '').toString();
+  const query = (queryValue || '').toString();
+  if (!input.trim() || !query.trim()) return null;
+  return { inputValue: input, queryValue: query };
+};
+
 export const resolveInitialListSearchValue = (
   search: ListViewSearchConfig | undefined,
   now: Date = new Date()

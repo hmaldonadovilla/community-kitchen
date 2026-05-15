@@ -3096,6 +3096,19 @@ const FormView: React.FC<FormViewProps> = ({
         return false;
       }
 
+      setLineItems(prev => {
+        const rows = prev[args.errorGroupKey];
+        if (!Array.isArray(rows) || !rows.some(row => Number.isFinite(row.localAddedAtMs))) return prev;
+        return {
+          ...prev,
+          [args.errorGroupKey]: rows.map(row => {
+            if (!Number.isFinite(row.localAddedAtMs)) return row;
+            const { localAddedAtMs: _localAddedAtMs, ...rest } = row;
+            return rest;
+          })
+        };
+      });
+
       if (args.canView) {
         setOverlayDetailSelection({ groupId: args.groupId, rowId: args.rowId, mode: 'view' });
         overlayDetailEditSnapshotRef.current = null;
@@ -3122,6 +3135,7 @@ const FormView: React.FC<FormViewProps> = ({
       mergeLineItemGroupErrors,
       onDiagnostic,
       setErrors,
+      setLineItems,
       setOverlayDetailSelection,
       subgroupOverlay.open,
       subgroupOverlay.subKey,

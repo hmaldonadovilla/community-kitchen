@@ -3769,6 +3769,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     const records = bootstrap?.records || {};
     return { response, records };
   });
+  const [preservedListSearchByForm, setPreservedListSearchByForm] = useState<
+    Record<string, { inputValue: string; queryValue: string }>
+  >({});
   const { openRecordPerfRef, backToHomePerfRef } = useAppNavigationPerf({
     selectedRecordId,
     view,
@@ -3863,6 +3866,24 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     [hasListViewAnalyticsWidgets, logEvent]
   );
   const [listRefreshToken, setListRefreshToken] = useState(0);
+  const preservedListSearchState = preservedListSearchByForm[formKey] || null;
+  const handlePreservedListSearchStateChange = useCallback(
+    (state: { inputValue: string; queryValue: string } | null) => {
+      setPreservedListSearchByForm(prev => {
+        const next = { ...prev };
+        if (!state || (!state.inputValue.trim() && !state.queryValue.trim())) {
+          delete next[formKey];
+          return next;
+        }
+        next[formKey] = {
+          inputValue: state.inputValue,
+          queryValue: state.queryValue
+        };
+        return next;
+      });
+    },
+    [formKey]
+  );
   const requestListRefresh = useCallback((opts?: { clearResponse?: boolean }) => {
     // Keep any already-hydrated record snapshots (from bootstrap and/or recent selections) so navigating
     // back to the list does not reintroduce slow record fetches.
@@ -14141,6 +14162,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     recordLoadError: Boolean(recordLoadError),
     hasCurrentRecord: Boolean(currentRecord)
   });
+  const hideAppHeaderAutoSaveNotices = definition.appHeader?.hideAutoSaveNotices === true;
   const headerRight = useMemo(() => {
     return (
       <AppHeaderStatus
@@ -14151,18 +14173,20 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         draftSavePhase={draftSave.phase}
         draftSaveMessage={draftSave.message}
         isClosedRecord={isClosedRecord}
+        hideAutoSaveNotices={hideAppHeaderAutoSaveNotices}
       />
     );
-  }, [autoSaveEnabled, draftSave.message, draftSave.phase, envTag, isClosedRecord, language, view]);
+  }, [autoSaveEnabled, draftSave.message, draftSave.phase, envTag, hideAppHeaderAutoSaveNotices, isClosedRecord, language, view]);
   const headerRightPriority = useMemo(
     () =>
       shouldRenderAppHeaderSaveNotice({
         view,
         autoSaveEnabled,
         draftSavePhase: draftSave.phase,
-        isClosedRecord
+        isClosedRecord,
+        hideAutoSaveNotices: hideAppHeaderAutoSaveNotices
       }),
-    [autoSaveEnabled, draftSave.phase, isClosedRecord, view]
+    [autoSaveEnabled, draftSave.phase, hideAppHeaderAutoSaveNotices, isClosedRecord, view]
   );
   const {
     drawerEnabled: headerDrawerEnabled,
@@ -14541,6 +14565,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         handleRecordSelect={handleRecordSelect}
         handleReadListViewDateSearchCache={handleReadListViewDateSearchCache}
         handleListViewCache={handleListViewCache}
+        preservedListSearchState={preservedListSearchState}
+        handlePreservedListSearchStateChange={handlePreservedListSearchStateChange}
         logEvent={logEvent}
       />
 

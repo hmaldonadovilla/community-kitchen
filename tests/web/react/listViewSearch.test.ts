@@ -1,6 +1,7 @@
 import {
   isPastIsoDate,
   normalizeToIsoDateLocal,
+  resolvePreservedInlineListSearchState,
   resolveInitialListSearchValue,
   resolveOldestPrefetchedIsoDate,
   shouldHydrateRecordsForServerDateSearch,
@@ -157,6 +158,15 @@ describe('listViewSearch', () => {
         hasServerResponse: true
       })
     ).toBe(false);
+  });
+
+  it('preserves only visible inline list searches when opening a row', () => {
+    expect(resolvePreservedInlineListSearchState('2026-05-14', '2026-05-14')).toEqual({
+      inputValue: '2026-05-14',
+      queryValue: '2026-05-14'
+    });
+    expect(resolvePreservedInlineListSearchState('', '2026-05-09..2026-05-16')).toBeNull();
+    expect(resolvePreservedInlineListSearchState('   ', '2026-05-14')).toBeNull();
   });
 
   it('resolves a relative today initial value for date search', () => {

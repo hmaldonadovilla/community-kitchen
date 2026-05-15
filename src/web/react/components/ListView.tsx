@@ -18,6 +18,7 @@ import { filterItemsByAdvancedSearch, hasActiveAdvancedSearch } from '../app/lis
 import { collectListViewMetricDependencies, computeListViewMetricValue } from '../app/listViewMetric';
 import {
   normalizeToIsoDateLocal,
+  resolvePreservedInlineListSearchState,
   resolveInitialListSearchValue,
   resolveOldestPrefetchedIsoDate,
   shouldHydrateRecordsForServerDateSearch,
@@ -90,6 +91,8 @@ interface ListViewProps {
   legendItems?: ResolvedListViewLegendItem[];
   legendColumns?: number;
   legendColumnWidths?: [number, number] | null;
+  preservedSearchState?: { inputValue?: string; queryValue?: string } | null;
+  onPreservedSearchStateChange?: (state: { inputValue: string; queryValue: string } | null) => void;
 }
 
 const ListView: React.FC<ListViewProps> = ({
@@ -113,7 +116,9 @@ const ListView: React.FC<ListViewProps> = ({
   error: errorProp,
   legendItems,
   legendColumns = 1,
-  legendColumnWidths = null
+  legendColumnWidths = null,
+  preservedSearchState = null,
+  onPreservedSearchStateChange
 }) => {
   const uiDisabled = Boolean(disabled);
   const pageSize = Math.max(1, Math.min(definition.listView?.pageSize || 10, 50));
@@ -124,6 +129,10 @@ const ListView: React.FC<ListViewProps> = ({
   const advancedSearchEnabled = listSearchMode === 'advanced';
   const searchInputId = 'ck-list-search';
   const initialSearchValue = resolveInitialListSearchValue(definition.listView?.search);
+  const preservedSearchInputValue = (preservedSearchState?.inputValue || '').toString().trim();
+  const preservedSearchQueryValue = (preservedSearchState?.queryValue || '').toString().trim();
+  const initialSearchInputValue = preservedSearchInputValue || initialSearchValue;
+  const initialSearchQueryValue = preservedSearchQueryValue || initialSearchInputValue;
   const [loading, setLoading] = useState(false);
   const [prefetching, setPrefetching] = useState(false);
   const [pageDemandLoading, setPageDemandLoading] = useState(false);
@@ -145,8 +154,12 @@ const ListView: React.FC<ListViewProps> = ({
   const [pageIndex, setPageIndex] = useState(0);
   const defaultSortField = definition.listView?.defaultSort?.fieldId || 'updatedAt';
   const defaultSortDirection = (definition.listView?.defaultSort?.direction || 'desc') as 'asc' | 'desc';
-  const [searchInputValue, setSearchInputValue] = useState(() => initialSearchValue);
-  const [searchQueryValue, setSearchQueryValue] = useState(() => initialSearchValue);
+  const [searchInputValue, setSearchInputValue] = useState(() => initialSearchInputValue);
+  const [searchQueryValue, setSearchQueryValue] = useState(() => initialSearchQueryValue);
+  const initialSearchStateRef = useRef({
+    inputValue: initialSearchInputValue,
+    queryValue: initialSearchQueryValue
+  });
   const [sortField, setSortField] = useState<string>(defaultSortField);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(defaultSortDirection);
 
@@ -193,6 +206,13 @@ const ListView: React.FC<ListViewProps> = ({
   const prevUiLoadingRef = useRef<boolean>(uiLoading);
 
   useEffect(() => {
+    initialSearchStateRef.current = {
+      inputValue: initialSearchInputValue,
+      queryValue: initialSearchQueryValue
+    };
+  }, [initialSearchInputValue, initialSearchQueryValue]);
+
+  useEffect(() => {
     if (cachedResponse === undefined || cachedResponse === null) return;
     const items = Array.isArray(cachedResponse.items) ? cachedResponse.items : [];
     setAllItems(items);
@@ -206,8 +226,9 @@ const ListView: React.FC<ListViewProps> = ({
   }, [cachedRecords]);
 
   useEffect(() => {
-    setSearchInputValue(initialSearchValue);
-    setSearchQueryValue(initialSearchValue);
+    const initial = initialSearchStateRef.current;
+    setSearchInputValue(initial.inputValue);
+    setSearchQueryValue(initial.queryValue);
     setAdvancedFieldFilters({});
     setAdvancedHasSearched(false);
     setAdvancedKeyword('');
@@ -715,8 +736,9 @@ const ListView: React.FC<ListViewProps> = ({
 
   useEffect(() => {
     setPageIndex(0);
-    setSearchInputValue(initialSearchValue);
-    setSearchQueryValue(initialSearchValue);
+    const initial = initialSearchStateRef.current;
+    setSearchInputValue(initial.inputValue);
+    setSearchQueryValue(initial.queryValue);
     setAdvancedOpen(false);
     setAdvancedFieldFilters({});
     setAdvancedHasSearched(false);
@@ -1459,6 +1481,10 @@ const ListView: React.FC<ListViewProps> = ({
     [localDateSearchCacheEntry?.records, records]
   );
 
+  const preserveCurrentInlineSearchState = useCallback(() => {
+    onPreservedSearchStateChange?.(resolvePreservedInlineListSearchState(searchInputValue, searchQueryValue));
+  }, [onPreservedSearchStateChange, searchInputValue, searchQueryValue]);
+
   const renderSingleRuleAction = (
     row: ListItem,
     col: ListViewRuleColumnConfig,
@@ -1555,6 +1581,7 @@ const ListView: React.FC<ListViewProps> = ({
             openButtonId: openView === 'button' ? openButtonId : null,
             text: ariaLabel
           });
+          preserveCurrentInlineSearchState();
           onSelect(row, resolveCachedRecordForRow(row), {
             openView,
             openButtonId: openView === 'button' ? openButtonId : undefined
@@ -1759,13 +1786,22 @@ const ListView: React.FC<ListViewProps> = ({
         openView: rowOpen?.openView || 'auto',
         openButtonId: rowOpen?.openView === 'button' ? rowOpen?.openButtonId || null : null
       });
+      preserveCurrentInlineSearchState();
       if (rowOpen) {
         onSelect(row, record, { openView: rowOpen.openView, openButtonId: rowOpen.openButtonId });
       } else {
         onSelect(row, record);
       }
     },
-    [onDiagnostic, onSelect, resolveCachedRecordForRow, rowClickEnabled, ruleColumns, uiDisabled]
+    [
+      onDiagnostic,
+      onSelect,
+      preserveCurrentInlineSearchState,
+      resolveCachedRecordForRow,
+      rowClickEnabled,
+      ruleColumns,
+      uiDisabled
+    ]
   );
 
   const clearSearchInputOnly = useCallback(() => {
@@ -1779,6 +1815,7 @@ const ListView: React.FC<ListViewProps> = ({
   const clearSearchResults = useCallback(() => {
     setSearchInputValue('');
     setSearchQueryValue('');
+    onPreservedSearchStateChange?.(null);
     if (advancedSearchEnabled) {
       setAdvancedFieldFilters({});
       setAdvancedHasSearched(false);
@@ -1786,7 +1823,7 @@ const ListView: React.FC<ListViewProps> = ({
       setAdvancedOpen(false);
     }
     onDiagnostic?.('list.search.clearResults', { mode: listSearchMode });
-  }, [advancedSearchEnabled, listSearchMode, onDiagnostic]);
+  }, [advancedSearchEnabled, listSearchMode, onDiagnostic, onPreservedSearchStateChange]);
 
   const closeOverlayPreset = useCallback(() => {
     const shouldClearSearch = shouldClearSearchOnOverlayPresetClose(overlayPresetButton?.cfg || null);
@@ -1794,6 +1831,7 @@ const ListView: React.FC<ListViewProps> = ({
     if (shouldClearSearch) {
       setSearchInputValue(initialSearchValue);
       setSearchQueryValue(initialSearchValue);
+      onPreservedSearchStateChange?.(null);
       if (advancedSearchEnabled) {
         setAdvancedFieldFilters({});
         setAdvancedHasSearched(false);
@@ -1802,7 +1840,7 @@ const ListView: React.FC<ListViewProps> = ({
       }
     }
     onDiagnostic?.('list.search.preset.overlay.close', { clearSearch: shouldClearSearch });
-  }, [advancedSearchEnabled, initialSearchValue, onDiagnostic, overlayPresetButton?.cfg]);
+  }, [advancedSearchEnabled, initialSearchValue, onDiagnostic, onPreservedSearchStateChange, overlayPresetButton?.cfg]);
 
   const applyAdvancedSearchNow = useCallback(() => {
     if (!advancedSearchEnabled) return;
@@ -1941,6 +1979,7 @@ const ListView: React.FC<ListViewProps> = ({
 
       setSearchInputValue('');
       setSearchQueryValue(mode === 'advanced' ? '' : nextValue);
+      onPreservedSearchStateChange?.(null);
 
       if (mode === 'advanced') {
         setAdvancedFieldFilters(nextFieldFilters);
@@ -1963,7 +2002,7 @@ const ListView: React.FC<ListViewProps> = ({
         advancedOverride: usesAdvancedOverride
       });
     },
-    [advancedSearchEnabled, dateSearchEnabled, listSearchMode, onDiagnostic]
+    [advancedSearchEnabled, dateSearchEnabled, listSearchMode, onDiagnostic, onPreservedSearchStateChange]
   );
 
   const visiblePresetButtons = useMemo(

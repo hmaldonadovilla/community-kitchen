@@ -3,12 +3,14 @@ import type { LineItemFieldConfig, LineItemRowState } from '../../types';
 export type LineItemRowSortDirection = 'asc' | 'desc';
 export type LineItemRowSortEmptyPlacement = 'first' | 'last';
 export type LineItemRowSortMode = 'auto' | 'text' | 'number';
+export type LineItemRowSortNewRows = 'sort' | 'firstUntilSave';
 
 export interface LineItemRowSortConfig {
   fieldId?: string;
   direction?: LineItemRowSortDirection;
   empty?: LineItemRowSortEmptyPlacement;
   mode?: LineItemRowSortMode;
+  newRows?: LineItemRowSortNewRows;
 }
 
 const normalizeText = (value: unknown): string => {
@@ -34,6 +36,7 @@ export const applyLineItemRowSort = (args: {
   const emptyPlacement = config?.empty === 'first' ? 'first' : 'last';
   const mode = config?.mode === 'number' || config?.mode === 'text' ? config.mode : 'auto';
   const numeric = isNumericField(field, mode);
+  const keepNewRowsFirst = config?.newRows === 'firstUntilSave';
 
   const decorated = rows.map((row, index) => {
     const raw = (row.values || {})[fieldId];
@@ -67,5 +70,16 @@ export const applyLineItemRowSort = (args: {
     return left.index - right.index;
   });
 
-  return decorated.map(entry => entry.row);
+  if (!keepNewRowsFirst) return decorated.map(entry => entry.row);
+
+  const localAdded = decorated
+    .filter(entry => Number.isFinite(entry.row.localAddedAtMs))
+    .sort((left, right) => {
+      const delta = (right.row.localAddedAtMs || 0) - (left.row.localAddedAtMs || 0);
+      return delta !== 0 ? delta : left.index - right.index;
+    });
+  if (!localAdded.length) return decorated.map(entry => entry.row);
+
+  const localAddedIds = new Set(localAdded.map(entry => entry.row.id));
+  return localAdded.map(entry => entry.row).concat(decorated.filter(entry => !localAddedIds.has(entry.row.id)).map(entry => entry.row));
 };

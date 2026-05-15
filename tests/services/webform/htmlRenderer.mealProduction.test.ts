@@ -21,7 +21,11 @@ const mealProductionGroup: QuestionConfig = {
     fields: [
       { id: 'MEAL_TYPE', type: 'TEXT', labelEn: 'Meal type', required: false } as any,
       { id: 'ORD_QTY', type: 'NUMBER', labelEn: 'Ordered', required: false } as any,
-      { id: 'FINAL_QTY', type: 'NUMBER', labelEn: 'Final', required: false } as any
+      { id: 'FINAL_QTY', type: 'NUMBER', labelEn: 'Final', required: false } as any,
+      { id: 'MP_TO_COOK', type: 'NUMBER', labelEn: 'To cook', required: false } as any,
+      { id: 'MP_LEFTOVER_RECIPE_CAPTURE', type: 'TEXT', labelEn: 'MI leftover name', required: false } as any,
+      { id: 'MP_LEFTOVER_PORTIONS_CAPTURE', type: 'NUMBER', labelEn: 'MI leftover portions', required: false } as any,
+      { id: 'MP_LEFTOVER_STORAGE_CAPTURE', type: 'TEXT', labelEn: 'Storage', required: false } as any
     ],
     subGroups: [
       {
@@ -80,6 +84,27 @@ const questions: QuestionConfig[] = [
   { id: 'ING_EVD', type: 'FILE_UPLOAD', qEn: 'Evidence', required: false, status: 'Active', options: [], optionsFr: [], optionsNl: [] } as any,
   { id: 'MP_COOK_TEMP', type: 'CHECKBOX', qEn: 'All pots ≥63°C', required: false, status: 'Active', options: [], optionsFr: [], optionsNl: [] } as any,
   { id: 'TEMP_EVD', type: 'FILE_UPLOAD', qEn: 'Food safety photo', required: false, status: 'Active', options: [], optionsFr: [], optionsNl: [] } as any,
+  {
+    id: 'MP_LEFTOVER_CAPTURE_LI',
+    type: 'LINE_ITEM_GROUP',
+    qEn: 'Single ingredient leftovers',
+    required: false,
+    status: 'Active',
+    options: [],
+    optionsFr: [],
+    optionsNl: [],
+    lineItemConfig: {
+      fields: [
+        { id: 'LEFTOVER_KIND', type: 'TEXT', labelEn: 'Kind', required: false } as any,
+        { id: 'LEFTOVER_RECIPE', type: 'TEXT', labelEn: 'Recipe', required: false } as any,
+        { id: 'LEFTOVER_PORTIONS', type: 'NUMBER', labelEn: 'Portions', required: false } as any,
+        { id: 'LEFTOVER_INGREDIENT', type: 'TEXT', labelEn: 'SI Leftover name', required: false } as any,
+        { id: 'LEFTOVER_QTY', type: 'NUMBER', labelEn: 'Qty', required: false } as any,
+        { id: 'LEFTOVER_UNIT', type: 'TEXT', labelEn: 'Unit', required: false } as any,
+        { id: 'LEFTOVER_STORAGE', type: 'TEXT', labelEn: 'Storage', required: false } as any
+      ]
+    }
+  } as any,
   mealProductionGroup
 ];
 
@@ -117,7 +142,11 @@ const recordValues = {
       [ROW_ID_KEY]: 'meal-1',
       MEAL_TYPE: 'Diabetic',
       ORD_QTY: 15,
+      MP_TO_COOK: 15,
       FINAL_QTY: 15,
+      MP_LEFTOVER_RECIPE_CAPTURE: 'Renamed green beans',
+      MP_LEFTOVER_PORTIONS_CAPTURE: 4,
+      MP_LEFTOVER_STORAGE_CAPTURE: 'Frozen',
       MP_TYPE_LI: [
         {
           [ROW_ID_KEY]: 'prep-1',
@@ -131,6 +160,16 @@ const recordValues = {
           ]
         }
       ]
+    }
+  ],
+  MP_LEFTOVER_CAPTURE_LI: [
+    {
+      [ROW_ID_KEY]: 'si-1',
+      LEFTOVER_KIND: 'Single-ingredient',
+      LEFTOVER_INGREDIENT: 'Rice',
+      LEFTOVER_QTY: 250,
+      LEFTOVER_UNIT: 'gr',
+      LEFTOVER_STORAGE: 'Chilled'
     }
   ]
 };
@@ -537,6 +576,31 @@ describe('meal production bundled HTML rendering', () => {
     expect(summary.html).toContain('LE-1');
     expect(summary.html).toContain('LP-1');
     expect(summary.html).toContain('LEFTOVER_PORTIONS');
+  });
+
+  it('renders source leftover capture data for summary fallback before bank records are attached', () => {
+    const record: WebFormSubmission = {
+      formKey: 'Config: Meal Production',
+      language: 'EN',
+      id: 'MP-AA000818',
+      values: recordValues as any,
+      status: 'Open'
+    } as any;
+
+    const res = renderHtmlFromHtmlTemplate({
+      dataSources,
+      form,
+      questions,
+      record,
+      templateIdMap: { EN: 'bundle:meal_production.summary.html' }
+    });
+
+    expect(res.success).toBe(true);
+    expect(res.html).toContain('data-mi-leftover-recipe>Renamed green beans</span>');
+    expect(res.html).toContain('data-mi-leftover-portions>4</span>');
+    expect(res.html).toContain('data-si-leftover-ingredient>Rice</span>');
+    expect(res.html).toContain('data-si-leftover-qty>250</span>');
+    expect(res.html).toContain('collectSourceGeneratedLeftovers');
   });
 
   it('backfills missing ingredient category and allergen metadata at render time for actual bundled meal production records', () => {

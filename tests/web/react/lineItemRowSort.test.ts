@@ -38,4 +38,18 @@ describe('lineItemRowSort', () => {
 
     expect(sorted.map(row => row.id)).toEqual(['r4', 'r1', 'r2', 'r3']);
   });
+
+  it('keeps current-session rows first when configured, then sorts the remaining rows', () => {
+    const sorted = applyLineItemRowSort({
+      rows: [
+        ...rows,
+        { id: 'r5', values: { ING: 'Aubergine', QTY: 4 }, localAddedAtMs: 100 },
+        { id: 'r6', values: { ING: 'Basil', QTY: 1 }, localAddedAtMs: 200 }
+      ],
+      fields: [{ id: 'ING', type: 'TEXT' } as any],
+      config: { fieldId: 'ING', direction: 'asc', mode: 'text', newRows: 'firstUntilSave' }
+    });
+
+    expect(sorted.map(row => row.id)).toEqual(['r6', 'r5', 'r3', 'r2', 'r1', 'r4']);
+  });
 });

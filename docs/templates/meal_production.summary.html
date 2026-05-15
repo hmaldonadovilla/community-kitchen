@@ -305,6 +305,9 @@
             <span class="ck-hidden" data-ord-qty>{{MP_MEALS_REQUEST.ORD_QTY}}</span>
             <span class="ck-hidden" data-to-cook>{{MP_MEALS_REQUEST.MP_TO_COOK}}</span>
             <span class="ck-hidden" data-final-qty>{{MP_MEALS_REQUEST.FINAL_QTY}}</span>
+            <span class="ck-hidden" data-mi-leftover-recipe>{{MP_MEALS_REQUEST.MP_LEFTOVER_RECIPE_CAPTURE}}</span>
+            <span class="ck-hidden" data-mi-leftover-portions>{{MP_MEALS_REQUEST.MP_LEFTOVER_PORTIONS_CAPTURE}}</span>
+            <span class="ck-hidden" data-mi-leftover-storage>{{MP_MEALS_REQUEST.MP_LEFTOVER_STORAGE_CAPTURE}}</span>
             <span class="ck-hidden" data-prep-type>{{MP_MEALS_REQUEST.MP_TYPE_LI.PREP_TYPE}}</span>
             <span class="ck-hidden" data-prep-qty>{{MP_MEALS_REQUEST.MP_TYPE_LI.PREP_QTY}}</span>
             <span class="ck-hidden" data-recipe>{{MP_MEALS_REQUEST.MP_TYPE_LI.RECIPE}}</span>
@@ -323,6 +326,23 @@
       </tbody>
     </table>
   </div>
+
+  <table class="ck-hidden" data-ck-si-leftover-data>
+    <tbody>
+      <tr>
+        <td>
+          <span class="ck-hidden">{{ROW_TABLE(MP_LEFTOVER_CAPTURE_LI.LEFTOVER_INGREDIENT)}}</span>
+          <span class="ck-hidden" data-si-leftover-kind>{{MP_LEFTOVER_CAPTURE_LI.LEFTOVER_KIND}}</span>
+          <span class="ck-hidden" data-si-leftover-recipe>{{MP_LEFTOVER_CAPTURE_LI.LEFTOVER_RECIPE}}</span>
+          <span class="ck-hidden" data-si-leftover-portions>{{MP_LEFTOVER_CAPTURE_LI.LEFTOVER_PORTIONS}}</span>
+          <span class="ck-hidden" data-si-leftover-ingredient>{{MP_LEFTOVER_CAPTURE_LI.LEFTOVER_INGREDIENT}}</span>
+          <span class="ck-hidden" data-si-leftover-qty>{{MP_LEFTOVER_CAPTURE_LI.LEFTOVER_QTY}}</span>
+          <span class="ck-hidden" data-si-leftover-unit>{{MP_LEFTOVER_CAPTURE_LI.LEFTOVER_UNIT}}</span>
+          <span class="ck-hidden" data-si-leftover-storage>{{MP_LEFTOVER_CAPTURE_LI.LEFTOVER_STORAGE}}</span>
+        </td>
+      </tr>
+    </tbody>
+  </table>
 
   <div class="ck-section">
     <div class="ck-totals">
@@ -413,6 +433,26 @@
       var ingredient = toText(values.LEFTOVER_INGREDIENT || '');
       var quantity = formatGeneratedLeftoverQuantity(values);
       return [leftoverId, kind, recipe || ingredient, quantity].filter(Boolean).join(' | ');
+    };
+    var isPositiveQuantity = function (value) {
+      var text = toText(value);
+      if (!text || isTemplateToken(text)) return false;
+      var numericValue = Number(text.replace(/,/g, '.'));
+      return Number.isFinite(numericValue) ? numericValue > 0 : true;
+    };
+    var appendGeneratedLeftoverEntry = function (entry, seenIds) {
+      if (!generatedList) return;
+      var values = entry && typeof entry.values === 'object' ? entry.values : {};
+      var leftoverId = toText(values.LEFTOVER_ID || (entry && entry.recordId) || '');
+      var label = buildGeneratedLeftoverLabel(entry);
+      if (!label) return;
+      var key = leftoverId || label;
+      if (key && seenIds[key]) return;
+      if (key) seenIds[key] = true;
+      var item = document.createElement('li');
+      item.className = 'ck-generated-item';
+      item.textContent = label;
+      generatedList.appendChild(item);
     };
     var statusKeyRaw = toText((root.querySelector('[data-record-status-key]') || {}).textContent || '');
     var statusRaw = toText((root.querySelector('[data-record-status]') || {}).textContent || '');
@@ -537,6 +577,7 @@
     var generatedSection = root.querySelector('[data-generated-leftovers-section]');
     var generatedList = root.querySelector('[data-generated-leftovers-list]');
     var dataTables = Array.prototype.slice.call(root.querySelectorAll('[data-ck-meal-data]'));
+    var siLeftoverTables = Array.prototype.slice.call(root.querySelectorAll('[data-ck-si-leftover-data]'));
     if (!listContainer || !dataTables.length) return;
 
     var isConfirmedValue = function (value) {
@@ -645,6 +686,9 @@
         ordQty: getText('[data-ord-qty]'),
         toCook: getText('[data-to-cook]'),
         finalQty: getText('[data-final-qty]'),
+        miLeftoverRecipe: getText('[data-mi-leftover-recipe]'),
+        miLeftoverPortions: getText('[data-mi-leftover-portions]'),
+        miLeftoverStorage: getText('[data-mi-leftover-storage]'),
         prepType: getText('[data-prep-type]'),
         prepQty: getText('[data-prep-qty]'),
         recipe: getText('[data-recipe]'),
@@ -657,6 +701,44 @@
         allergens: collected.allergens
       };
     });
+
+    var collectSourceGeneratedLeftovers = function () {
+      var sourceEntries = [];
+      entries.forEach(function (entry) {
+        if (normalize(entry.prepType) !== 'cook') return;
+        if (!isPositiveQuantity(entry.miLeftoverPortions)) return;
+        sourceEntries.push({
+          values: {
+            LEFTOVER_KIND: MULTI_INGREDIENT_LEFTOVER_KIND,
+            LEFTOVER_RECIPE: entry.miLeftoverRecipe || entry.recipe,
+            LEFTOVER_PORTIONS: entry.miLeftoverPortions,
+            LEFTOVER_STORAGE: entry.miLeftoverStorage
+          }
+        });
+      });
+
+      siLeftoverTables.forEach(function (table) {
+        var getText = function (selector) {
+          var el = table.querySelector(selector);
+          return toText(el ? el.textContent : '');
+        };
+        var quantity = getText('[data-si-leftover-qty]');
+        var portions = getText('[data-si-leftover-portions]');
+        if (!isPositiveQuantity(quantity) && !isPositiveQuantity(portions)) return;
+        sourceEntries.push({
+          values: {
+            LEFTOVER_KIND: toText(getText('[data-si-leftover-kind]')) || SINGLE_INGREDIENT_LEFTOVER_KIND,
+            LEFTOVER_RECIPE: getText('[data-si-leftover-recipe]'),
+            LEFTOVER_PORTIONS: portions,
+            LEFTOVER_INGREDIENT: getText('[data-si-leftover-ingredient]'),
+            LEFTOVER_QTY: quantity,
+            LEFTOVER_UNIT: getText('[data-si-leftover-unit]'),
+            LEFTOVER_STORAGE: getText('[data-si-leftover-storage]')
+          }
+        });
+      });
+      return sourceEntries;
+    };
 
     if (!topTempPhotoUrls.length) {
       var fallbackTopTempPhotoUrls = [];
@@ -952,13 +1034,20 @@
             var values = entry && typeof entry.values === 'object' ? entry.values : {};
             var leftoverId = toText(values.LEFTOVER_ID || entry.recordId || '');
             if (!leftoverId || seenIds[leftoverId]) return;
-            seenIds[leftoverId] = true;
-            var label = buildGeneratedLeftoverLabel(entry);
-            if (!label) return;
-            var item = document.createElement('li');
-            item.className = 'ck-generated-item';
-            item.textContent = label;
-            generatedList.appendChild(item);
+            appendGeneratedLeftoverEntry(entry, seenIds);
+          });
+          if (!generatedList.children.length) {
+            collectSourceGeneratedLeftovers().forEach(function (entry) {
+              appendGeneratedLeftoverEntry(entry, seenIds);
+            });
+          }
+          if (generatedList.children.length) {
+            generatedSection.classList.remove('ck-hidden');
+          }
+        } else {
+          var fallbackSeenIds = {};
+          collectSourceGeneratedLeftovers().forEach(function (entry) {
+            appendGeneratedLeftoverEntry(entry, fallbackSeenIds);
           });
           if (generatedList.children.length) {
             generatedSection.classList.remove('ck-hidden');
@@ -970,6 +1059,9 @@
     }
 
     dataTables.forEach(function (table) {
+      table.remove();
+    });
+    siLeftoverTables.forEach(function (table) {
       table.remove();
     });
   })();
