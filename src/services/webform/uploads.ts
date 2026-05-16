@@ -1,5 +1,34 @@
 import { QuestionConfig } from '../../types';
 import { debugLog } from './debug';
+import { trashDriveApiFile } from './driveApi';
+
+const DRIVE_MULTIPART_UPLOAD_URL =
+  'https://www.googleapis.com/upload/drive/v2/files?uploadType=multipart&supportsAllDrives=true&fields=id%2CalternateLink%2CwebViewLink';
+const DEFAULT_SERVER_UPLOAD_CONCURRENCY = 3;
+const MAX_SERVER_UPLOAD_CONCURRENCY = 5;
+
+type UploadTarget = {
+  folderId: string | null;
+  folderName: string | null;
+  resolvedBy: 'DriveApp' | 'DriveAPI';
+  createFile: (blob: GoogleAppsScript.Base.Blob) => string;
+};
+
+type PreparedUploadEntry =
+  | { kind: 'url'; url: string }
+  | {
+      kind: 'blob';
+      blob: GoogleAppsScript.Base.Blob;
+      name: string;
+      mime: string;
+      bytes: number[];
+      sizeMb: number;
+    };
+
+type DriveUploadResult = {
+  url: string;
+  fileId?: string;
+};
 
 export class UploadService {
   private ss: GoogleAppsScript.Spreadsheet.Spreadsheet;
@@ -37,7 +66,7 @@ export class UploadService {
       destinationFolderId: uploadConfig?.destinationFolderId || null,
       resolvedBy: target.resolvedBy
     });
-    const urls: string[] = [];
+    const entries: PreparedUploadEntry[] = [];
 
     limitedFiles.forEach(file => {
       // Preserve already-uploaded URLs (e.g., when editing an existing record)
@@ -48,14 +77,14 @@ export class UploadService {
             .split(',')
             .map(part => part.trim())
             .filter(Boolean)
-            .forEach(url => urls.push(url));
+            .forEach(url => entries.push({ kind: 'url', url }));
         }
         return;
       }
       if (file && typeof file === 'object' && typeof (file as any).url === 'string') {
         const url = ((file as any).url as string).trim();
         if (url) {
-          urls.push(url);
+          entries.push({ kind: 'url', url });
           return;
         }
       }
@@ -63,8 +92,8 @@ export class UploadService {
       const blob = toBlob(file);
       if (!blob) return;
 
-      const name = blob.getName();
-      const bytes = blob.getBytes();
+      const name = (blob.getName() || 'upload').toString();
+      const bytes = Array.from((blob.getBytes() || []) as ArrayLike<number>);
       const isEmpty = Array.isArray(bytes) && bytes.length === 0;
       if (isEmpty) return;
 
@@ -83,17 +112,28 @@ export class UploadService {
         if (sizeMb > uploadConfig.maxFileSizeMb) return;
       }
 
-      try {
-        const url = target.createFile(blob);
-        if (url) urls.push(url);
-      } catch (err: any) {
-        const sizeMb = bytes ? Math.round((bytes.length / (1024 * 1024)) * 100) / 100 : 0;
-        const msg = (err?.message || err?.toString?.() || 'Drive createFile failed.').toString();
-        throw new Error(
-          `Drive createFile failed (folderId=${folderId || 'unknown'}, name=${name || 'upload'}, sizeMb=${sizeMb}). ${msg}`
-        );
-      }
+      entries.push({
+        kind: 'blob',
+        blob,
+        name,
+        mime:
+          typeof (blob as any).getContentType === 'function'
+            ? blob.getContentType() || 'application/octet-stream'
+            : 'application/octet-stream',
+        bytes,
+        sizeMb: bytes ? Math.round((bytes.length / (1024 * 1024)) * 100) / 100 : 0
+      });
     });
+
+    const uploadedBlobUrls = this.uploadPreparedBlobs(entries, target, uploadConfig);
+    let blobIndex = 0;
+    const urls = entries
+      .map(entry => {
+        if (entry.kind === 'url') return entry.url;
+        const url = uploadedBlobUrls[blobIndex++] || '';
+        return url;
+      })
+      .filter(Boolean);
 
     // De-dupe while preserving order
     const seen = new Set<string>();
@@ -106,12 +146,171 @@ export class UploadService {
     return deduped.join(', ');
   }
 
-  private resolveUploadTarget(uploadConfig?: QuestionConfig['uploadConfig']): {
-    folderId: string | null;
-    folderName: string | null;
-    resolvedBy: 'DriveApp' | 'DriveAPI';
-    createFile: (blob: GoogleAppsScript.Base.Blob) => string;
-  } {
+  private uploadPreparedBlobs(
+    entries: PreparedUploadEntry[],
+    target: UploadTarget,
+    uploadConfig?: QuestionConfig['uploadConfig']
+  ): string[] {
+    const blobs = entries.filter((entry): entry is Extract<PreparedUploadEntry, { kind: 'blob' }> => entry.kind === 'blob');
+    if (!blobs.length) return [];
+    if (blobs.length > 1) {
+      const concurrency = this.resolveServerUploadConcurrency(uploadConfig);
+      const authHeader = this.resolveDriveRestAuthorizationHeader();
+      if (concurrency > 1 && target.folderId && authHeader && this.canUseFetchAll()) {
+        const results = this.createFilesViaDriveRestParallel(blobs, target.folderId, authHeader, concurrency);
+        return results.map(result => result.url).filter(Boolean);
+      }
+    }
+    return blobs.map(entry => this.createFileSequential(target, entry));
+  }
+
+  private createFileSequential(
+    target: UploadTarget,
+    entry: Extract<PreparedUploadEntry, { kind: 'blob' }>
+  ): string {
+    try {
+      return target.createFile(entry.blob);
+    } catch (err: any) {
+      const msg = (err?.message || err?.toString?.() || 'Drive createFile failed.').toString();
+      throw new Error(
+        `Drive createFile failed (folderId=${target.folderId || 'unknown'}, name=${entry.name || 'upload'}, sizeMb=${entry.sizeMb}). ${msg}`
+      );
+    }
+  }
+
+  private resolveServerUploadConcurrency(uploadConfig?: QuestionConfig['uploadConfig']): number {
+    const raw = (uploadConfig as any)?.serverUploadConcurrency;
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_SERVER_UPLOAD_CONCURRENCY;
+    return Math.max(1, Math.min(MAX_SERVER_UPLOAD_CONCURRENCY, Math.floor(parsed)));
+  }
+
+  private canUseFetchAll(): boolean {
+    return typeof UrlFetchApp !== 'undefined' && typeof (UrlFetchApp as any).fetchAll === 'function';
+  }
+
+  private resolveDriveRestAuthorizationHeader(): string {
+    if (typeof ScriptApp === 'undefined') return '';
+    try {
+      const token = ScriptApp.getOAuthToken();
+      return token ? `Bearer ${token}` : '';
+    } catch {
+      return '';
+    }
+  }
+
+  private createFilesViaDriveRestParallel(
+    entries: Array<Extract<PreparedUploadEntry, { kind: 'blob' }>>,
+    folderId: string,
+    authHeader: string,
+    concurrency: number
+  ): DriveUploadResult[] {
+    const createdFileIds: string[] = [];
+    const results: DriveUploadResult[] = [];
+    try {
+      for (let offset = 0; offset < entries.length; offset += concurrency) {
+        const chunk = entries.slice(offset, offset + concurrency);
+        const requests = chunk.map(entry => this.buildDriveMultipartUploadRequest(entry, folderId, authHeader));
+        debugLog('upload.driveRest.fetchAll.start', { count: chunk.length, concurrency, folderId });
+        const responses = (UrlFetchApp as any).fetchAll(requests);
+        responses.forEach((response: GoogleAppsScript.URL_Fetch.HTTPResponse, index: number) => {
+          const result = this.parseDriveUploadResponse(response, folderId, chunk[index]);
+          if (result.fileId) createdFileIds.push(result.fileId);
+          results[offset + index] = result;
+        });
+      }
+      return results;
+    } catch (err: any) {
+      createdFileIds.forEach(fileId => {
+        try {
+          trashDriveApiFile(fileId);
+        } catch {
+          // Best-effort cleanup only; preserve the original upload failure.
+        }
+      });
+      throw err;
+    }
+  }
+
+  private buildDriveMultipartUploadRequest(
+    entry: Extract<PreparedUploadEntry, { kind: 'blob' }>,
+    folderId: string,
+    authHeader: string
+  ): GoogleAppsScript.URL_Fetch.URLFetchRequest {
+    const boundary = `ck_upload_${Utilities.getUuid().replace(/[^A-Za-z0-9]/g, '')}`;
+    const metadata = {
+      title: entry.name || 'upload',
+      mimeType: entry.mime || 'application/octet-stream',
+      parents: [{ id: folderId }]
+    };
+    const header = [
+      `--${boundary}`,
+      'Content-Type: application/json; charset=UTF-8',
+      '',
+      JSON.stringify(metadata),
+      `--${boundary}`,
+      `Content-Type: ${entry.mime || 'application/octet-stream'}`,
+      ''
+    ].join('\r\n');
+    const footer = `\r\n--${boundary}--`;
+    const payload: number[] = [];
+    this.encodeTextBytes(`${header}\r\n`).forEach(byte => payload.push(byte));
+    entry.bytes.forEach(byte => payload.push(byte));
+    this.encodeTextBytes(footer).forEach(byte => payload.push(byte));
+    return {
+      url: DRIVE_MULTIPART_UPLOAD_URL,
+      method: 'post',
+      contentType: `multipart/related; boundary=${boundary}`,
+      headers: {
+        Authorization: authHeader
+      },
+      muteHttpExceptions: true,
+      payload
+    } as any;
+  }
+
+  private encodeTextBytes(value: string): number[] {
+    return Array.from(Utilities.base64Decode(Utilities.base64Encode(value)) as ArrayLike<number>);
+  }
+
+  private parseDriveUploadResponse(
+    response: GoogleAppsScript.URL_Fetch.HTTPResponse,
+    folderId: string,
+    entry: Extract<PreparedUploadEntry, { kind: 'blob' }>
+  ): DriveUploadResult {
+    const code = response.getResponseCode();
+    const raw = response.getContentText() || '';
+    let body: any = null;
+    if (raw) {
+      try {
+        body = JSON.parse(raw);
+      } catch {
+        body = null;
+      }
+    }
+    if (code < 200 || code >= 300) {
+      const message =
+        body?.error?.message ||
+        body?.message ||
+        raw ||
+        `Drive upload failed with HTTP ${code}.`;
+      throw new Error(
+        `Drive createFile failed (folderId=${folderId || 'unknown'}, name=${entry.name || 'upload'}, sizeMb=${entry.sizeMb}). ${message}`
+      );
+    }
+    const fileId = (body?.id || '').toString().trim();
+    const url = (body?.webViewLink || body?.alternateLink || (fileId ? `https://drive.google.com/open?id=${fileId}` : ''))
+      .toString()
+      .trim();
+    if (!url) {
+      throw new Error(
+        `Drive createFile failed (folderId=${folderId || 'unknown'}, name=${entry.name || 'upload'}, sizeMb=${entry.sizeMb}). Drive upload response did not include a URL.`
+      );
+    }
+    return { url, fileId };
+  }
+
+  private resolveUploadTarget(uploadConfig?: QuestionConfig['uploadConfig']): UploadTarget {
     const destinationId = uploadConfig?.destinationFolderId
       ? uploadConfig.destinationFolderId.toString().trim()
       : '';

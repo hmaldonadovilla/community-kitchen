@@ -6652,9 +6652,9 @@
         },
         "compression": {
           "images": {
-            "maxDimension": 1280,
-            "quality": 0.78,
-            "outputType": "keep"
+            "maxDimension": 960,
+            "quality": 0.65,
+            "outputType": "image/jpeg"
           }
         },
         "discardChangesConfirm": {
@@ -6786,9 +6786,9 @@
         },
         "compression": {
           "images": {
-            "maxDimension": 1280,
-            "quality": 0.78,
-            "outputType": "keep"
+            "maxDimension": 960,
+            "quality": 0.65,
+            "outputType": "image/jpeg"
           }
         },
         "discardChangesConfirm": {
@@ -10144,9 +10144,9 @@
           },
           "compression": {
             "images": {
-              "maxDimension": 1280,
-              "quality": 0.78,
-              "outputType": "keep"
+              "maxDimension": 960,
+              "quality": 0.65,
+              "outputType": "image/jpeg"
             }
           },
           "discardChangesConfirm": {
@@ -10278,9 +10278,9 @@
           },
           "compression": {
             "images": {
-              "maxDimension": 1280,
-              "quality": 0.78,
-              "outputType": "keep"
+              "maxDimension": 960,
+              "quality": 0.65,
+              "outputType": "image/jpeg"
             }
           },
           "discardChangesConfirm": {
