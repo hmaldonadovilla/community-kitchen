@@ -205,6 +205,10 @@
     gap: 6px;
   }
 
+  .ck-expiration-override-button {
+    margin-left: 2px;
+  }
+
   .ck-date-input {
     min-height: 32px;
     padding: 5px 8px;
@@ -217,6 +221,12 @@
 
   .ck-date-input:disabled {
     opacity: 0.65;
+  }
+
+  .ck-expiration-override-error {
+    flex-basis: 100%;
+    color: #b00020;
+    font-size: var(--ck-font-label);
   }
 
   .ck-manual-marker {
@@ -254,23 +264,29 @@
     <div class="ck-meta-grid">
       <div class="ck-meta-item ck-meta-item-inline ck-meta-item--full">
         <span class="ck-label">{{LABEL(MP_PREP_DATE)}}:</span>
-        <span class="ck-value">{{MP_PREP_DATE}}</span>
+        <span class="ck-value" data-production-date-value>{{MP_PREP_DATE}}</span>
       </div>
       <div class="ck-meta-item ck-meta-item-inline ck-meta-item--full">
         <span class="ck-label">{{LABEL(MP_EXP_DATE)}}:</span>
         <span class="ck-value" data-expiration-date-value>{{MP_EXP_DATE}}</span>
         <span class="ck-manual-marker ck-hidden" data-expiration-manual-marker>(*)</span>
+        <button
+          type="button"
+          class="ck-action-button ck-expiration-override-button ck-hidden"
+          data-expiration-override-button
+        >Override</button>
         <span class="ck-expiration-override-controls ck-hidden" data-expiration-override-controls>
-          <input type="date" class="ck-date-input" data-expiration-override-date aria-label="Override expiration date" />
+          <input type="date" class="ck-date-input ck-hidden" data-expiration-override-date aria-label="Override expiration date" />
           <button
             type="button"
-            class="ck-action-button"
+            class="ck-hidden"
             data-ck-action="MP_OVERRIDE_EXP_DATE"
             data-ck-action-value-field="MP_EXP_DATE_OVERRIDE"
             data-ck-action-value-source="[data-expiration-override-date]"
             data-ck-action-value-required="true"
           >Override</button>
         </span>
+        <span class="ck-expiration-override-error ck-hidden" data-expiration-override-error></span>
       </div>
       <div class="ck-meta-item ck-meta-item-inline ck-meta-item--full">
         <span class="ck-label">{{LABEL(MP_ID)}}:</span>
@@ -288,6 +304,7 @@
       <div class="ck-hidden" data-record-status>{{STATUS}}</div>
       <div class="ck-hidden" data-record-status-key>{{STATUS_KEY}}</div>
       <div class="ck-hidden" data-expiration-override-value>{{MP_EXP_DATE_OVERRIDE}}</div>
+      <div class="ck-hidden" data-expiration-default-offset-days>3</div>
     </div>
   </div>
 
@@ -540,13 +557,53 @@
       var day = display[1].padStart(2, '0');
       return display[3] + '-' + mon + '-' + day;
     };
+    var parseIsoParts = function (iso) {
+      var match = toText(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!match) return null;
+      var year = Number(match[1]);
+      var monthIndex = Number(match[2]) - 1;
+      var day = Number(match[3]);
+      if (!Number.isFinite(year) || !Number.isFinite(monthIndex) || !Number.isFinite(day)) return null;
+      return { year: year, monthIndex: monthIndex, day: day };
+    };
+    var isoToUtcDate = function (iso) {
+      var parts = parseIsoParts(iso);
+      if (!parts) return null;
+      return new Date(Date.UTC(parts.year, parts.monthIndex, parts.day));
+    };
+    var addDaysIso = function (iso, days) {
+      var date = isoToUtcDate(iso);
+      if (!date || !Number.isFinite(days)) return '';
+      date.setUTCDate(date.getUTCDate() + days);
+      var year = String(date.getUTCFullYear());
+      var month = String(date.getUTCMonth() + 1).padStart(2, '0');
+      var day = String(date.getUTCDate()).padStart(2, '0');
+      return year + '-' + month + '-' + day;
+    };
+    var formatIsoDateLabel = function (iso) {
+      var date = isoToUtcDate(iso);
+      if (!date) return toText(iso);
+      var weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return weekdays[date.getUTCDay()] + ', ' + String(date.getUTCDate()).padStart(2, '0') + '-' + months[date.getUTCMonth()] + '-' + date.getUTCFullYear();
+    };
     var expirationValueNode = root.querySelector('[data-expiration-date-value]');
+    var productionDateNode = root.querySelector('[data-production-date-value]');
     var expirationOverrideNode = root.querySelector('[data-expiration-override-value]');
+    var expirationDefaultOffsetNode = root.querySelector('[data-expiration-default-offset-days]');
     var manualMarker = root.querySelector('[data-expiration-manual-marker]');
     var manualLegend = root.querySelector('[data-manual-expiration-legend]');
     var expirationControls = root.querySelector('[data-expiration-override-controls]');
+    var expirationVisibleButton = root.querySelector('[data-expiration-override-button]');
     var expirationDateInput = root.querySelector('[data-expiration-override-date]');
+    var expirationErrorNode = root.querySelector('[data-expiration-override-error]');
     var expirationOverrideButton = root.querySelector('[data-ck-action="MP_OVERRIDE_EXP_DATE"]');
+    var productionDateIso = parseDisplayDateToIso(productionDateNode ? productionDateNode.textContent : '');
+    var defaultOffsetDays = Number(toText(expirationDefaultOffsetNode ? expirationDefaultOffsetNode.textContent : ''));
+    var defaultExpirationText = toText(expirationValueNode ? expirationValueNode.textContent : '');
+    var defaultExpirationIso = productionDateIso && Number.isFinite(defaultOffsetDays)
+      ? addDaysIso(productionDateIso, defaultOffsetDays)
+      : parseDisplayDateToIso(defaultExpirationText);
     var overrideText = toText(expirationOverrideNode ? expirationOverrideNode.textContent : '');
     var hasManualExpiration = hasMeaningfulValue(overrideText);
     if (hasManualExpiration && expirationValueNode) {
@@ -554,10 +611,6 @@
     }
     if (manualMarker) manualMarker.classList.toggle('ck-hidden', !hasManualExpiration);
     if (manualLegend) manualLegend.classList.toggle('ck-hidden', !hasManualExpiration);
-    if (expirationDateInput) {
-      var inputSourceText = hasManualExpiration ? overrideText : toText(expirationValueNode ? expirationValueNode.textContent : '');
-      expirationDateInput.value = parseDisplayDateToIso(inputSourceText);
-    }
     var adminValue = normalize(resolveRequestParam('admin'));
     var isAdminRequest = ['true', '1', 'yes', 'on'].indexOf(adminValue) >= 0;
     var canOverrideExpiration = isAdminRequest && !isFinalReportSentStatus;
@@ -566,10 +619,91 @@
     }
     if (expirationDateInput) {
       expirationDateInput.disabled = !canOverrideExpiration;
+      expirationDateInput.value = '';
+      expirationDateInput.classList.add('ck-hidden');
+      if (productionDateIso) expirationDateInput.min = productionDateIso;
+    }
+    if (expirationVisibleButton) {
+      expirationVisibleButton.classList.toggle('ck-hidden', !isAdminRequest);
+      expirationVisibleButton.disabled = !canOverrideExpiration;
+      expirationVisibleButton.setAttribute('aria-disabled', canOverrideExpiration ? 'false' : 'true');
     }
     if (expirationOverrideButton) {
       expirationOverrideButton.disabled = !canOverrideExpiration;
       expirationOverrideButton.setAttribute('aria-disabled', canOverrideExpiration ? 'false' : 'true');
+    }
+    var showExpirationError = function (message) {
+      if (!expirationErrorNode) return;
+      expirationErrorNode.textContent = message;
+      expirationErrorNode.classList.toggle('ck-hidden', !message);
+    };
+    var clearExpirationError = function () {
+      showExpirationError('');
+    };
+    var hideExpirationDateInput = function () {
+      if (!expirationDateInput) return;
+      expirationDateInput.classList.add('ck-hidden');
+      expirationDateInput.value = '';
+    };
+    var showExpirationDateInput = function () {
+      if (!canOverrideExpiration || !expirationDateInput) return;
+      clearExpirationError();
+      expirationDateInput.value = '';
+      expirationDateInput.classList.remove('ck-hidden');
+      expirationDateInput.focus();
+      if (typeof expirationDateInput.showPicker === 'function') {
+        try {
+          expirationDateInput.showPicker();
+        } catch (_) {
+          // Some browsers only allow showPicker during direct user activation.
+        }
+      }
+    };
+    var validateExpirationCandidate = function (candidateIso) {
+      if (!candidateIso) return '';
+      if (productionDateIso && candidateIso < productionDateIso) {
+        return 'The new date cannot be before the production date (' + formatIsoDateLabel(productionDateIso) + ')';
+      }
+      if (defaultExpirationIso && candidateIso === defaultExpirationIso) {
+        return 'The new date must be different from the default expiration date (' + formatIsoDateLabel(defaultExpirationIso) + ')';
+      }
+      return '';
+    };
+    var commitExpirationCandidate = function () {
+      if (!canOverrideExpiration || !expirationDateInput) return;
+      var candidateIso = toText(expirationDateInput.value);
+      if (!candidateIso) {
+        clearExpirationError();
+        hideExpirationDateInput();
+        return;
+      }
+      var validationMessage = validateExpirationCandidate(candidateIso);
+      if (validationMessage) {
+        showExpirationError(validationMessage);
+        return;
+      }
+      clearExpirationError();
+      if (expirationValueNode) expirationValueNode.textContent = formatIsoDateLabel(candidateIso);
+      if (manualMarker) manualMarker.classList.remove('ck-hidden');
+      if (manualLegend) manualLegend.classList.remove('ck-hidden');
+      if (expirationOverrideButton) expirationOverrideButton.click();
+      hideExpirationDateInput();
+    };
+    if (expirationVisibleButton) {
+      expirationVisibleButton.addEventListener('click', showExpirationDateInput);
+    }
+    if (expirationDateInput) {
+      expirationDateInput.addEventListener('blur', commitExpirationCandidate);
+      expirationDateInput.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          expirationDateInput.blur();
+        } else if (event.key === 'Escape') {
+          clearExpirationError();
+          hideExpirationDateInput();
+          expirationVisibleButton && expirationVisibleButton.focus();
+        }
+      });
     }
 
     var listContainer = root.querySelector('[data-ck-meal-list]');

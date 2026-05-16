@@ -4278,7 +4278,7 @@
         "navigateTo": "summary",
         "confirm": {
           "title": {
-            "en": "Reminder"
+            "en": ""
           },
           "message": {
             "en": "Remember to indicate this new expiration date on individual portion containers."
@@ -6789,7 +6789,7 @@
           "navigateTo": "summary",
           "confirm": {
             "title": {
-              "en": "Reminder"
+              "en": ""
             },
             "message": {
               "en": "Remember to indicate this new expiration date on individual portion containers."

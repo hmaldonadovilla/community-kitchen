@@ -523,7 +523,7 @@ components:
                     - type: object
                       additionalProperties:
                         type: string
-                  description: Optional confirmation dialog title.
+                  description: Optional confirmation dialog title. Set the localized value to an empty string to hide the title line.
                 message:
                   oneOf:
                     - type: string
@@ -595,7 +595,7 @@ components:
                 - `topBarForm`: appear in the top action bar on the Form (edit) view.
                 - `topBarSummary`: appear in the top action bar on the Summary view.
                 - `listBar`: appear in the bottom action bar on the list view (menu if multiple).
-                - `htmlTemplate`: do not render in action bars; allow a bundled HTML template to invoke the button with `data-ck-action`.
+                - `htmlTemplate`: do not render in action bars; allow a bundled HTML template to invoke the button with `data-ck-action`. Templates can keep this button hidden and trigger it after their own validation succeeds.
             tone:
               type: string
               enum: [primary, secondary]

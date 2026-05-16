@@ -3333,7 +3333,7 @@ Example (render **Create + Copy** as **inline buttons** instead of a menu on For
     - a **bundled** template key: `bundle:<filename>` (loads `/docs/templates/<filename>` embedded into the deployment bundle at build time; rendered client-side; may fetch dataSource projections as needed)
   - `summaryHtmlTemplateId` supports the same structure as other template id configs (string, language map, or `cases` selector).
   - When set, the Summary view renders the HTML template (with placeholders) instead of the built-in Summary UI.
-  - Bundled Summary HTML can invoke a template-only `BUTTON` by setting `data-ck-action="<BUTTON_ID>"` on a button/control. For `updateRecord` actions, add `data-ck-action-value-field="<FIELD_ID>"` and `data-ck-action-value-source="<selector>"` to pass a runtime top-level scalar value patch from an input in the template; use `data-ck-action-value-required="true"` to block empty selections client-side.
+  - Bundled Summary HTML can invoke a template-only `BUTTON` by setting `data-ck-action="<BUTTON_ID>"` on a button/control. For `updateRecord` actions, add `data-ck-action-value-field="<FIELD_ID>"` and `data-ck-action-value-source="<selector>"` to pass a runtime top-level scalar value patch from an input in the template; use `data-ck-action-value-required="true"` to block empty selections client-side. When the visible template control needs custom validation before saving, keep the `data-ck-action` button hidden and trigger it only after the template script accepts the input.
   - If template rendering fails, the app shows an error and falls back to the built-in Summary view.
 
 - **Optional: portrait-only mode (avoid landscape)**:
