@@ -235,7 +235,8 @@ describe('meal production bundled HTML rendering', () => {
     expect(res.success).toBe(true);
     expect(res.html).toContain('data-ck-action="ING_PREVIEW"');
     expect(res.html).toContain('data-expiration-override-button');
-    expect(res.html).toContain('class="ck-date-input ck-hidden"');
+    expect(res.html).toContain('data-expiration-calendar');
+    expect(res.html).toContain('data-expiration-calendar-grid');
     expect(res.html).toContain('data-ck-action="MP_OVERRIDE_EXP_DATE"');
     expect(res.html).toContain('data-ck-action-value-field="MP_EXP_DATE_OVERRIDE"');
     expect(res.html).toContain('data-expiration-default-offset-days>3');
