@@ -8,11 +8,13 @@ import {
   peekHtmlTemplateCache,
   peekMarkdownTemplateCache,
   renderDocTemplatePdfPreviewApi,
+  renderStoredPdfPreviewApi,
   renderHtmlTemplateApi,
   renderMarkdownTemplateApi
 } from '../../api';
 import type { TemplateRenderCacheOptions } from '../../api';
 import { isBundledHtmlTemplateId, renderBundledHtmlTemplateClient } from '../../app/bundledHtmlClientRenderer';
+import { openPdfObjectUrl } from '../../app/pdfObjectUrlOpen';
 import { buildDraftPayload, resolveExistingRecordId } from '../../app/submission';
 import { resolveTemplateIdForRecord } from '../../app/templateId';
 import type { LineItemState } from '../../types';
@@ -54,6 +56,19 @@ const base64ToPdfObjectUrl = (pdfBase64: string, mimeType: string) => {
   }
   const blob = new Blob([bytes], { type: mimeType || 'application/pdf' });
   return URL.createObjectURL(blob);
+};
+
+const escapeHtml = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+const writePopupPlainMessage = (popup: Window | null | undefined, message: string) => {
+  try {
+    if (!popup || popup.closed) return;
+    popup.document.open();
+    popup.document.write(`<pre style="white-space:pre-wrap;font-family:${SYSTEM_FONT_STACK};padding:18px;">${escapeHtml(message)}</pre>`);
+    popup.document.close();
+  } catch {
+    // best effort
+  }
 };
 
 export const useAppReportPreviewActions = (args: {
@@ -273,6 +288,139 @@ export const useAppReportPreviewActions = (args: {
       void generateReportPdfPreview({ buttonId: openArgs.buttonId, popup: openArgs.popup });
     },
     [generateReportPdfPreview]
+  );
+
+  const generateStoredPdfPreview = useCallback(
+    async (previewArgs: { buttonId: string; fieldId?: string | null; popup?: Window | null }) => {
+      const buttonId = previewArgs.buttonId;
+      const fieldId = (previewArgs.fieldId || 'pdfUrl').toString().trim() || 'pdfUrl';
+      const popup = previewArgs.popup || null;
+      const hasPopup = !!popup && popup.closed !== true;
+      const seq = ++reportPdfSeqRef.current;
+      const parsedRef = parseButtonRef(buttonId || '');
+      const baseId = parsedRef.id;
+      const qIdx = parsedRef.qIdx;
+      const indexed = qIdx !== undefined ? definition.questions[qIdx] : undefined;
+      const btn =
+        indexed && indexed.type === 'BUTTON' && indexed.id === baseId
+          ? indexed
+          : definition.questions.find(q => q.type === 'BUTTON' && q.id === baseId);
+      const title = btn ? resolveLabel(btn, languageRef.current) : (baseId || 'Report');
+
+      setReportOverlay(prev => ({
+        ...(prev || { title: '' }),
+        open: !hasPopup,
+        kind: 'pdf',
+        buttonId,
+        title,
+        subtitle: definition.title,
+        pdfPhase: 'rendering',
+        pdfObjectUrl: undefined,
+        pdfFileName: undefined,
+        pdfMessage: tSystem('report.loadingPdf', languageRef.current, 'Loading PDF…'),
+        markdown: undefined,
+        html: undefined
+      }));
+
+      const recordId =
+        resolveExistingRecordId({
+          selectedRecordId: selectedRecordIdRef.current,
+          selectedRecordSnapshot: selectedRecordSnapshotRef.current,
+          lastSubmissionMetaId: lastSubmissionMetaRef.current?.id || null
+        }) || '';
+      if (!recordId) {
+        const msg = 'No saved record was found for this report.';
+        writePopupPlainMessage(popup, msg);
+        setReportOverlay(prev => (prev?.buttonId !== buttonId ? prev : { ...prev, pdfPhase: 'error', pdfMessage: msg }));
+        logEvent('report.storedPdfPreview.missingRecord', { buttonId: baseId, qIdx: qIdx ?? null, fieldId });
+        return;
+      }
+
+      logEvent('report.storedPdfPreview.start', { buttonId: baseId, qIdx: qIdx ?? null, fieldId, recordId });
+      try {
+        const res = await renderStoredPdfPreviewApi(formKey, recordId, fieldId);
+        if (seq !== reportPdfSeqRef.current) return;
+        if (!res?.success || !res?.pdfBase64) {
+          const msg = (res?.message || 'Failed to load PDF preview.').toString();
+          writePopupPlainMessage(popup, msg);
+          setReportOverlay(prev => (prev?.buttonId !== buttonId ? prev : { ...prev, pdfPhase: 'error', pdfMessage: msg }));
+          logEvent('report.storedPdfPreview.error', { buttonId: baseId, qIdx: qIdx ?? null, fieldId, message: msg });
+          return;
+        }
+
+        const objectUrl = base64ToPdfObjectUrl(res.pdfBase64, res.mimeType || 'application/pdf');
+        const openResult = openPdfObjectUrl({
+          objectUrl,
+          popup,
+          assignLocation: href => globalThis.location?.assign?.(href)
+        });
+        if (openResult.opened) {
+          setReportOverlay(prev =>
+            prev?.buttonId !== buttonId
+              ? prev
+              : { ...(prev || { open: false, title: '' }), open: false, pdfPhase: 'idle', pdfMessage: undefined }
+          );
+          logEvent('report.storedPdfPreview.ok', {
+            buttonId: baseId,
+            qIdx: qIdx ?? null,
+            fieldId,
+            fileName: res.fileName || null,
+            openMethod: openResult.method
+          });
+          return;
+        }
+
+        setReportOverlay(prev => {
+          if (prev?.buttonId !== buttonId) return prev;
+          return {
+            ...prev,
+            open: true,
+            kind: 'pdf',
+            pdfPhase: 'ready',
+            pdfObjectUrl: objectUrl,
+            pdfFileName: res.fileName,
+            pdfMessage: undefined,
+            markdown: undefined,
+            html: undefined
+          };
+        });
+        logEvent('report.storedPdfPreview.ok', {
+          buttonId: baseId,
+          qIdx: qIdx ?? null,
+          fieldId,
+          fileName: res.fileName || null,
+          openMethod: openResult.method
+        });
+      } catch (err: any) {
+        if (seq !== reportPdfSeqRef.current) return;
+        const uiMessage = resolveUiErrorMessage(err, 'Failed to load PDF preview.');
+        const logMessage = resolveLogMessage(err, 'Failed to load PDF preview.');
+        writePopupPlainMessage(popup, uiMessage || logMessage);
+        setReportOverlay(prev => (prev?.buttonId !== buttonId ? prev : { ...prev, pdfPhase: 'error', pdfMessage: uiMessage || logMessage }));
+        logEvent('report.storedPdfPreview.exception', { buttonId: baseId, qIdx: qIdx ?? null, fieldId, message: logMessage });
+      }
+    },
+    [
+      definition,
+      formKey,
+      languageRef,
+      logEvent,
+      parseButtonRef,
+      reportPdfSeqRef,
+      resolveLogMessage,
+      resolveUiErrorMessage,
+      selectedRecordIdRef,
+      selectedRecordSnapshotRef,
+      lastSubmissionMetaRef,
+      setReportOverlay
+    ]
+  );
+
+  const openStoredPdfPreview = useCallback(
+    (openArgs: { buttonId: string; fieldId?: string | null; popup?: Window | null }) => {
+      void generateStoredPdfPreview(openArgs);
+    },
+    [generateStoredPdfPreview]
   );
 
   const generateReportMarkdownPreview = useCallback(
@@ -571,6 +719,7 @@ export const useAppReportPreviewActions = (args: {
   return {
     openPdfPreviewWindow,
     openReport,
+    openStoredPdfPreview,
     openMarkdown,
     openHtml
   };

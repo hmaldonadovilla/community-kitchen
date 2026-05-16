@@ -187,6 +187,9 @@
     "missingLink": {
       "en": "No link found."
     },
+    "openLinkBlocked": {
+      "en": "Open the link from the action menu again if it did not open."
+    },
     "closeCreateMenu": {
       "en": "Close create menu"
     },
@@ -680,6 +683,9 @@
     },
     "generatingPdf": {
       "en": "Generating PDF…"
+    },
+    "loadingPdf": {
+      "en": "Loading PDF…"
     },
     "failedPdf": {
       "en": "Failed to generate PDF."

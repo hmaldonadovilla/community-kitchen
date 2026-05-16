@@ -3144,6 +3144,8 @@ Recommended steps after deploying a new bundle:
 }
 ```
 
+`openUrlField` opens as a real new-tab link when the browser supports it. On iOS standalone/PWA installs, saved `pdfUrl` reports open in the app's PDF preview overlay because PWAs do not expose normal browser tabs.
+
 #### Example: create record with preset values
 
 ```json

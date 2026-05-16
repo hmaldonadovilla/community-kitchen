@@ -1,8 +1,9 @@
 import React from 'react';
 import type { LangCode } from '../../../types';
 import { tSystem } from '../../../systemStrings';
+import { CustomActionLink, shouldRenderCustomButtonAsLink } from './CustomActionLink';
 
-export type TopActionBarButton = { id: string; label: string; action?: string };
+export type TopActionBarButton = { id: string; label: string; action?: string; href?: string; disabled?: boolean };
 
 const IconWrap: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <span className="ck-bottom-icon" aria-hidden="true">
@@ -60,17 +61,30 @@ export const TopActionBar: React.FC<{
       <div className="ck-bottom-bar-inner">
         <div className="ck-bottom-capsule" aria-label={tSystem('app.topActions', language, 'Actions')}>
           {buttons.map(btn => {
+            const buttonState = { ...btn, disabled: disabled || btn.disabled };
             const icon = iconForCustomAction(btn.action);
+            const content = (
+              <>
+                <IconWrap>{icon}</IconWrap>
+                {btn.label}
+              </>
+            );
+            if (shouldRenderCustomButtonAsLink(buttonState)) {
+              return (
+                <CustomActionLink key={btn.id} button={buttonState} className="ck-bottom-item">
+                  {content}
+                </CustomActionLink>
+              );
+            }
             return (
               <button
                 key={btn.id}
                 type="button"
                 className="ck-bottom-item"
-                disabled={disabled}
+                disabled={buttonState.disabled}
                 onClick={() => onButton(btn.id)}
               >
-                <IconWrap>{icon}</IconWrap>
-                {btn.label}
+                {content}
               </button>
             );
           })}
@@ -79,5 +93,3 @@ export const TopActionBar: React.FC<{
     </nav>
   );
 };
-
-

@@ -175,6 +175,10 @@ import {
   shouldArmAutoSaveHoldForReportAction,
   shouldHoldAutoSaveForReportOverlay
 } from './app/reportPreviewAutosave';
+import {
+  readOpenUrlRuntimeEnvironment,
+  shouldUseInAppPdfPreview
+} from './app/openUrlField';
 import { runSelectionEffects as runSelectionEffectsHelper } from './app/selectionEffects';
 import { isRetryableRecordBusyMessage as isRetryableRecordBusyMessageValue } from './app/retryableRecordBusy';
 import {
@@ -6614,6 +6618,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const {
     openPdfPreviewWindow,
     openReport,
+    openStoredPdfPreview,
     openMarkdown,
     openHtml
   } = useAppReportPreviewActions({
@@ -6763,6 +6768,30 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }
       if (action === 'openUrlField') {
         const fieldId = (cfg?.fieldId || '').toString().trim();
+        const href = resolveOpenUrlFieldHref(fieldId);
+        if (
+          shouldUseInAppPdfPreview({
+            action,
+            fieldId,
+            href,
+            env: readOpenUrlRuntimeEnvironment()
+          })
+        ) {
+          const title = btn ? resolveLabel(btn, languageRef.current) : (baseId || 'Report');
+          const popup = openPdfPreviewWindow({
+            title,
+            subtitle: definition.title,
+            language: languageRef.current,
+            loadingLabel: tSystem('report.loadingPdf', languageRef.current, 'Loading PDF…')
+          });
+          if (!popup) {
+            logEvent('report.storedPdfPreview.popupBlocked', { buttonId: baseId, qIdx: qIdx ?? null, fieldId });
+          } else {
+            logEvent('report.storedPdfPreview.popupOpened', { buttonId: baseId, qIdx: qIdx ?? null, fieldId });
+          }
+          openStoredPdfPreview({ buttonId, fieldId, popup });
+          return;
+        }
         openUrlFieldAction({ baseId, qIdx, fieldId });
         return;
       }
@@ -6799,10 +6828,12 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       logEvent,
       openHtml,
       openMarkdown,
+      openStoredPdfPreview,
       openUrlFieldAction,
       openPdfPreviewWindow,
       openReport,
       parseButtonRef,
+      resolveOpenUrlFieldHref,
       runUpdateRecordButtonAction
     ]
   );

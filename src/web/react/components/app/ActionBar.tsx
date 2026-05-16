@@ -16,6 +16,7 @@ import type {
 import type { View } from '../../types';
 import { resolveLocalizedString } from '../../../i18n';
 import { tSystem } from '../../../systemStrings';
+import { CustomActionLink, shouldRenderCustomButtonAsLink } from './CustomActionLink';
 
 type CustomButton = {
   id: string;
@@ -23,6 +24,7 @@ type CustomButton = {
   action: ButtonAction;
   placements: ButtonPlacement[];
   disabled?: boolean;
+  href?: string;
 };
 
 const normalizeActionToken = (value: string): string =>
@@ -573,6 +575,69 @@ export const ActionBar: React.FC<{
     onSummary();
   };
 
+  const renderCustomMenuButton = (btn: CustomButton, className: string, closeMenu: () => void) => {
+    const buttonState = { ...btn, disabled: disabled || btn.disabled || (!btn.href && !onCustomButton) };
+    const content = (
+      <>
+        <IconWrap>{iconForCustomAction(btn.action)}</IconWrap>
+        {btn.label}
+      </>
+    );
+    if (shouldRenderCustomButtonAsLink(buttonState)) {
+      return (
+        <CustomActionLink key={btn.id} button={buttonState} className={className} onNavigate={closeMenu}>
+          {content}
+        </CustomActionLink>
+      );
+    }
+    return (
+      <button
+        key={btn.id}
+        type="button"
+        className={className}
+        disabled={buttonState.disabled}
+        onClick={() => {
+          closeMenu();
+          onCustomButton?.(btn.id);
+        }}
+      >
+        {content}
+      </button>
+    );
+  };
+
+  const renderCustomCapsuleButton = (btn: CustomButton, idx: number, className: string) => {
+    const buttonState = { ...btn, disabled: disabled || btn.disabled || (!btn.href && !onCustomButton) };
+    const content = (
+      <>
+        <IconWrap>{iconForCustomAction(btn.action)}</IconWrap>
+        <span className="ck-bottom-label">{btn.label}</span>
+      </>
+    );
+    if (shouldRenderCustomButtonAsLink(buttonState)) {
+      return (
+        <CustomActionLink
+          key={`custom-${btn.id}-${idx}`}
+          button={buttonState}
+          className={className}
+        >
+          {content}
+        </CustomActionLink>
+      );
+    }
+    return (
+      <button
+        key={`custom-${btn.id}-${idx}`}
+        type="button"
+        className={className}
+        onClick={() => onCustomButton?.(btn.id)}
+        disabled={buttonState.disabled}
+      >
+        {content}
+      </button>
+    );
+  };
+
   const renderCustomMenuOverlay = (def: MenuDef | null) => {
     if (!def) return null;
     return (
@@ -584,21 +649,7 @@ export const ActionBar: React.FC<{
           onClick={() => setMenu(null)}
         />
         <div className="ck-bottom-menu" aria-label={def.label}>
-          {def.buttons.map(btn => (
-            <button
-              key={btn.id}
-              type="button"
-              className="ck-bottom-menu-item ck-bottom-menu-item--primary"
-              disabled={disabled || btn.disabled || !onCustomButton}
-              onClick={() => {
-                setMenu(null);
-                onCustomButton?.(btn.id);
-              }}
-            >
-              <IconWrap>{iconForCustomAction(btn.action)}</IconWrap>
-              {btn.label}
-            </button>
-          ))}
+          {def.buttons.map(btn => renderCustomMenuButton(btn, 'ck-bottom-menu-item ck-bottom-menu-item--primary', () => setMenu(null)))}
         </div>
       </div>
     );
@@ -634,23 +685,13 @@ export const ActionBar: React.FC<{
 	            {resolved.capsule
 	              .filter(it => it.kind === 'create')
 	              .flatMap(it => (it.kind === 'create' ? it.presetButtons : []))
-	              .map(btn => (
-	                <button
-	                  key={btn.id}
-	                  type="button"
-	                  className={`ck-bottom-menu-item${isPrimaryActionLabel(btn.label) ? ' ck-bottom-menu-item--primary' : ''}`}
-	                  disabled={disabled || btn.disabled || !onCustomButton}
-	                  onClick={() => {
-	                    setMenu(null);
-	                    onCustomButton?.(btn.id);
-	                  }}
-                >
-                  <IconWrap>
-                    <PlusIcon />
-                  </IconWrap>
-                  {btn.label}
-                </button>
-              ))}
+	              .map(btn =>
+	                renderCustomMenuButton(
+	                  btn,
+	                  `ck-bottom-menu-item${isPrimaryActionLabel(btn.label) ? ' ck-bottom-menu-item--primary' : ''}`,
+	                  () => setMenu(null)
+	                )
+	              )}
             {copyEnabled &&
               resolved.capsule.some(it => it.kind === 'create' && (it as any).showCopy) && (
               <button
@@ -708,21 +749,13 @@ export const ActionBar: React.FC<{
 	            {resolved.capsule
 	              .filter(it => it.kind === 'summary')
 	              .flatMap(it => (it.kind === 'summary' ? it.menuButtons : []))
-	              .map(btn => (
-	                <button
-	                  key={btn.id}
-	                  type="button"
-	                  className={`ck-bottom-menu-item${isPrimaryActionLabel(btn.label) ? ' ck-bottom-menu-item--primary' : ''}`}
-	                  disabled={disabled || btn.disabled || !onCustomButton}
-	                  onClick={() => {
-	                    setMenu(null);
-	                    onCustomButton?.(btn.id);
-	                  }}
-                >
-                  <IconWrap>{iconForCustomAction(btn.action)}</IconWrap>
-                  {btn.label}
-                </button>
-              ))}
+	              .map(btn =>
+	                renderCustomMenuButton(
+	                  btn,
+	                  `ck-bottom-menu-item${isPrimaryActionLabel(btn.label) ? ' ck-bottom-menu-item--primary' : ''}`,
+	                  () => setMenu(null)
+	                )
+	              )}
           </div>
         </div>
       )}
@@ -890,19 +923,7 @@ export const ActionBar: React.FC<{
 	                  if (it.kind === 'custom') {
 	                    const btn = it.button;
 	                    const primary = isPrimaryActionLabel(btn.label);
-	                    return (
-	                      <button
-	                        // eslint-disable-next-line react/no-array-index-key
-	                        key={`custom-${btn.id}-${idx}`}
-	                        type="button"
-	                        className={`ck-bottom-item${primary ? ' ck-bottom-item--primary' : ''}`}
-	                        onClick={() => onCustomButton?.(btn.id)}
-	                        disabled={disabled || btn.disabled || !onCustomButton}
-	                      >
-                        <IconWrap>{iconForCustomAction(btn.action)}</IconWrap>
-                        <span className="ck-bottom-label">{btn.label}</span>
-                      </button>
-                    );
+	                    return renderCustomCapsuleButton(btn, idx, `ck-bottom-item${primary ? ' ck-bottom-item--primary' : ''}`);
                   }
                   return null;
                       })}

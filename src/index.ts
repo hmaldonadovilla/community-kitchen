@@ -437,6 +437,12 @@ export function renderDocTemplatePdfPreview(formObject: WebFormSubmission, butto
   return service.renderDocTemplatePdfPreview(formObject, buttonId);
 }
 
+export function renderStoredPdfPreview(formKey: string, recordId: string, fieldId?: string): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.renderStoredPdfPreview(formKey, recordId, fieldId);
+}
+
 export function renderDocTemplateHtml(formObject: WebFormSubmission, buttonId: string): any {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);

@@ -12,6 +12,11 @@ import type { LineItemState } from '../../types';
 import { resolveLabel } from '../../utils/labels';
 import { getSystemFieldValue } from '../../../rules/systemFields';
 import { shouldHideField } from '../../../rules/visibility';
+import {
+  readOpenUrlRuntimeEnvironment,
+  resolveOpenUrlFieldPresentation,
+  type OpenUrlFieldMode
+} from '../../app/openUrlField';
 
 export type AppCustomButton = {
   id: string;
@@ -19,6 +24,9 @@ export type AppCustomButton = {
   placements: any[];
   action: any;
   disabled: boolean;
+  href?: string;
+  openUrlFieldId?: string;
+  openUrlMode?: OpenUrlFieldMode;
 };
 
 export const useAppCustomButtons = (args: {
@@ -137,9 +145,28 @@ export const useAppCustomButtons = (args: {
         const placementsRaw = cfg.placements;
         const placements = Array.isArray(placementsRaw) && placementsRaw.length ? placementsRaw : (['form'] as const);
         const id = encodeButtonRef(q.id, idx);
-        const disabled =
-          action === 'openUrlField' && cfg.disableWhenValueMissing === true ? !resolveOpenUrlFieldHref((cfg.fieldId || '').toString()) : false;
-        return { id, label: resolveLabel(q, language), placements: placements as any, action: action as any, disabled };
+        const openUrlFieldId = action === 'openUrlField' ? (cfg.fieldId || '').toString().trim() : '';
+        const href = openUrlFieldId ? resolveOpenUrlFieldHref(openUrlFieldId) : '';
+        const openUrlPresentation =
+          action === 'openUrlField'
+            ? resolveOpenUrlFieldPresentation({
+                action,
+                fieldId: openUrlFieldId,
+                href,
+                env: readOpenUrlRuntimeEnvironment()
+              })
+            : null;
+        const disabled = action === 'openUrlField' && cfg.disableWhenValueMissing === true ? !href : false;
+        return {
+          id,
+          label: resolveLabel(q, language),
+          placements: placements as any,
+          action: action as any,
+          disabled,
+          ...(openUrlPresentation?.mode === 'externalLink' ? { href: openUrlPresentation.href } : {}),
+          ...(openUrlFieldId ? { openUrlFieldId } : {}),
+          ...(openUrlPresentation ? { openUrlMode: openUrlPresentation.mode } : {})
+        };
       })
       .filter((button): button is AppCustomButton => !!button);
   }, [

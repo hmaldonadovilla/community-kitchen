@@ -1693,6 +1693,13 @@ export const renderDocTemplatePdfPreviewApi = (
 ): Promise<RenderDocTemplatePdfPreviewResult> =>
   invokeDriveArtifactTransport<RenderDocTemplatePdfPreviewResult>('renderDocTemplatePdfPreview', payload, buttonId);
 
+export const renderStoredPdfPreviewApi = (
+  formKey: string,
+  recordId: string,
+  fieldId = 'pdfUrl'
+): Promise<RenderDocTemplatePdfPreviewResult> =>
+  runAppsScript<RenderDocTemplatePdfPreviewResult>('renderStoredPdfPreview', formKey, recordId, fieldId);
+
 export const renderDocTemplateHtmlApi = (payload: SubmissionPayload, buttonId: string): Promise<RenderDocPreviewResult> =>
   invokeDriveArtifactTransport<RenderDocPreviewResult>('renderDocTemplateHtml', payload, buttonId);
 

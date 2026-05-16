@@ -67,7 +67,7 @@ import {
   DataSourceIdBackfillService
 } from './webform/dataSourceIdBackfill';
 import { buildReactShellTemplate, buildReactTemplate } from './webform/template';
-import { getDriveApiFile, trashDriveApiFile } from './webform/driveApi';
+import { extractDriveFileId, fetchDriveFileBlob, getDriveApiFile, trashDriveApiFile } from './webform/driveApi';
 import { loadDedupRules, computeDedupSignature } from './dedup';
 import {
   collectDocTemplateMigrationIds,
@@ -5654,6 +5654,69 @@ export class WebFormService {
       mimeType: result.mimeType || 'application/pdf',
       fileName: result.fileName
     };
+  }
+
+  /**
+   * Return an in-memory PDF preview for a saved Drive URL on the current record.
+   *
+   * This is intentionally record-scoped: the client supplies the form and record id,
+   * while the server reads the configured field value from the saved record before
+   * fetching Drive. That prevents the web client from using this endpoint as an
+   * arbitrary Drive-file proxy.
+   */
+  public renderStoredPdfPreview(
+    formKeyRaw: string,
+    recordIdRaw: string,
+    fieldIdRaw?: string
+  ): { success: boolean; pdfBase64?: string; mimeType?: string; fileName?: string; message?: string } {
+    const formKey = (formKeyRaw || '').toString().trim();
+    const recordId = (recordIdRaw || '').toString().trim();
+    const fieldId = (fieldIdRaw || 'pdfUrl').toString().trim() || 'pdfUrl';
+    if (!formKey || !recordId) {
+      return { success: false, message: 'Form key and record id are required.' };
+    }
+    if (fieldId !== 'pdfUrl') {
+      return { success: false, message: 'Only saved PDF URLs can be previewed in-app.' };
+    }
+
+    const record = this.fetchSubmissionById(formKey, recordId);
+    const pdfUrl = (record?.pdfUrl || '').toString().trim();
+    if (!record || !pdfUrl) {
+      debugLog('renderStoredPdfPreview.missingUrl', { formKey, recordId, fieldId });
+      return { success: false, message: 'No saved PDF link was found for this record.' };
+    }
+
+    const fileId = extractDriveFileId(pdfUrl);
+    if (!fileId) {
+      debugLog('renderStoredPdfPreview.invalidUrl', { formKey, recordId, fieldId });
+      return { success: false, message: 'The saved PDF link is not a supported Drive file URL.' };
+    }
+
+    try {
+      const blob = fetchDriveFileBlob(fileId, 'renderStoredPdfPreview');
+      if (!blob) {
+        debugLog('renderStoredPdfPreview.fetchFailed', { formKey, recordId, fieldId, fileId });
+        return { success: false, message: 'Could not load the saved PDF from Drive.' };
+      }
+      const pdfBlob = (() => {
+        const contentType = typeof blob.getContentType === 'function' ? (blob.getContentType() || '').toString() : '';
+        if (contentType.toLowerCase() === 'application/pdf') return blob;
+        try {
+          return blob.getAs('application/pdf');
+        } catch {
+          return blob;
+        }
+      })();
+      const bytes = pdfBlob.getBytes();
+      const pdfBase64 = Utilities.base64Encode(bytes);
+      const fileName = (typeof pdfBlob.getName === 'function' ? pdfBlob.getName() : '') || `${recordId}.pdf`;
+      debugLog('renderStoredPdfPreview.ok', { formKey, recordId, fieldId, fileId, fileName });
+      return { success: true, pdfBase64, mimeType: 'application/pdf', fileName };
+    } catch (err: any) {
+      const msg = (err?.message || err?.toString?.() || 'Failed to load the saved PDF.').toString();
+      debugLog('renderStoredPdfPreview.exception', { formKey, recordId, fieldId, fileId, message: msg });
+      return { success: false, message: msg };
+    }
   }
 
   /**

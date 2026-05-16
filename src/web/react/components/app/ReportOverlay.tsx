@@ -60,11 +60,12 @@ export const ReportOverlay: React.FC<{
       <div style={{ flex: 1, minHeight: 0, position: 'relative', display: 'flex', flexDirection: 'column' }}>
         {pdfPhase === 'rendering' ? (
           <div style={{ padding: 16 }} className="status">
-            {kind === 'pdf'
+            {pdfMessage ||
+            (kind === 'pdf'
               ? tSystem('report.generatingPdf', language, 'Generating PDF…')
               : kind === 'markdown'
                 ? tSystem('common.loading', language, 'Loading…')
-                : tSystem('common.loading', language, 'Loading…')}
+                : tSystem('common.loading', language, 'Loading…'))}
           </div>
         ) : null}
         {pdfPhase === 'error' ? (
@@ -79,21 +80,8 @@ export const ReportOverlay: React.FC<{
         ) : null}
 
         {kind === 'pdf' && pdfPhase === 'ready' && pdfObjectUrl ? (
-          <div style={{ padding: 16, flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ flex: 1, minHeight: 0 }}>
-              <iframe
-                title={title || tSystem('report.title', language, 'Report')}
-                src={pdfObjectUrl}
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  border: 'none',
-                  borderRadius: 0,
-                  background: 'transparent'
-                }}
-              />
-            </div>
-            <div className="muted">
+          <div className="ck-pdf-preview">
+            <div className="ck-pdf-preview__open muted">
               <a href={pdfObjectUrl} target="_blank" rel="noopener noreferrer">
                 {tSystem('summary.openPdf', language, tSystem('common.open', language, 'Open'))}
               </a>

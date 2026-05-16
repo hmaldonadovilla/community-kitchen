@@ -35,6 +35,19 @@ export const isLikelyBinaryDriveString = (raw: string): boolean => {
   return value.trimStart().startsWith('%PDF-');
 };
 
+export const extractDriveFileId = (value: string): string => {
+  const text = (value || '').toString().trim();
+  if (!text) return '';
+  const idParamMatch = text.match(/[?&]id=([a-zA-Z0-9_-]{10,})/);
+  if (idParamMatch) return idParamMatch[1];
+  const filePathMatch = text.match(/\/file\/d\/([a-zA-Z0-9_-]{10,})/);
+  if (filePathMatch) return filePathMatch[1];
+  const pathMatch = text.match(/\/d\/([a-zA-Z0-9_-]{10,})/);
+  if (pathMatch) return pathMatch[1];
+  if (/^[a-zA-Z0-9_-]{10,}$/.test(text)) return text;
+  return '';
+};
+
 export const readDriveBlobAsText = (
   blob: GoogleAppsScript.Base.Blob,
   fallbackMimeType?: string | null

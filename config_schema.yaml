@@ -611,9 +611,11 @@ components:
               type: string
               enum: [openUrlField]
               description: |
-                Open (redirect to) the URL stored in a field of the current record.
+                Open the URL stored in a field of the current record in a new browser context.
 
                 Use this for quick access to saved PDFs, Drive links, or external resources.
+                Saved `pdfUrl` reports use an in-app PDF preview on iOS standalone/PWA
+                installs because iOS PWAs do not provide normal browser tabs.
             fieldId:
               type: string
               description: |

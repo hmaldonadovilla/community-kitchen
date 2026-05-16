@@ -1375,6 +1375,11 @@ export function buildWebFormHtml(
         font-size: var(--ck-font-pill);
         white-space: nowrap;
         box-shadow: none;
+        text-decoration: none;
+      }
+      a.ck-bottom-item,
+      a.ck-bottom-item:visited {
+        color: var(--text);
       }
       .ck-bottom-label {
         /* Show labels in full; wrapping happens at the button level (via the capsule). */
@@ -1500,11 +1505,31 @@ export function buildWebFormHtml(
         align-items: center;
         gap: 10px;
         box-shadow: none;
+        text-decoration: none;
+      }
+      a.ck-bottom-menu-item,
+      a.ck-bottom-menu-item:visited {
+        color: var(--ck-secondary-text);
       }
       .ck-bottom-menu-item--primary {
         background: var(--accent);
         border-color: var(--accent);
         color: var(--accentText);
+      }
+      a.ck-bottom-menu-item--primary,
+      a.ck-bottom-menu-item--primary:visited {
+        color: var(--accentText);
+      }
+      .ck-pdf-preview {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        background: #fff;
+      }
+      .ck-pdf-preview__open {
+        padding: 16px 16px max(18px, env(safe-area-inset-bottom));
+        background: var(--card);
       }
     </style>
   </head>

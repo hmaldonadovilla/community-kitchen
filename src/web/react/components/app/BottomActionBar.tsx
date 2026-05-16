@@ -2,6 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import type { View } from '../../types';
 import type { LangCode } from '../../../types';
 import { tSystem } from '../../../systemStrings';
+import { CustomActionLink, shouldRenderCustomButtonAsLink } from './CustomActionLink';
+
+type CustomButton = { id: string; label: string; action?: string; href?: string; disabled?: boolean };
 
 const IconWrap: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <span className="ck-bottom-icon" aria-hidden="true">
@@ -77,9 +80,9 @@ export const BottomActionBar: React.FC<{
   canCopy: boolean;
   summaryEnabled?: boolean;
   copyEnabled?: boolean;
-  customButtonsFormMenu?: Array<{ id: string; label: string; action?: string }>;
-  customButtonsSummaryBar?: Array<{ id: string; label: string; action?: string }>;
-  customButtonsListBar?: Array<{ id: string; label: string; action?: string }>;
+  customButtonsFormMenu?: CustomButton[];
+  customButtonsSummaryBar?: CustomButton[];
+  customButtonsListBar?: CustomButton[];
   onHome: () => void;
   onCreateNew: () => void;
   onCreateCopy: () => void;
@@ -134,6 +137,65 @@ export const BottomActionBar: React.FC<{
   }, [menu]);
 
   const homeActive = view === 'list';
+
+  const renderCustomMenuButton = (btn: CustomButton, className: string, closeMenu: () => void) => {
+    const buttonState = { ...btn, disabled: submitting || btn.disabled || (!btn.href && !onButton) };
+    const content = (
+      <>
+        <IconWrap>{iconForCustomAction(btn.action)}</IconWrap>
+        {btn.label}
+      </>
+    );
+    if (shouldRenderCustomButtonAsLink(buttonState)) {
+      return (
+        <CustomActionLink key={btn.id} button={buttonState} className={className} onNavigate={closeMenu}>
+          {content}
+        </CustomActionLink>
+      );
+    }
+    return (
+      <button
+        key={btn.id}
+        type="button"
+        className={className}
+        disabled={buttonState.disabled}
+        onClick={() => {
+          closeMenu();
+          onButton?.(btn.id);
+        }}
+      >
+        {content}
+      </button>
+    );
+  };
+
+  const renderCustomBottomItem = (btn: CustomButton) => {
+    const buttonState = { ...btn, disabled: submitting || btn.disabled || (!btn.href && !onButton) };
+    const content = (
+      <>
+        <IconWrap>{iconForCustomAction(btn.action)}</IconWrap>
+        {btn.label}
+      </>
+    );
+    if (shouldRenderCustomButtonAsLink(buttonState)) {
+      return (
+        <CustomActionLink key={btn.id} button={buttonState} className="ck-bottom-item">
+          {content}
+        </CustomActionLink>
+      );
+    }
+    return (
+      <button
+        key={btn.id}
+        type="button"
+        className="ck-bottom-item"
+        onClick={() => onButton?.(btn.id)}
+        disabled={buttonState.disabled}
+      >
+        {content}
+      </button>
+    );
+  };
 
   const handleCreatePress = () => {
     if (submitting) return;
@@ -226,23 +288,7 @@ export const BottomActionBar: React.FC<{
                 {tSystem('actions.viewSummary', language, 'View summary')}
               </button>
             )}
-            {(customButtonsFormMenu || []).map(btn => (
-              <button
-                key={btn.id}
-                type="button"
-                className="ck-bottom-menu-item"
-                disabled={submitting || !onButton}
-                onClick={() => {
-                  setMenu(null);
-                  onButton?.(btn.id);
-                }}
-              >
-                <IconWrap>
-                  {iconForCustomAction(btn.action)}
-                </IconWrap>
-                {btn.label}
-              </button>
-            ))}
+            {(customButtonsFormMenu || []).map(btn => renderCustomMenuButton(btn, 'ck-bottom-menu-item', () => setMenu(null)))}
           </div>
         </div>
       )}
@@ -256,23 +302,9 @@ export const BottomActionBar: React.FC<{
             onClick={() => setMenu(null)}
           />
           <div className="ck-bottom-menu" aria-label={tSystem('actions.actionsMenu', language, 'Actions menu')}>
-            {((view === 'summary' ? customButtonsSummaryBar : customButtonsListBar) || []).map(btn => (
-              <button
-                key={btn.id}
-                type="button"
-                className="ck-bottom-menu-item ck-bottom-menu-item--primary"
-                disabled={submitting || !onButton}
-                onClick={() => {
-                  setMenu(null);
-                  onButton?.(btn.id);
-                }}
-              >
-                <IconWrap>
-                  {iconForCustomAction(btn.action)}
-                </IconWrap>
-                {btn.label}
-              </button>
-            ))}
+            {((view === 'summary' ? customButtonsSummaryBar : customButtonsListBar) || []).map(btn =>
+              renderCustomMenuButton(btn, 'ck-bottom-menu-item ck-bottom-menu-item--primary', () => setMenu(null))
+            )}
           </div>
         </div>
       )}
@@ -345,19 +377,9 @@ export const BottomActionBar: React.FC<{
               </button>
             )}
 
-            {view === 'summary' && hasSummaryBarButtons && (customButtonsSummaryBar || []).length === 1 && (
-              <button
-                type="button"
-                className="ck-bottom-item"
-                onClick={() => onButton?.((customButtonsSummaryBar || [])[0].id)}
-                disabled={submitting || !onButton}
-              >
-                <IconWrap>
-                  {iconForCustomAction((customButtonsSummaryBar || [])[0].action)}
-                </IconWrap>
-                {(customButtonsSummaryBar || [])[0].label}
-              </button>
-            )}
+            {view === 'summary' && hasSummaryBarButtons && (customButtonsSummaryBar || []).length === 1
+              ? renderCustomBottomItem((customButtonsSummaryBar || [])[0])
+              : null}
 
             {view === 'summary' && (customButtonsSummaryBar || []).length > 1 && (
               <button
@@ -375,19 +397,9 @@ export const BottomActionBar: React.FC<{
               </button>
             )}
 
-            {view === 'list' && hasListBarButtons && (customButtonsListBar || []).length === 1 && (
-              <button
-                type="button"
-                className="ck-bottom-item"
-                onClick={() => onButton?.((customButtonsListBar || [])[0].id)}
-                disabled={submitting || !onButton}
-              >
-                <IconWrap>
-                  {iconForCustomAction((customButtonsListBar || [])[0].action)}
-                </IconWrap>
-                {(customButtonsListBar || [])[0].label}
-              </button>
-            )}
+            {view === 'list' && hasListBarButtons && (customButtonsListBar || []).length === 1
+              ? renderCustomBottomItem((customButtonsListBar || [])[0])
+              : null}
 
             {view === 'list' && (customButtonsListBar || []).length > 1 && (
               <button
@@ -418,5 +430,3 @@ export const BottomActionBar: React.FC<{
     </>
   );
 };
-
-

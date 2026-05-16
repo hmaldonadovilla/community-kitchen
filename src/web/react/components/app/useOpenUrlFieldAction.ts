@@ -3,6 +3,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 
 import { tSystem } from '../../../systemStrings';
 import type { LangCode, WebFormSubmission } from '../../../types';
+import { openUrlInNewContext } from '../../app/openUrlField';
 import { resolveExistingRecordId } from '../../app/submission';
 
 type SubmissionMeta = {
@@ -63,22 +64,23 @@ export const useOpenUrlFieldAction = (args: {
         return;
       }
 
-      let opened = false;
-      try {
-        const w = globalThis.window?.open?.(href, '_blank');
-        opened = Boolean(w);
-      } catch {
-        opened = false;
+      const result = openUrlInNewContext({
+        href,
+        openWindow: globalThis.window?.open?.bind(globalThis.window) as any,
+        assignLocation: globalThis.location?.assign?.bind(globalThis.location),
+        allowCurrentWindowNavigation: false
+      });
+      if (!result.opened) {
+        setStatus(tSystem('actions.openLinkBlocked', languageRef.current, 'Open the link from the action menu again if it did not open.'));
+        setStatusLevel('info');
       }
-      if (!opened) {
-        try {
-          globalThis.location?.assign?.(href);
-          opened = true;
-        } catch {
-          opened = false;
-        }
-      }
-      logEvent('button.openUrl.open', { buttonId: baseId, qIdx: qIdx ?? null, fieldId: normalizedFieldId, opened });
+      logEvent('button.openUrl.open', {
+        buttonId: baseId,
+        qIdx: qIdx ?? null,
+        fieldId: normalizedFieldId,
+        opened: result.opened,
+        method: result.method
+      });
     },
     [
       languageRef,
