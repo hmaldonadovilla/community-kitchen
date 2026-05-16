@@ -1531,6 +1531,14 @@ export interface FileUploadConfig {
    */
   blockUntilSaved?: boolean;
   /**
+   * Optional server-side concurrency for Apps Script Drive uploads.
+   *
+   * This keeps the client upload as a single save transaction while allowing
+   * Apps Script to send multiple Drive create requests concurrently. Values are
+   * capped by the server to avoid Drive/App Script rate spikes.
+   */
+  serverUploadConcurrency?: number;
+  /**
    * Optional localized confirmation shown when closing the photo overlay with
    * unsaved add/remove changes. Falls back to the built-in system string.
    */
