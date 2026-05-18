@@ -235,6 +235,45 @@ export function runDailyLifecycleRecompute(): any {
   return service.runDailyLifecycleRecompute();
 }
 
+export function runScheduledRecordAlerts(options?: any): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return service.runScheduledRecordAlerts(options);
+}
+
+function syncScheduledRecordAlertTriggers(ss: GoogleAppsScript.Spreadsheet.Spreadsheet): {
+  deleted: number;
+  installed: number;
+  schedules: Array<{ hour: number; minute: number }>;
+} {
+  const service = new WebFormService(ss);
+  const schedules = service.getScheduledRecordAlertTriggerSchedules();
+  const triggers = ScriptApp.getProjectTriggers().filter(t => t.getHandlerFunction() === 'runScheduledRecordAlerts');
+  let deleted = 0;
+  triggers.forEach(trigger => {
+    try {
+      ScriptApp.deleteTrigger(trigger);
+      deleted += 1;
+    } catch {
+      // ignore best-effort cleanup failures
+    }
+  });
+  schedules.forEach(schedule => {
+    const builder = ScriptApp.newTrigger('runScheduledRecordAlerts')
+      .timeBased()
+      .everyDays(1)
+      .atHour(schedule.hour);
+    const withMinute = typeof (builder as any).nearMinute === 'function' ? (builder as any).nearMinute(schedule.minute) : builder;
+    withMinute.create();
+  });
+  return { deleted, installed: schedules.length, schedules };
+}
+
+export function installScheduledRecordAlertTriggers(): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  return syncScheduledRecordAlertTriggers(ss);
+}
+
 // New endpoints (scaffolding)
 export function fetchDataSource(
   dataSourceId: string,
@@ -548,8 +587,10 @@ export function installTriggers(): void {
       .create();
   }
 
-  if (!hasConfig || !hasResponses || !hasDailyAnalytics || !hasDailyLifecycle) {
-    Browser.msgBox('Triggers installed! (Options + Response indexing + Daily analytics + Daily lifecycle)');
+  const scheduledAlertResult = syncScheduledRecordAlertTriggers(ss);
+
+  if (!hasConfig || !hasResponses || !hasDailyAnalytics || !hasDailyLifecycle || scheduledAlertResult.deleted || scheduledAlertResult.installed) {
+    Browser.msgBox('Triggers installed! (Options + Response indexing + Daily analytics + Daily lifecycle + Scheduled alerts)');
   } else {
     Browser.msgBox('Triggers already installed.');
   }
@@ -559,7 +600,7 @@ export function onOpen(): void {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu('Community Kitchen')
     .addItem('Setup Forms', 'setup')
-    .addItem('Install Triggers (Options + Response indexing + Daily analytics + Daily lifecycle)', 'installTriggers')
+    .addItem('Install Triggers (Options + Response indexing + Daily analytics + Daily lifecycle + Scheduled alerts)', 'installTriggers')
     .addItem('Create/Update All Forms', 'createAllForms')
     .addItem('Invalidate Web App Cache', 'invalidateWebAppCache')
     .addItem('Rebuild Indexes (Data Version + Dedup)', 'rebuildIndexes')

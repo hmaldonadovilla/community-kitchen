@@ -3234,6 +3234,98 @@ export interface LifecycleConfig {
   rules?: LifecycleRule[];
 }
 
+export interface ScheduledRecordAlertScheduleConfig {
+  /**
+   * Script-local hour when the alert should run.
+   */
+  hour: number;
+  /**
+   * Script-local minute when the alert should run.
+   *
+   * Apps Script time triggers are approximate, so the runtime treats the configured
+   * minute as the start of the due window within the configured hour.
+   */
+  minute?: number;
+  /**
+   * Number of minutes after the configured time during which the alert is still due.
+   * Defaults to the remainder of the configured hour.
+   */
+  windowMinutes?: number;
+}
+
+export interface ScheduledRecordAlertFilterConfig {
+  /**
+   * Field id evaluated for this filter.
+   */
+  fieldId: string;
+  /**
+   * Accepted value(s), matched case-insensitively.
+   */
+  equals?: string | string[];
+  /**
+   * Rejected value(s), matched case-insensitively.
+   */
+  notEquals?: string | string[];
+}
+
+export interface ScheduledRecordAlertEmailConfig {
+  recipients: EmailRecipientEntry[];
+  cc?: EmailRecipientEntry[];
+  bcc?: EmailRecipientEntry[];
+  from?: string;
+  fromName?: string;
+  subject?: LocalizedString | string;
+  message?: LocalizedString | string;
+  lineTemplate?: LocalizedString | string;
+}
+
+export interface ScheduledRecordAlertConfig {
+  /**
+   * Stable alert id used for diagnostics, trigger dedupe, and tests.
+   */
+  id: string;
+  /**
+   * Generic record email alert. `recordCompletenessEmail` is accepted as an alias in dashboard JSON.
+   */
+  type: 'recordEmail';
+  /**
+   * Set false to keep the alert configured but inactive.
+   */
+  enabled?: boolean;
+  schedule: ScheduledRecordAlertScheduleConfig;
+  /**
+   * Source form key. Defaults to the form that owns this alert config.
+   */
+  sourceFormKey?: string;
+  /**
+   * Date field used to scope the alert to today's records.
+   */
+  dateFieldId: string;
+  /**
+   * Optional field id used to read the business status.
+   * When omitted, the form follow-up status field or record meta Status column is used.
+   */
+  statusFieldId?: string;
+  /**
+   * Status values considered incomplete/actionable. Defaults to ["Incomplete"].
+   */
+  statusValues?: string[];
+  /**
+   * Additional record filters such as service = Lunch.
+   */
+  filters?: ScheduledRecordAlertFilterConfig[];
+  /**
+   * Token-to-field mapping used by email templates. Keys become tokens such as `{{CUSTOMER}}`.
+   */
+  fields?: Record<string, string>;
+  email: ScheduledRecordAlertEmailConfig;
+  /**
+   * Prevent duplicate emails for the same alert/date when a trigger is retried.
+   * Default: true.
+   */
+  dedupe?: boolean;
+}
+
 export interface AutoSaveConfig {
   /**
    * Enable draft autosave while editing in the React web app.
@@ -3584,6 +3676,10 @@ export interface FormConfig {
    * Optional config-driven lifecycle automation, evaluated by the daily lifecycle trigger.
    */
   lifecycle?: LifecycleConfig;
+  /**
+   * Optional config-driven scheduled email alerts evaluated by Apps Script time triggers.
+   */
+  scheduledAlerts?: ScheduledRecordAlertConfig[];
   /**
    * CacheService TTL (seconds) for cached HTML/Markdown templates for this form.
    *

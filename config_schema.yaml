@@ -6736,6 +6736,154 @@ components:
         - mark leftovers `expired` when `LEFTOVER_EXP_DATE <= today`
         - later reuse for other stock/bank status rollovers
 
+    ScheduledRecordAlertScheduleConfig:
+      type: object
+      properties:
+        hour:
+          type: integer
+          minimum: 0
+          maximum: 23
+          description: Script-local hour when this alert should run.
+        minute:
+          type: integer
+          minimum: 0
+          maximum: 59
+          default: 0
+          description: Script-local minute when this alert should run.
+        windowMinutes:
+          type: integer
+          minimum: 0
+          description: |
+            Optional due window after the configured time. Apps Script time triggers are approximate,
+            so omit this to allow the alert for the remainder of the configured hour.
+      required: [hour]
+
+    ScheduledRecordAlertFilterConfig:
+      type: object
+      properties:
+        fieldId:
+          type: string
+          description: Field id to evaluate.
+        equals:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+          description: Accepted value(s), matched case-insensitively.
+        notEquals:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+          description: Rejected value(s), matched case-insensitively.
+      required: [fieldId]
+
+    ScheduledRecordAlertEmailConfig:
+      type: object
+      properties:
+        recipients:
+          type: array
+          items:
+            oneOf:
+              - type: string
+              - type: object
+                additionalProperties: true
+          description: Static email addresses or dataSource recipient entries.
+        cc:
+          type: array
+          items:
+            oneOf:
+              - type: string
+              - type: object
+                additionalProperties: true
+        bcc:
+          type: array
+          items:
+            oneOf:
+              - type: string
+              - type: object
+                additionalProperties: true
+        from:
+          type: string
+        fromName:
+          type: string
+        subject:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+        message:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Email body template. Supported tokens include `{{RECORD_LINES}}`, `{{RECORD_COUNT}}`, and `{{TODAY_DATE}}`.
+        lineTemplate:
+          oneOf:
+            - type: string
+            - $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Template for one matched record line. Tokens come from the alert `fields` map, plus `{{RECORD_ID}}` and `{{STATUS}}`.
+      required: [recipients]
+
+    ScheduledRecordAlertConfig:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Stable alert id used for diagnostics and same-day dedupe.
+        type:
+          type: string
+          enum: [recordEmail, recordCompletenessEmail]
+          default: recordEmail
+          description: Generic scheduled record email alert. `recordCompletenessEmail` is accepted as an alias.
+        enabled:
+          type: boolean
+          default: true
+        schedule:
+          $ref: '#/components/schemas/ScheduledRecordAlertScheduleConfig'
+        sourceFormKey:
+          type: string
+          description: Source form key. Defaults to the form that owns this dashboard config.
+        dateFieldId:
+          type: string
+          description: Date field used to scope the alert to today's records.
+        statusFieldId:
+          type: string
+          description: Status field to read. Defaults to `followupConfig.statusFieldId`, then the system Status column.
+        statusValues:
+          type: array
+          items:
+            type: string
+          default: ["In progress", "In production"]
+          description: Status values considered incomplete/actionable, such as draft or production statuses that still require final report completion.
+        filters:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScheduledRecordAlertFilterConfig'
+          description: Additional field filters, such as service equals Lunch.
+        fields:
+          type: object
+          additionalProperties:
+            type: string
+          description: Token-to-field mapping used by `email.lineTemplate`.
+        email:
+          $ref: '#/components/schemas/ScheduledRecordAlertEmailConfig'
+        dedupe:
+          type: boolean
+          default: true
+          description: Prevent duplicate emails for the same alert/date when a trigger is retried.
+      required: [id, schedule, dateFieldId, email]
+
+    ScheduledRecordAlertsConfig:
+      type: array
+      items:
+        $ref: '#/components/schemas/ScheduledRecordAlertConfig'
+      description: |
+        Config-driven scheduled email alerts evaluated by Apps Script time triggers.
+        Use for operational checks such as today's incomplete Meal Production records at service-specific or end-of-day alert times.
+
     UtilisationConflictDialogConfig:
       type: object
       description: |
@@ -7688,6 +7836,9 @@ components:
         lifecycle:
           $ref: '#/components/schemas/LifecycleConfig'
           description: Config-driven daily lifecycle automation (dashboard-level).
+        scheduledAlerts:
+          $ref: '#/components/schemas/ScheduledRecordAlertsConfig'
+          description: Config-driven scheduled email alerts (dashboard-level).
         languages:
           type: array
           items:

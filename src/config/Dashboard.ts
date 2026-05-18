@@ -17,6 +17,7 @@ import {
   FieldDisableRule,
   LifecycleConfig,
   LifecycleRule,
+  ScheduledRecordAlertConfig,
   EmailRecipientEntry,
   EmailRecipientDataSourceConfig,
   DedupDialogConfig,
@@ -156,6 +157,7 @@ export class Dashboard {
       const listViewMetric = dashboardConfig?.listViewMetric;
       const analytics = dashboardConfig?.analytics;
       const lifecycle = dashboardConfig?.lifecycle;
+      const scheduledAlerts = dashboardConfig?.scheduledAlerts;
       const autoSave = dashboardConfig?.autoSave;
       const recordFreshness = dashboardConfig?.recordFreshness;
       const auditLogging = dashboardConfig?.auditLogging;
@@ -219,6 +221,7 @@ export class Dashboard {
           listViewView,
           listViewMetric,
           analytics,
+          scheduledAlerts,
           autoSave,
           recordFreshness,
           auditLogging,
@@ -300,6 +303,7 @@ export class Dashboard {
     listViewView?: ListViewViewConfig;
     listViewMetric?: ListViewMetricConfig;
     analytics?: AnalyticsConfig;
+    scheduledAlerts?: ScheduledRecordAlertConfig[];
     autoSave?: AutoSaveConfig;
     recordFreshness?: RecordFreshnessConfig;
     auditLogging?: AuditLoggingConfig;
@@ -413,6 +417,15 @@ export class Dashboard {
               ? { rules: parsed.lifecycleRules }
               : undefined;
     const lifecycle = this.normalizeLifecycleConfig(lifecycleRaw);
+    const scheduledAlertsRaw =
+      parsed.scheduledAlerts !== undefined
+        ? parsed.scheduledAlerts
+        : parsed.scheduledRecordAlerts !== undefined
+          ? parsed.scheduledRecordAlerts
+          : parsed.recordAlerts !== undefined
+            ? parsed.recordAlerts
+            : undefined;
+    const scheduledAlerts = this.normalizeScheduledRecordAlertsConfig(scheduledAlertsRaw);
     const templateCacheObj =
       parsed.templateCache !== undefined && parsed.templateCache !== null && typeof parsed.templateCache === 'object'
         ? parsed.templateCache
@@ -1508,6 +1521,7 @@ export class Dashboard {
       !listViewMetric &&
       !analytics?.widgets?.length &&
       !lifecycle?.rules?.length &&
+      !scheduledAlerts?.length &&
       !autoSave &&
       !recordFreshness &&
       !auditLogging &&
@@ -1565,6 +1579,7 @@ export class Dashboard {
       listViewView,
       listViewMetric,
       analytics,
+      scheduledAlerts,
       autoSave,
       recordFreshness,
       auditLogging,
@@ -2770,6 +2785,155 @@ export class Dashboard {
       (rule as any).dayOffset = Math.trunc(dayOffsetRaw);
     }
     return rule;
+  }
+
+  private normalizeScheduledRecordAlertsConfig(raw: any): ScheduledRecordAlertConfig[] | undefined {
+    if (raw === undefined || raw === null) return undefined;
+    const list = Array.isArray(raw) ? raw : [raw];
+    const alerts = list
+      .map((entry: any) => this.normalizeScheduledRecordAlert(entry))
+      .filter(Boolean) as ScheduledRecordAlertConfig[];
+    return alerts.length ? alerts : undefined;
+  }
+
+  private normalizeScheduledRecordAlert(raw: any): ScheduledRecordAlertConfig | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const typeRaw = (raw.type ?? raw.kind ?? 'recordEmail').toString().trim();
+    if (typeRaw && typeRaw !== 'recordEmail' && typeRaw !== 'recordCompletenessEmail') return undefined;
+    const id = (raw.id ?? raw.alertId ?? raw.name ?? '').toString().trim();
+    const dateFieldId = (raw.dateFieldId ?? raw.productionDateFieldId ?? raw.dateField ?? '').toString().trim();
+    const email = this.normalizeScheduledRecordAlertEmail(raw.email ?? raw.notification ?? raw);
+    const schedule = this.normalizeScheduledRecordAlertSchedule(raw.schedule ?? raw);
+    if (!id || !dateFieldId || !schedule || !email) return undefined;
+
+    const alert: ScheduledRecordAlertConfig = {
+      id,
+      type: 'recordEmail',
+      schedule,
+      dateFieldId,
+      email
+    };
+    if (raw.enabled !== undefined) alert.enabled = Boolean(raw.enabled);
+    const sourceFormKey = (raw.sourceFormKey ?? raw.formKey ?? '').toString().trim();
+    if (sourceFormKey) alert.sourceFormKey = sourceFormKey;
+    const statusFieldId = (raw.statusFieldId ?? raw.statusField ?? '').toString().trim();
+    if (statusFieldId) alert.statusFieldId = statusFieldId;
+    const statusValues = this.normalizeStringList(raw.statusValues ?? raw.incompleteStatuses ?? raw.statuses);
+    if (statusValues?.length) alert.statusValues = statusValues;
+    const fields = this.normalizeStringMap(raw.fields ?? raw.fieldMapping ?? raw.tokens);
+    if (fields) alert.fields = fields;
+    const filters = this.normalizeScheduledRecordAlertFilters(raw.filters ?? raw.where);
+    const serviceFieldId = (raw.serviceFieldId ?? '').toString().trim();
+    const serviceValues = this.normalizeStringList(raw.serviceValues ?? raw.services ?? raw.service);
+    if (serviceFieldId && serviceValues?.length) {
+      filters.push({ fieldId: serviceFieldId, equals: serviceValues });
+    }
+    if (filters.length) alert.filters = filters;
+    if (raw.dedupe !== undefined) alert.dedupe = Boolean(raw.dedupe);
+    return alert;
+  }
+
+  private normalizeScheduledRecordAlertSchedule(raw: any): ScheduledRecordAlertConfig['schedule'] | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const timeRaw = raw.time ?? raw.at;
+    let hourRaw = raw.hour;
+    let minuteRaw = raw.minute;
+    if ((hourRaw === undefined || hourRaw === null) && typeof timeRaw === 'string') {
+      const match = timeRaw.trim().match(/^(\d{1,2})(?::(\d{1,2}))?$/);
+      if (match) {
+        hourRaw = match[1];
+        minuteRaw = match[2] || 0;
+      }
+    }
+    const hour = Math.trunc(Number(hourRaw));
+    const minute = Math.trunc(Number(minuteRaw ?? 0));
+    if (!Number.isFinite(hour) || hour < 0 || hour > 23) return undefined;
+    if (!Number.isFinite(minute) || minute < 0 || minute > 59) return undefined;
+    const schedule: ScheduledRecordAlertConfig['schedule'] = { hour };
+    if (minute) schedule.minute = minute;
+    const windowMinutesRaw = Number(raw.windowMinutes ?? raw.toleranceMinutes);
+    if (Number.isFinite(windowMinutesRaw) && windowMinutesRaw >= 0) {
+      schedule.windowMinutes = Math.trunc(windowMinutesRaw);
+    }
+    return schedule;
+  }
+
+  private normalizeScheduledRecordAlertEmail(raw: any): ScheduledRecordAlertConfig['email'] | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const recipients = this.normalizeRecipientEntries(raw.recipients ?? raw.to ?? raw.emailRecipients);
+    if (!recipients?.length) return undefined;
+    const email: ScheduledRecordAlertConfig['email'] = { recipients };
+    const cc = this.normalizeRecipientEntries(raw.cc ?? raw.emailCc);
+    if (cc?.length) email.cc = cc;
+    const bcc = this.normalizeRecipientEntries(raw.bcc ?? raw.emailBcc);
+    if (bcc?.length) email.bcc = bcc;
+    const subject = this.normalizeLocalizedString(raw.subject ?? raw.emailSubject);
+    if (subject !== undefined) email.subject = subject;
+    const message = this.normalizeLocalizedString(raw.message ?? raw.body ?? raw.emailMessage);
+    if (message !== undefined) email.message = message;
+    const lineTemplate = this.normalizeLocalizedString(raw.lineTemplate ?? raw.recordLineTemplate);
+    if (lineTemplate !== undefined) email.lineTemplate = lineTemplate;
+    const from = (raw.from ?? raw.emailFrom ?? '').toString().trim();
+    if (from) email.from = from;
+    const fromName = (raw.fromName ?? raw.emailFromName ?? '').toString().trim();
+    if (fromName) email.fromName = fromName;
+    return email;
+  }
+
+  private normalizeScheduledRecordAlertFilters(raw: any): NonNullable<ScheduledRecordAlertConfig['filters']> {
+    const list = Array.isArray(raw) ? raw : raw && typeof raw === 'object' ? [raw] : [];
+    return list.reduce<NonNullable<ScheduledRecordAlertConfig['filters']>>((acc, entry) => {
+      if (!entry || typeof entry !== 'object') return acc;
+      const fieldId = (entry.fieldId ?? entry.field ?? '').toString().trim();
+      if (!fieldId) return acc;
+      const equals = this.normalizeStringList(entry.equals ?? entry.value ?? entry.values);
+      const notEquals = this.normalizeStringList(entry.notEquals ?? entry.exclude ?? entry.excludes);
+      if (!equals?.length && !notEquals?.length) return acc;
+      const filter: NonNullable<ScheduledRecordAlertConfig['filters']>[number] = { fieldId };
+      if (equals?.length) filter.equals = equals;
+      if (notEquals?.length) filter.notEquals = notEquals;
+      acc.push(filter);
+      return acc;
+    }, []);
+  }
+
+  private normalizeLocalizedString(input: any): any {
+    if (input === undefined || input === null) return undefined;
+    if (typeof input === 'string') {
+      const trimmed = input.trim();
+      return trimmed ? trimmed : undefined;
+    }
+    if (typeof input !== 'object') return undefined;
+    const out: Record<string, string> = {};
+    Object.entries(input).forEach(([key, value]) => {
+      if (typeof value !== 'string') return;
+      const trimmed = value.trim();
+      if (trimmed) out[key.toLowerCase()] = trimmed;
+    });
+    return Object.keys(out).length ? out : undefined;
+  }
+
+  private normalizeStringList(value: any): string[] | undefined {
+    const list = Array.isArray(value) ? value : typeof value === 'string' ? value.split(/[,;\n]/) : value === undefined || value === null ? [] : [value];
+    const normalized = Array.from(
+      new Set(
+        list
+          .map(entry => (entry === undefined || entry === null ? '' : entry.toString().trim()))
+          .filter(Boolean)
+      )
+    );
+    return normalized.length ? normalized : undefined;
+  }
+
+  private normalizeStringMap(raw: any): Record<string, string> | undefined {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+    const out: Record<string, string> = {};
+    Object.entries(raw).forEach(([key, value]) => {
+      const normalizedKey = key.toString().trim();
+      const normalizedValue = value === undefined || value === null ? '' : value.toString().trim();
+      if (normalizedKey && normalizedValue) out[normalizedKey] = normalizedValue;
+    });
+    return Object.keys(out).length ? out : undefined;
   }
 
   private normalizeFollowupSubmitEffects(raw: any): FollowupSubmitEffect[] | undefined {

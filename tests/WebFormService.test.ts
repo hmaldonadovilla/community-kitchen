@@ -2864,6 +2864,116 @@ describe('WebFormService', () => {
     }
   });
 
+  test('runScheduledRecordAlerts emails lunch records at 13h and all incomplete records at 17h', () => {
+    jest.spyOn(service as any, 'listBundledForms').mockReturnValue([]);
+    const dashboardSheet = ss.getSheetByName('Forms Dashboard') || ss.insertSheet('Forms Dashboard');
+    const scheduledAlertsJson = JSON.stringify({
+      scheduledAlerts: [
+        {
+          id: 'meal-production-lunch-incomplete',
+          type: 'recordCompletenessEmail',
+          schedule: { hour: 13, minute: 0 },
+          dateFieldId: 'MP_PREP_DATE',
+          statusFieldId: 'Status',
+          statusValues: ['In progress', 'In production'],
+          filters: [{ fieldId: 'MP_SERVICE', equals: ['Lunch'] }],
+          fields: {
+            PRODUCTION_DATE: 'MP_PREP_DATE',
+            CUSTOMER: 'MP_DISTRIBUTOR',
+            SERVICE: 'MP_SERVICE',
+            RESPONSIBLE_COOK: 'MP_COOK_NAME'
+          },
+          email: {
+            recipients: ['ops@example.com'],
+            from: 'operations@communitykitchen.be',
+            fromName: 'Community Kitchen Operations',
+            subject: 'Meal Production report(s) not completed – action required',
+            lineTemplate: '- {{PRODUCTION_DATE}}, {{CUSTOMER}}, {{SERVICE}} created by {{RESPONSIBLE_COOK}} is incomplete',
+            message:
+              'Meal Production record(s) for:\n\n{{RECORD_LINES}}\n\nPlease review, record all required information and photos to create and send the final report before {{TODAY_DATE}} midnight.\n\nRemember to record leftover(s) and generate ID(s) if applicable.'
+          }
+        },
+        {
+          id: 'meal-production-all-services-incomplete',
+          type: 'recordCompletenessEmail',
+          schedule: { hour: 17, minute: 0 },
+          dateFieldId: 'MP_PREP_DATE',
+          statusFieldId: 'Status',
+          statusValues: ['In progress', 'In production'],
+          fields: {
+            PRODUCTION_DATE: 'MP_PREP_DATE',
+            CUSTOMER: 'MP_DISTRIBUTOR',
+            SERVICE: 'MP_SERVICE',
+            RESPONSIBLE_COOK: 'MP_COOK_NAME'
+          },
+          email: {
+            recipients: ['ops@example.com'],
+            subject: 'All incomplete alert',
+            lineTemplate: '- {{PRODUCTION_DATE}}, {{CUSTOMER}}, {{SERVICE}} created by {{RESPONSIBLE_COOK}} is incomplete',
+            message: 'Meal Production record(s) for:\n\n{{RECORD_LINES}}'
+          }
+        }
+      ]
+    });
+    const dashboardData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
+      ['Meal Production', 'Config: Meal Production', 'Meal Production Data', 'Desc', '', '', '', scheduledAlertsJson]
+    ];
+    (dashboardSheet as any).setMockData(dashboardData);
+
+    const configSheet = ss.getSheetByName('Config: Meal Production') || ss.insertSheet('Config: Meal Production');
+    const configRows = [
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+      ['MP_PREP_DATE', 'DATE', 'Date', 'Date', 'Date', true, '', '', '', 'Active', '', '', '', '', ''],
+      ['MP_SERVICE', 'CHOICE', 'Service', 'Service', 'Service', true, 'Lunch,Dinner', 'Lunch,Dinner', 'Lunch,Dinner', 'Active', '', '', '', '', ''],
+      ['MP_DISTRIBUTOR', 'TEXT', 'Customer', 'Customer', 'Customer', true, '', '', '', 'Active', '', '', '', '', ''],
+      ['MP_COOK_NAME', 'TEXT', 'Responsible cook', 'Responsible cook', 'Responsible cook', true, '', '', '', 'Active', '', '', '', '', '']
+    ];
+    (configSheet as any).setMockData(configRows);
+
+    const responseSheet = ss.getSheetByName('Meal Production Data') || ss.insertSheet('Meal Production Data');
+    (responseSheet as any).setMockData([
+      [
+        'Record ID',
+        'Data Version',
+        'Created At',
+        'Updated At',
+        'Status',
+        'PDF URL',
+        'Date [MP_PREP_DATE]',
+        'Service [MP_SERVICE]',
+        'Customer [MP_DISTRIBUTOR]',
+        'Responsible cook [MP_COOK_NAME]'
+      ],
+      ['MP-1', 1, '', '', 'In progress', '', '2026-05-18', 'Lunch', 'Le Phare', 'Akkara'],
+      ['MP-2', 1, '', '', 'In production', '', '2026-05-18', 'Dinner', 'Le Phare', 'Akkara'],
+      ['MP-3', 1, '', '', 'Closed', '', '2026-05-18', 'Lunch', 'Belliar', 'Ruby']
+    ]);
+
+    const result = service.runScheduledRecordAlerts({ todayIso: '2026-05-18', hour: 13, minute: 0 });
+
+    expect(result).toEqual(expect.objectContaining({ success: true, checkedAlerts: 1, sentAlerts: 1, matchedRecords: 1 }));
+    expect((global as any).GmailApp.sendEmail).toHaveBeenCalledTimes(1);
+    const [to, subject, body, options] = (global as any).GmailApp.sendEmail.mock.calls[0];
+    expect(to).toBe('ops@example.com');
+    expect(subject).toBe('Meal Production report(s) not completed – action required');
+    expect(body).toContain('- Mon, 18-May-2026, Le Phare, Lunch created by Akkara is incomplete');
+    expect(body).not.toContain('Dinner');
+    expect(options.from).toBe('operations@communitykitchen.be');
+    expect(options.name).toBe('Community Kitchen Operations');
+
+    const dinnerResult = service.runScheduledRecordAlerts({ todayIso: '2026-05-18', hour: 17, minute: 0 });
+    expect(dinnerResult).toEqual(expect.objectContaining({ success: true, checkedAlerts: 1, sentAlerts: 1, matchedRecords: 2 }));
+    expect((global as any).GmailApp.sendEmail).toHaveBeenCalledTimes(2);
+    const [, dinnerSubject, dinnerBody] = (global as any).GmailApp.sendEmail.mock.calls[1];
+    expect(dinnerSubject).toBe('All incomplete alert');
+    expect(dinnerBody).toContain('- Mon, 18-May-2026, Le Phare, Lunch created by Akkara is incomplete');
+    expect(dinnerBody).toContain('- Mon, 18-May-2026, Le Phare, Dinner created by Akkara is incomplete');
+    expect(dinnerBody).not.toContain('Belliar');
+  });
+
   test('shouldApplyLifecycleRule supports onOrBeforeToday for inclusive expiry configs', () => {
     const rule = {
       type: 'dateStatusTransition',

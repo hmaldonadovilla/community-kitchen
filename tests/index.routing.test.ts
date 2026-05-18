@@ -38,9 +38,11 @@ describe('index routing', () => {
     const scheduledHours: Record<string, number> = {};
     const previousScriptApp = (global as any).ScriptApp;
     const previousBrowser = (global as any).Browser;
+    jest.spyOn(WebFormService.prototype, 'getScheduledRecordAlertTriggerSchedules').mockReturnValue([]);
 
     (global as any).ScriptApp = {
       getProjectTriggers: () => [],
+      deleteTrigger: jest.fn(),
       newTrigger: (handler: string) => ({
         forSpreadsheet: () => ({
           onEdit: () => ({
@@ -71,6 +73,62 @@ describe('index routing', () => {
       );
       expect(scheduledHours.runDailyAnalyticsRecompute).toBe(23);
       expect(scheduledHours.runDailyLifecycleRecompute).toBe(2);
+    } finally {
+      (global as any).ScriptApp = previousScriptApp;
+      (global as any).Browser = previousBrowser;
+    }
+  });
+
+  it('installs configured scheduled record alert triggers at their configured times', () => {
+    const created: Array<{ handler: string; hour: number; minute?: number }> = [];
+    const deleted: string[] = [];
+    const previousScriptApp = (global as any).ScriptApp;
+    const previousBrowser = (global as any).Browser;
+    jest.spyOn(WebFormService.prototype, 'getScheduledRecordAlertTriggerSchedules').mockReturnValue([
+      { hour: 13, minute: 0 },
+      { hour: 17, minute: 0 }
+    ]);
+
+    const existingAlertTrigger = { getHandlerFunction: () => 'runScheduledRecordAlerts' };
+    (global as any).ScriptApp = {
+      getProjectTriggers: () => [existingAlertTrigger],
+      deleteTrigger: (trigger: any) => deleted.push(trigger.getHandlerFunction()),
+      newTrigger: (handler: string) => ({
+        forSpreadsheet: () => ({
+          onEdit: () => ({
+            create: () => undefined
+          })
+        }),
+        timeBased: () => ({
+          everyDays: () => ({
+            atHour: (hour: number) => ({
+              nearMinute: (minute: number) => ({
+                create: () => {
+                  created.push({ handler, hour, minute });
+                }
+              }),
+              create: () => {
+                created.push({ handler, hour });
+              }
+            })
+          })
+        })
+      })
+    };
+    (global as any).Browser = {
+      msgBox: jest.fn(),
+      Buttons: { OK: 'OK' }
+    };
+
+    try {
+      installTriggers();
+      expect(deleted).toEqual(['runScheduledRecordAlerts']);
+      expect(created).toEqual(
+        expect.arrayContaining([
+          { handler: 'runScheduledRecordAlerts', hour: 13, minute: 0 },
+          { handler: 'runScheduledRecordAlerts', hour: 17, minute: 0 }
+        ])
+      );
     } finally {
       (global as any).ScriptApp = previousScriptApp;
       (global as any).Browser = previousBrowser;

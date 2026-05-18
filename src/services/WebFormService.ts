@@ -105,9 +105,16 @@ import {
 } from './webform/updateRecordDependencies';
 import { matchesWhenClause } from '../web/rules/visibility';
 import { normalizeToIsoDate } from './webform/followup/utils';
+import { resolveRecipients } from './webform/followup/recipients';
 import { HeaderColumns } from './webform/types';
 import { resolveStatusTransitionValue } from '../domain/statusTransitions';
 import { shouldApplyLifecycleStatusDateRule } from './webform/lifecycleRules';
+import {
+  buildScheduledRecordAlertEmail,
+  collectScheduledRecordAlertTriggerSchedules,
+  findScheduledRecordAlertMatches,
+  isScheduledRecordAlertDue
+} from './webform/scheduledAlerts';
 import { isSingleIngredientLeftoverKind } from '../domain/leftoverKinds';
 
 const HOME_BOOTSTRAP_CACHE_TTL_SECONDS = 60 * 60 * 6; // CacheService max TTL
@@ -130,6 +137,7 @@ const RECORD_MUTATION_LANE_PROPERTY_PREFIX = 'CK_RECORD_MUTATION_LANE_';
 const RECORD_MUTATION_LANE_OWNER_TTL_MS = 1000 * 60 * 3;
 const RECORD_MUTATION_LANE_WAIT_TIMEOUT_MS = 1000 * 60 * 4;
 const RECORD_MUTATION_LANE_POLL_MS = 250;
+const SCHEDULED_RECORD_ALERT_SENT_PREFIX = 'CK_SCHEDULED_RECORD_ALERT_SENT_';
 const ANALYTICS_PIPELINE_QUEUE_PROPERTY_KEY = 'CK_ANALYTICS_PIPELINE_QUEUE';
 const ANALYTICS_PIPELINE_TRIGGER_PROPERTY_KEY = 'CK_ANALYTICS_PIPELINE_TRIGGER_ID';
 const ANALYTICS_PIPELINE_TRIGGER_HANDLER = 'runQueuedAnalyticsPipelineJobs';
@@ -1809,6 +1817,168 @@ export class WebFormService {
       success: errors.length === 0,
       updatedForms,
       updatedRecords,
+      errors
+    };
+  }
+
+  public getScheduledRecordAlertTriggerSchedules(): Array<{ hour: number; minute: number }> {
+    return collectScheduledRecordAlertTriggerSchedules(this.getFormsCached());
+  }
+
+  private scriptHourMinute(now: Date): { hour: number; minute: number } {
+    try {
+      const tz =
+        typeof Session !== 'undefined' && (Session as any)?.getScriptTimeZone
+          ? (Session as any).getScriptTimeZone()
+          : undefined;
+      if (tz && typeof Utilities !== 'undefined' && (Utilities as any)?.formatDate) {
+        const hour = Number((Utilities as any).formatDate(now, tz, 'H'));
+        const minute = Number((Utilities as any).formatDate(now, tz, 'm'));
+        if (Number.isFinite(hour) && Number.isFinite(minute)) {
+          return { hour: Math.trunc(hour), minute: Math.trunc(minute) };
+        }
+      }
+    } catch {
+      // Fall back to local Date methods outside Apps Script.
+    }
+    return { hour: now.getHours(), minute: now.getMinutes() };
+  }
+
+  private scheduledRecordAlertSentKey(alertId: string, todayIso: string): string {
+    const safeId = (alertId || 'alert').toString().trim().replace(/[^A-Za-z0-9_-]+/g, '_').slice(0, 80);
+    return `${SCHEDULED_RECORD_ALERT_SENT_PREFIX}${safeId}_${todayIso}`;
+  }
+
+  public runScheduledRecordAlerts(options?: {
+    now?: Date | string;
+    todayIso?: string;
+    hour?: number;
+    minute?: number;
+    alertIds?: string[];
+    force?: boolean;
+  }): { success: boolean; checkedAlerts: number; sentAlerts: number; matchedRecords: number; skippedAlerts: number; errors: string[] } {
+    const now = options?.now ? new Date(options.now) : new Date();
+    const todayIso = options?.todayIso || this.scriptTodayIso();
+    const timeParts = this.scriptHourMinute(now);
+    const hour = Number.isFinite(Number(options?.hour)) ? Math.trunc(Number(options?.hour)) : timeParts.hour;
+    const minute = Number.isFinite(Number(options?.minute)) ? Math.trunc(Number(options?.minute)) : timeParts.minute;
+    const targetIds = new Set((options?.alertIds || []).map(id => (id || '').toString().trim()).filter(Boolean));
+    const force = Boolean(options?.force);
+    const forms = this.getFormsCached();
+    const errors: string[] = [];
+    let checkedAlerts = 0;
+    let sentAlerts = 0;
+    let matchedRecords = 0;
+    let skippedAlerts = 0;
+
+    forms.forEach(ownerForm => {
+      const ownerKey = (ownerForm.configSheet || ownerForm.title || '').toString().trim();
+      (ownerForm.scheduledAlerts || []).forEach(alert => {
+        if (!alert || alert.enabled === false) return;
+        if (targetIds.size && !targetIds.has(alert.id)) return;
+        if (!force && !isScheduledRecordAlertDue(alert, hour, minute)) return;
+        checkedAlerts += 1;
+
+        const sentKey = this.scheduledRecordAlertSentKey(alert.id, todayIso);
+        const props = this.scriptProperties();
+        if (!force && alert.dedupe !== false && props?.getProperty(sentKey)) {
+          skippedAlerts += 1;
+          return;
+        }
+
+        try {
+          const sourceFormKey = (alert.sourceFormKey || ownerKey).toString().trim();
+          const { form: sourceForm, questions } = this.getFormContextLite(sourceFormKey);
+          const { sheet, columns } = this.submissions.ensureDestination(
+            sourceForm.destinationTab || `${sourceForm.title} Responses`,
+            questions
+          );
+          const lastRow = sheet.getLastRow();
+          const lastColumn = Math.max(sheet.getLastColumn(), 1);
+          if (lastRow < 2 || lastColumn < 1) return;
+          const rows = sheet.getRange(2, 1, lastRow - 1, lastColumn).getValues();
+          const evaluation = findScheduledRecordAlertMatches({
+            alert,
+            form: sourceForm,
+            rows,
+            columns,
+            todayIso
+          });
+          evaluation.errors.forEach(message => errors.push(`${alert.id}: ${message}`));
+          if (evaluation.errors.length || !evaluation.matches.length) return;
+          matchedRecords += evaluation.matches.length;
+
+          const email = buildScheduledRecordAlertEmail({
+            alert,
+            matches: evaluation.matches,
+            questions,
+            todayIso
+          });
+          const firstMatch = evaluation.matches[0];
+          const syntheticRecord: WebFormSubmission = {
+            id: firstMatch.recordId,
+            formKey: sourceFormKey,
+            language: 'EN',
+            status: firstMatch.status,
+            values: firstMatch.values
+          } as any;
+          const recipientPlaceholders = {
+            '{{TODAY_DATE}}': todayIso,
+            '{{RECORD_COUNT}}': evaluation.matches.length.toString()
+          };
+          const toRecipients = resolveRecipients(this.dataSources, alert.email.recipients, recipientPlaceholders, syntheticRecord);
+          if (!toRecipients.length) {
+            errors.push(`${alert.id}: resolved recipients are empty`);
+            return;
+          }
+          const ccRecipients = resolveRecipients(this.dataSources, alert.email.cc, recipientPlaceholders, syntheticRecord);
+          const bccRecipients = resolveRecipients(this.dataSources, alert.email.bcc, recipientPlaceholders, syntheticRecord);
+
+          debugLog('scheduledAlerts.email.send', {
+            alertId: alert.id,
+            sourceFormKey,
+            recordCount: evaluation.matches.length,
+            toCount: toRecipients.length,
+            ccCount: ccRecipients.length,
+            bccCount: bccRecipients.length,
+            todayIso
+          });
+
+          GmailApp.sendEmail(toRecipients.join(','), email.subject || 'Scheduled record alert', email.body || '', {
+            htmlBody: email.htmlBody || email.body || '',
+            cc: ccRecipients.length ? ccRecipients.join(',') : undefined,
+            bcc: bccRecipients.length ? bccRecipients.join(',') : undefined,
+            from: alert.email.from || undefined,
+            name: alert.email.fromName || undefined
+          });
+          sentAlerts += 1;
+          if (alert.dedupe !== false) {
+            props?.setProperty(sentKey, new Date().toISOString());
+          }
+        } catch (err: any) {
+          const message = (err?.message || err?.toString?.() || 'Unknown scheduled alert error').toString();
+          errors.push(`${alert.id}: ${message}`);
+        }
+      });
+    });
+
+    debugLog('scheduledAlerts.run', {
+      forms: forms.length,
+      checkedAlerts,
+      sentAlerts,
+      matchedRecords,
+      skippedAlerts,
+      errorCount: errors.length,
+      todayIso,
+      hour,
+      minute
+    });
+    return {
+      success: errors.length === 0,
+      checkedAlerts,
+      sentAlerts,
+      matchedRecords,
+      skippedAlerts,
       errors
     };
   }

@@ -9,6 +9,82 @@
     "appUrl": "https://script.google.com/macros/s/AKfycbzHNGgE2wOFt8_FEI_vs6f1WsnDmlcseUqI4XDUxeiDnrtEMV65un2yj_eQmSnFFsFfgA/exec?form=Config%3A%20Meal%20Production",
     "formId": "https://script.google.com/macros/s/AKfycbzHNGgE2wOFt8_FEI_vs6f1WsnDmlcseUqI4XDUxeiDnrtEMV65un2yj_eQmSnFFsFfgA/exec?form=Config%3A%20Meal%20Production",
     "rowIndex": 4,
+    "scheduledAlerts": [
+      {
+        "id": "meal-production-lunch-incomplete",
+        "type": "recordEmail",
+        "enabled": true,
+        "schedule": {
+          "hour": 13,
+          "minute": 0
+        },
+        "sourceFormKey": "Config: Meal Production",
+        "dateFieldId": "MP_PREP_DATE",
+        "statusFieldId": "Status",
+        "statusValues": [
+          "In progress",
+          "In production"
+        ],
+        "filters": [
+          {
+            "fieldId": "MP_SERVICE",
+            "equals": [
+              "Lunch"
+            ]
+          }
+        ],
+        "fields": {
+          "PRODUCTION_DATE": "MP_PREP_DATE",
+          "CUSTOMER": "MP_DISTRIBUTOR",
+          "SERVICE": "MP_SERVICE",
+          "RESPONSIBLE_COOK": "MP_COOK_NAME"
+        },
+        "email": {
+          "recipients": [
+            "hmaldonadovilla@outlook.com",
+            "que0106@gmail.com"
+          ],
+          "from": "operations@communitykitchen.be",
+          "fromName": "Community Kitchen Operations",
+          "subject": "Meal Production report(s) not completed – action required",
+          "lineTemplate": "- {{PRODUCTION_DATE}}, {{CUSTOMER}}, {{SERVICE}} created by {{RESPONSIBLE_COOK}} is incomplete",
+          "message": "Meal Production record(s) for:\n\n{{RECORD_LINES}}\n\nPlease review, record all required information and photos to create and send the final report before {{TODAY_DATE}} midnight.\n\nRemember to record leftover(s) and generate ID(s) if applicable."
+        }
+      },
+      {
+        "id": "meal-production-all-services-incomplete",
+        "type": "recordEmail",
+        "enabled": true,
+        "schedule": {
+          "hour": 17,
+          "minute": 0
+        },
+        "sourceFormKey": "Config: Meal Production",
+        "dateFieldId": "MP_PREP_DATE",
+        "statusFieldId": "Status",
+        "statusValues": [
+          "In progress",
+          "In production"
+        ],
+        "fields": {
+          "PRODUCTION_DATE": "MP_PREP_DATE",
+          "CUSTOMER": "MP_DISTRIBUTOR",
+          "SERVICE": "MP_SERVICE",
+          "RESPONSIBLE_COOK": "MP_COOK_NAME"
+        },
+        "email": {
+          "recipients": [
+            "hmaldonadovilla@outlook.com",
+            "que0106@gmail.com"
+          ],
+          "from": "operations@communitykitchen.be",
+          "fromName": "Community Kitchen Operations",
+          "subject": "Meal Production report(s) not completed – action required",
+          "lineTemplate": "- {{PRODUCTION_DATE}}, {{CUSTOMER}}, {{SERVICE}} created by {{RESPONSIBLE_COOK}} is incomplete",
+          "message": "Meal Production record(s) for:\n\n{{RECORD_LINES}}\n\nPlease review, record all required information and photos to create and send the final report before {{TODAY_DATE}} midnight.\n\nRemember to record leftover(s) and generate ID(s) if applicable."
+        }
+      }
+    ],
     "followupConfig": {
       "pdfTemplateId": {
         "EN": "bundle:meal_production.pdf.html",

@@ -1572,6 +1572,63 @@ describe('Dashboard', () => {
     });
   });
 
+  test('getForms parses scheduled record alerts from dashboard config', () => {
+    const configJson = JSON.stringify({
+      scheduledAlerts: [
+        {
+          id: 'meal-production-lunch-incomplete',
+          type: 'recordCompletenessEmail',
+          schedule: { time: '13:00' },
+          sourceFormKey: 'Config: Meal Production',
+          dateFieldId: 'MP_PREP_DATE',
+          statusFieldId: 'Status',
+          incompleteStatuses: ['In progress', 'In production'],
+          serviceFieldId: 'MP_SERVICE',
+          serviceValues: ['Lunch'],
+          fields: {
+            PRODUCTION_DATE: 'MP_PREP_DATE',
+            CUSTOMER: 'MP_DISTRIBUTOR'
+          },
+          email: {
+            recipients: 'ops@example.com',
+            subject: 'Meal Production report(s) not completed – action required',
+            lineTemplate: '- {{PRODUCTION_DATE}}, {{CUSTOMER}} is incomplete'
+          }
+        }
+      ]
+    });
+    const mockData = [
+      [],
+      [],
+      ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Web App URL (?form=ConfigSheetName)', 'Follow-up Config (JSON)'],
+      ['Meal Production', 'Config: Meal Production', 'Meal Production Data', 'Desc', '', configJson]
+    ];
+    sheet.setMockData(mockData);
+    const dashboard = new Dashboard(mockSS as any);
+    const forms = dashboard.getForms();
+    expect(forms[0].scheduledAlerts).toEqual([
+      {
+        id: 'meal-production-lunch-incomplete',
+        type: 'recordEmail',
+        schedule: { hour: 13 },
+        sourceFormKey: 'Config: Meal Production',
+        dateFieldId: 'MP_PREP_DATE',
+        statusFieldId: 'Status',
+        statusValues: ['In progress', 'In production'],
+        filters: [{ fieldId: 'MP_SERVICE', equals: ['Lunch'] }],
+        fields: {
+          PRODUCTION_DATE: 'MP_PREP_DATE',
+          CUSTOMER: 'MP_DISTRIBUTOR'
+        },
+        email: {
+          recipients: ['ops@example.com'],
+          subject: 'Meal Production report(s) not completed – action required',
+          lineTemplate: '- {{PRODUCTION_DATE}}, {{CUSTOMER}} is incomplete'
+        }
+      }
+    ]);
+  });
+
   test('getForms parses submitValidation.hideSubmitTopErrorMessage from dashboard config', () => {
     const configJson = JSON.stringify({
       submitValidation: {

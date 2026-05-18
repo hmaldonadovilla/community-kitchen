@@ -2865,6 +2865,49 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
      - `quietWindowMs` (optional): background refresh quiet window for this watch. Defaults to `30000` and follows the same min/max bounds as record freshness.
      - `stopWhen` (optional): `WhenClause` that stops the datasource watch, for example when `status` is `Closed`.
      - `dialog` (optional): message shown when the refreshed datasource rows differ from the cached rows. Supports `title`, `message`, `confirmLabel`, `cancelLabel`, `showCancel`, `showCloseButton`, `dismissOnBackdrop`, and `primaryAction`.
+ - `scheduledAlerts` (optional): config-driven email alerts that run automatically from Apps Script time triggers. Each alert checks only today's records for its `dateFieldId`, filters by `statusValues` and optional `filters`, and emails all matches in one message. After adding or changing alerts, run **Community Kitchen → Install Triggers (Options + Response indexing + Daily analytics + Daily lifecycle + Scheduled alerts)** so trigger times are recreated from config.
+   - `id`: stable alert id used in logs and same-day dedupe.
+   - `schedule.hour` / `schedule.minute`: script-local run time. Apps Script time triggers are approximate; the runtime treats the configured time as due for the configured hour unless `windowMinutes` is set.
+   - `sourceFormKey` (optional): source form to query. Defaults to the form that owns the alert config.
+   - `dateFieldId`: date field used to keep the scope to today's records.
+   - `statusFieldId` (optional): status field to read. Defaults to `followupConfig.statusFieldId`, then the system Status column.
+   - `statusValues`: statuses that should trigger the alert, for example `["In progress", "In production"]`.
+   - `filters`: additional field filters, for example `{ "fieldId": "MP_SERVICE", "equals": ["Lunch"] }`.
+   - `fields`: token-to-field mapping used by `email.lineTemplate`.
+   - `email`: recipients, optional cc/bcc/from/fromName, subject, body `message`, and per-record `lineTemplate`.
+
+   Example:
+
+   ```json
+   {
+     "scheduledAlerts": [
+       {
+         "id": "meal-production-lunch-incomplete",
+         "type": "recordEmail",
+         "schedule": { "hour": 13, "minute": 0 },
+         "sourceFormKey": "Config: Meal Production",
+         "dateFieldId": "MP_PREP_DATE",
+         "statusFieldId": "Status",
+         "statusValues": ["In progress", "In production"],
+         "filters": [{ "fieldId": "MP_SERVICE", "equals": ["Lunch"] }],
+         "fields": {
+           "PRODUCTION_DATE": "MP_PREP_DATE",
+           "CUSTOMER": "MP_DISTRIBUTOR",
+           "SERVICE": "MP_SERVICE",
+           "RESPONSIBLE_COOK": "MP_COOK_NAME"
+         },
+         "email": {
+           "recipients": ["operations.manager@example.com"],
+           "from": "operations@communitykitchen.be",
+           "fromName": "Community Kitchen Operations",
+           "subject": "Meal Production report(s) not completed – action required",
+           "lineTemplate": "- {{PRODUCTION_DATE}}, {{CUSTOMER}}, {{SERVICE}} created by {{RESPONSIBLE_COOK}} is incomplete",
+           "message": "Meal Production record(s) for:\n\n{{RECORD_LINES}}\n\nPlease review, record all required information and photos to create and send the final report before {{TODAY_DATE}} midnight.\n\nRemember to record leftover(s) and generate ID(s) if applicable."
+         }
+       }
+     ]
+   }
+   ```
  - `dedupDeleteOnKeyChange` (optional): when `true`, edits to top-level fields that are part of reject dedup rules delete the current record row immediately after confirm/blur + field automations. This setting is deletion-only; after delete, normal create-flow dedup precheck + autosave behavior applies.
 - `submitEffects` (optional): declarative shared-table writes that run after the source record saves.
   - Supported types: `createRecord`, `updateRecord`
@@ -3065,10 +3108,12 @@ Recommended steps after deploying a new bundle:
 
 - Run **Community Kitchen → Create/Update All Forms** (ensures columns exist).
 - Run **Community Kitchen → Rebuild Indexes (Data Version + Dedup)** (backfills existing rows).
-- Run **Community Kitchen → Install Triggers (Options + Response indexing + Daily analytics + Daily lifecycle)**:
+- Run **Community Kitchen → Install Triggers (Options + Response indexing + Daily analytics + Daily lifecycle + Scheduled alerts)**:
   - Installs `onEdit` triggers to keep options + `Data Version` + indexes consistent when users manually edit sheets.
   - Installs a daily time-based trigger for `runDailyAnalyticsRecompute` to reconcile analytics snapshots.
   - Installs a daily time-based trigger for `runDailyLifecycleRecompute` at `2am` to evaluate config-driven lifecycle rules (for example `available -> expired` on `Leftover Bank` when `LEFTOVER_EXP_DATE <= today`).
+  - Recreates daily time-based triggers for every configured `scheduledAlerts[].schedule` entry so operational alert checks run automatically.
+  - CLI deployers can run `installScheduledRecordAlertTriggers` after deployment to refresh only scheduled alert triggers without opening the spreadsheet menu.
 
 ### UI tips (React edit + Summary)
 
