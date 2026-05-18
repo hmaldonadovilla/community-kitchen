@@ -1128,7 +1128,7 @@ export interface UpdateRecordButtonConfig {
    * When configured, the client previews impacted target records before applying the update.
    * If matches are found, the user must confirm and the server applies `mutations` to those
    * target records before saving the current record.
-   */
+  */
   dependencyGuard?: UpdateRecordDependencyGuardConfig;
   /**
    * When true, ensure a persisted draft record id exists before applying the update.
@@ -2009,6 +2009,11 @@ export interface ValidationRule {
      * Skips empty values unless required is also set.
      */
     integer?: boolean;
+    /**
+     * When true, whole-number strings with leading zeroes are invalid.
+     * Skips empty values and numeric values already parsed by the client.
+     */
+    noLeadingZeros?: boolean;
     allowed?: string[];
     disallowed?: string[];
   };

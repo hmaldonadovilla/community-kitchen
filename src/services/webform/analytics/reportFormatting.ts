@@ -76,14 +76,25 @@ export const normalizeIngredientUsageQuantity = (args: {
     }
   }
 
-  if (isGramUnit(unit) && quantity > 1000) {
-    quantity /= 1000;
-    unit = 'kg';
-  }
-
   return {
     quantity: roundReportQuantity(quantity),
     unit,
     missingTablespoonConversion
+  };
+};
+
+export const normalizeIngredientUsageAggregateQuantity = (args: {
+  quantity: number;
+  unit: string;
+}): { quantity: number; unit: string } => {
+  let quantity = args.quantity;
+  let unit = (args.unit || '').toString().trim();
+  if (isGramUnit(unit)) {
+    quantity /= 1000;
+    unit = 'kg';
+  }
+  return {
+    quantity: roundReportQuantity(quantity),
+    unit
   };
 };

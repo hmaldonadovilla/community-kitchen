@@ -214,6 +214,9 @@ describe('meal production bundled HTML rendering', () => {
     expect(res.html).toContain('Green beans - frozen');
     expect(res.html).toContain('Salt');
     expect(res.html).toContain('ck-category-row');
+    expect(res.html).toContain('Ingredients receipt photo evidence');
+    expect(res.html).not.toContain('MP-AA000818 |');
+    expect(res.html).not.toContain('https://example.com/photo-1');
   });
 
   it('renders the summary ingredients action as a primary button', () => {
@@ -235,13 +238,26 @@ describe('meal production bundled HTML rendering', () => {
     expect(res.success).toBe(true);
     expect(res.html).toContain('data-ck-action="ING_PREVIEW"');
     expect(res.html).toContain('data-expiration-override-button');
-    expect(res.html).toContain('data-expiration-calendar');
-    expect(res.html).toContain('data-expiration-calendar-grid');
+    expect(res.html).toContain('type="date"');
+    expect(res.html).toContain('class="ck-date-input"');
+    expect(res.html).toContain('data-expiration-override-date');
+    expect(res.html).toContain('ck-expiration-override-picker');
+    expect(res.html).toContain('prepareExpirationDateInput');
+    expect(res.html).not.toContain('data-expiration-calendar');
+    expect(res.html).not.toContain('ck-calendar');
+    expect(res.html).not.toContain('showPicker');
+    expect(res.html).not.toContain('openExpirationNativePicker');
     expect(res.html).toContain('data-ck-action="MP_OVERRIDE_EXP_DATE"');
     expect(res.html).toContain('data-ck-action-value-field="MP_EXP_DATE_OVERRIDE"');
+    expect(res.html).not.toContain('data-ck-action-value-required="true"');
     expect(res.html).toContain('data-expiration-default-offset-days>3');
+    expect(res.html).toContain('? addDaysIso(productionDateIso, defaultOffsetDays)');
+    expect(res.html).toContain(": parseDisplayDateToIso(expirationValueNode ? expirationValueNode.textContent : '')");
     expect(res.html).toContain('The new date cannot be before the production date');
-    expect(res.html).toContain('The new date must be different from the default expiration date');
+    expect(res.html).toContain('isDefaultExpirationIso(candidateIso)');
+    expect(res.html).not.toContain('The new date must be different from the default expiration date');
+    expect(res.html).not.toContain('{{LABEL(ING_EVD)}}');
+    expect(res.html).not.toContain('{{FILES_ICON(ING_EVD)}}');
     expect(res.html).toContain('(*) manually entered');
     expect(res.html).toContain('background: var(--accent, #0b57d0)');
     expect(res.html).toContain('color: var(--accentText, #fff)');

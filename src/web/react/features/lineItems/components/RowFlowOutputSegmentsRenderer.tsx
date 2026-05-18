@@ -185,7 +185,8 @@ export const RowFlowOutputSegmentsRenderer: React.FC<RowFlowOutputSegmentsRender
                   selectAllOnFocus
                   sanitize={raw =>
                     sanitizeNumericDraft(raw, {
-                      integerOnly: allowsIntegerOnly
+                      integerOnly: allowsIntegerOnly,
+                      rejectLeadingZeros: allowsIntegerOnly
                     })
                   }
                   minWidth={Number.isFinite(Number(segment.config.minWidth)) ? Number(segment.config.minWidth) : 48}

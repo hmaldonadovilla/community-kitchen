@@ -585,6 +585,7 @@ const FormView: React.FC<FormViewProps> = ({
   const subgroupBottomRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const subgroupPrevCountsRef = useRef<Record<string, number>>({});
   const statusRef = useRef<HTMLDivElement | null>(null);
+  const guidedStepScrollInitRef = useRef(false);
   const {
     firstErrorRef,
     requestRef: errorNavRequestRef,
@@ -942,6 +943,46 @@ const FormView: React.FC<FormViewProps> = ({
     setActiveGuidedStepId(nextId);
     onDiagnostic?.('steps.step.change', { from: activeGuidedStepId || null, to: nextId, reason: 'load' });
   }, [activeGuidedStepId, guidedEnabled, guidedStepIds, maxReachableGuidedIndex, onDiagnostic]);
+
+  useEffect(() => {
+    if (!guidedEnabled || !activeGuidedStepId) return;
+    if (!guidedStepScrollInitRef.current) {
+      guidedStepScrollInitRef.current = true;
+      return;
+    }
+    const run = () => {
+      try {
+        const scrollingElement = document.scrollingElement || document.documentElement || document.body;
+        if (scrollingElement && typeof scrollingElement.scrollTo === 'function') {
+          scrollingElement.scrollTo({ top: 0, behavior: 'auto' });
+        }
+        if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
+          window.scrollTo({ top: 0, behavior: 'auto' });
+        }
+        onDiagnostic?.('steps.step.scrollTop', { stepId: activeGuidedStepId });
+      } catch (err: any) {
+        onDiagnostic?.('steps.step.scrollTop.failed', {
+          stepId: activeGuidedStepId,
+          message: (err?.message || err?.toString?.() || 'scroll failed').toString()
+        });
+      }
+    };
+    const raf =
+      typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function'
+        ? window.requestAnimationFrame(run)
+        : globalThis.setTimeout(run, 0);
+    return () => {
+      try {
+        if (typeof window !== 'undefined' && typeof window.cancelAnimationFrame === 'function' && typeof raf === 'number') {
+          window.cancelAnimationFrame(raf);
+        } else {
+          globalThis.clearTimeout(raf as any);
+        }
+      } catch {
+        // ignore
+      }
+    };
+  }, [activeGuidedStepId, guidedEnabled, onDiagnostic]);
 
   useEffect(() => {
     if (!guidedEnabled) return;

@@ -448,7 +448,9 @@ export const useFormUploadController = (args: {
           ...prev,
           draftItems: items,
           saving: blockUntilSaved && !errorMessage && accepted > 0 ? true : prev.saving,
-          notice: constraintMessage ? { message: constraintMessage, tone: errorMessage ? 'error' : 'warning' } : undefined
+          notice: constraintMessage
+            ? { message: constraintMessage, tone: errorMessage || warningKind === 'maxFilesPartial' ? 'error' : 'warning' }
+            : undefined
         };
       });
       if (constraintMessage) {

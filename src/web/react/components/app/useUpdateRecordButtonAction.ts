@@ -142,13 +142,22 @@ export const useUpdateRecordButtonAction = (args: {
       const cancelLabel = confirmCfg
         ? resolveLocalizedString(confirmCfg?.cancelLabel, languageRef.current, '').toString().trim()
         : '';
+      const progressDialog = (cfg?.progressDialog || cfg?.waitDialog || null) as any;
 
       const run = (submitMode: 'default' | 'dependencyGuard' = 'default') => {
         if (updateRecordActionInFlightRef.current) {
           logEvent('button.updateRecord.blocked.inFlightGuard', { buttonId: baseId, qIdx: qIdx ?? null });
           return;
         }
-        const busyTitle = btn ? resolveLabel(btn, languageRef.current) : (baseId || '');
+        const busyTitle =
+          progressDialog && Object.prototype.hasOwnProperty.call(progressDialog, 'title')
+            ? resolveOptionalLocalizedString(progressDialog.title, languageRef.current, '').toString()
+            : btn
+              ? resolveLabel(btn, languageRef.current)
+              : (baseId || '');
+        const busyMessage = progressDialog
+          ? resolveLocalizedString(progressDialog.message, languageRef.current, '').toString().trim()
+          : '';
         updateRecordActionInFlightRef.current = true;
         const pipelineStartMark = `ck.updateRecord.pipeline.start.${Date.now()}`;
         perfMark(pipelineStartMark);
@@ -208,6 +217,7 @@ export const useUpdateRecordButtonAction = (args: {
             set: setObj as any,
             ensureRecordId: cfg?.ensureRecordId === true,
             busyTitle,
+            busyMessage,
             submitMode
           }
         )

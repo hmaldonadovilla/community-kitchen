@@ -36,4 +36,22 @@ describe('resolveHtmlPreviewActionContext', () => {
       missingRequiredValues: ['MP_EXP_DATE_OVERRIDE']
     });
   });
+
+  it('allows optional dynamic values to clear a field', () => {
+    const attrs = new Map<string, string>([
+      ['data-ck-action-value-field', 'MP_EXP_DATE_OVERRIDE'],
+      ['data-ck-action-value-source', '[data-expiration-override-date]']
+    ]);
+
+    const context = resolveHtmlPreviewActionContext({
+      getAttribute: name => attrs.get(name) ?? null,
+      readValue: () => ''
+    });
+
+    expect(context).toEqual({
+      values: {
+        MP_EXP_DATE_OVERRIDE: ''
+      }
+    });
+  });
 });

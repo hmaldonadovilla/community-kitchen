@@ -1203,7 +1203,7 @@ export const FORM_VIEW_STYLES = `
           font-size: var(--ck-font-helper);
           font-weight: 400;
           line-height: 1.35;
-          color: var(--error);
+          color: var(--danger);
           text-align: left;
         }
         .ck-upload-notice {
@@ -1221,7 +1221,7 @@ export const FORM_VIEW_STYLES = `
           color: var(--text);
         }
         .ck-upload-notice--error {
-          color: var(--error);
+          color: var(--danger);
         }
         .ck-upload-failure__retry {
           appearance: none;

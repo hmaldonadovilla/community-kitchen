@@ -23,6 +23,7 @@ import { buildRecordVisibilityContext, buildRowVisibilityContext } from '../upda
 import { aggregateGeneratedBankReport, type GeneratedBankReportSheet } from './generatedBankReport';
 import {
   buildAnalyticsReportTemplatePlaceholders,
+  normalizeIngredientUsageAggregateQuantity,
   normalizeIngredientUsageQuantity
 } from './reportFormatting';
 
@@ -547,8 +548,27 @@ export class AnalyticsPipelineService {
       });
     });
 
+    const finalGrouped = new Map<string, IngredientUsageRow>();
+    Array.from(grouped.values()).forEach(row => {
+      const normalized = normalizeIngredientUsageAggregateQuantity({
+        quantity: row.quantity,
+        unit: row.unit
+      });
+      const key = `${row.ingredient.toLowerCase()}::${normalized.unit.toLowerCase()}`;
+      const current = finalGrouped.get(key) || {
+        ingredient: row.ingredient,
+        unit: normalized.unit,
+        quantity: 0,
+        category: ''
+      };
+      current.quantity += normalized.quantity;
+      current.quantity = Math.round(current.quantity * 1_000_000) / 1_000_000;
+      if (!current.category && row.category) current.category = row.category;
+      finalGrouped.set(key, current);
+    });
+
     return {
-      rows: Array.from(grouped.values()).sort((left, right) => {
+      rows: Array.from(finalGrouped.values()).sort((left, right) => {
         const ingredientCompare = left.ingredient.localeCompare(right.ingredient);
         if (ingredientCompare !== 0) return ingredientCompare;
         return left.unit.localeCompare(right.unit);

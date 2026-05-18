@@ -26,7 +26,7 @@ describe('applyUploadConstraints', () => {
           maxFiles: 10,
           warningMessages: {
             maxFilesPartial: {
-              en: 'Maximum 10 photos allowed extra selected photos were not added, please review your photos.'
+              en: 'Maximum 10 photos allowed. Extra selected photos were not added. Please review your photos'
             }
           }
         }
@@ -39,7 +39,7 @@ describe('applyUploadConstraints', () => {
     expect(result.items).toHaveLength(10);
     expect(result.errorMessage).toBeUndefined();
     expect(result.warningMessage).toBe(
-      'Maximum 10 photos allowed extra selected photos were not added, please review your photos.'
+      'Maximum 10 photos allowed. Extra selected photos were not added. Please review your photos'
     );
     expect(result.warningKind).toBe('maxFilesPartial');
   });

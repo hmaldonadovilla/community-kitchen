@@ -58,7 +58,7 @@ describe('utilisationConflictDialog', () => {
       dialog: {
         title: { en: '' },
         message: {
-          en: 'Leftover availability changed before you completed your selection. Your selected quantity is no longer available. Please adjust your selections before continuing'
+          en: 'Leftover availability changed review new availability before continuing'
         },
         confirmLabel: { en: 'OK' },
         showCancel: false,
@@ -76,8 +76,7 @@ describe('utilisationConflictDialog', () => {
     expect(copy).toEqual(
       expect.objectContaining({
         title: '',
-        message:
-          'Leftover availability changed before you completed your selection. Your selected quantity is no longer available. Please adjust your selections before continuing',
+        message: 'Leftover availability changed review new availability before continuing',
         confirmLabel: 'OK',
         showCancel: false,
         showCloseButton: false,

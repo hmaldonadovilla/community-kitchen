@@ -591,6 +591,23 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   useEffect(() => {
     statusLevelRef.current = statusLevel;
   }, [statusLevel]);
+  useEffect(() => {
+    const normalized = (status || '').toString().trim().replace(/\.+$/, '').toLowerCase();
+    if (normalized !== 'report sent') return;
+    if (statusLevel !== 'success') {
+      setStatusLevel('success');
+    }
+    const timer = globalThis.setTimeout(() => {
+      const current = (statusRef.current || '').toString().trim().replace(/\.+$/, '').toLowerCase();
+      if (current !== 'report sent') return;
+      statusRef.current = null;
+      statusLevelRef.current = null;
+      setStatus(null);
+      setStatusLevel(null);
+      logEvent('status.reportSent.autoClear', { delayMs: 3000 });
+    }, 3000);
+    return () => globalThis.clearTimeout(timer);
+  }, [logEvent, status, statusLevel]);
   const clearSaveFailureStatusAfterSuccessfulSave = useCallback(
     (reason: string) => {
       if (

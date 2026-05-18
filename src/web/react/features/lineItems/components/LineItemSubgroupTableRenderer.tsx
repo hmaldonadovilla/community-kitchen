@@ -389,12 +389,20 @@ export const LineItemSubgroupTableRenderer: React.FC<LineItemSubgroupTableRender
               isEditableField
                 ? ({ reason, value }) => {
                     const numericOnlyMessage = tSystem('validation.numberOnly', language, 'Only numbers are allowed in this field.');
+                    const invalidMessage =
+                      reason === 'leadingZeros'
+                        ? tSystem(
+                            'validation.wholeNumberNoLeadingZeros',
+                            language,
+                            'Enter a valid whole number without leading zeros.'
+                          )
+                        : numericOnlyMessage;
                     setErrors(prev => {
                       const next = { ...prev };
                       const existing = next[fieldPath];
-                      if (existing && existing !== numericOnlyMessage) return prev;
-                      if (existing === numericOnlyMessage) return prev;
-                      next[fieldPath] = numericOnlyMessage;
+                      if (existing && existing !== invalidMessage && existing !== numericOnlyMessage) return prev;
+                      if (existing === invalidMessage) return prev;
+                      next[fieldPath] = invalidMessage;
                       return next;
                     });
                     onDiagnostic?.('field.number.invalidInput', { scope: 'line', fieldPath, reason, value });

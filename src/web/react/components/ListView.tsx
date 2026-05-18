@@ -345,7 +345,12 @@ const ListView: React.FC<ListViewProps> = ({
   const activeFetchRef = useRef(0);
   const serverDateSearchSeqRef = useRef(0);
   const overlayPresetSearchSeqRef = useRef(0);
+  const overlayPresetSearchCacheRef = useRef<Map<string, { items: ListItem[]; pages: number; totalCount: number | null }>>(new Map());
   const listPageDemandFetchSeqRef = useRef(0);
+
+  useEffect(() => {
+    overlayPresetSearchCacheRef.current.clear();
+  }, [formKey, refreshToken]);
 
   const fetchListPage = async (args: {
     token?: string;
@@ -2070,6 +2075,23 @@ const ListView: React.FC<ListViewProps> = ({
     const seq = ++overlayPresetSearchSeqRef.current;
     let cancelled = false;
     const fetchPageSize = 50;
+    const cached = overlayPresetSearchCacheRef.current.get(requestKey);
+
+    if (cached) {
+      setOverlayPresetSearch({
+        key: requestKey,
+        items: cached.items,
+        loading: false,
+        error: null
+      });
+      onDiagnostic?.('list.search.preset.overlay.cache.hit', {
+        buttonId: (overlayPresetButton.q as any)?.id || null,
+        items: cached.items.length,
+        pages: cached.pages,
+        totalCount: cached.totalCount
+      });
+      return;
+    }
 
     setOverlayPresetSearch({
       key: requestKey,
@@ -2117,6 +2139,11 @@ const ListView: React.FC<ListViewProps> = ({
           items: result.items,
           loading: false,
           error: null
+        });
+        overlayPresetSearchCacheRef.current.set(requestKey, {
+          items: result.items,
+          pages: result.pages,
+          totalCount: Number((result.response as any)?.totalCount ?? result.items.length) || null
         });
         onDiagnostic?.('list.search.preset.overlay.server.ok', {
           buttonId: (overlayPresetButton.q as any)?.id || null,

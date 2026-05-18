@@ -463,8 +463,11 @@
           ],
           "quietWindowMs": 30000,
           "dialog": {
+            "title": {
+              "en": ""
+            },
             "message": {
-              "en": "Leftover availability changed while you were editing. Please review your selections before continuing."
+              "en": "Leftover availability changed review new availability before continuing"
             },
             "confirmLabel": {
               "en": "OK"
@@ -1226,7 +1229,7 @@
                         "en": ""
                       },
                       "message": {
-                        "en": "Leftover availability changed before you completed your selection. Your selected quantity is no longer available. Please adjust your selections before continuing"
+                        "en": "Leftover availability changed review new availability before continuing"
                       },
                       "confirmLabel": {
                         "en": "OK"
@@ -4383,6 +4386,22 @@
                   ]
                 },
                 "then": {
+                  "fieldId": "LEFTOVER_PORTIONS",
+                  "noLeadingZeros": true
+                },
+                "message": {
+                  "en": "Enter a valid whole number without leading zeros."
+                }
+              },
+              {
+                "when": {
+                  "fieldId": "LEFTOVER_KIND",
+                  "equals": [
+                    "Multi-ingredient",
+                    "Entire dish"
+                  ]
+                },
+                "then": {
                   "fieldId": "LEFTOVER_RECIPE",
                   "required": true
                 },
@@ -5434,6 +5453,19 @@
             "validationRules": [
               {
                 "when": {
+                  "fieldId": "FINAL_QTY",
+                  "notEmpty": true
+                },
+                "then": {
+                  "fieldId": "FINAL_QTY",
+                  "noLeadingZeros": true
+                },
+                "message": {
+                  "en": "Enter a valid whole number without leading zeros."
+                }
+              },
+              {
+                "when": {
                   "fieldId": "ORD_QTY",
                   "notEmpty": true
                 },
@@ -5461,6 +5493,29 @@
               }
             },
             "validationRules": [
+              {
+                "when": {
+                  "all": [
+                    {
+                      "fieldId": "__ckStep",
+                      "equals": [
+                        "leftovers"
+                      ]
+                    },
+                    {
+                      "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
+                      "notEmpty": true
+                    }
+                  ]
+                },
+                "then": {
+                  "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
+                  "noLeadingZeros": true
+                },
+                "message": {
+                  "en": "Enter a valid whole number without leading zeros."
+                }
+              },
               {
                 "when": {
                   "all": [
@@ -6633,7 +6688,7 @@
         },
         "warningMessages": {
           "maxFilesPartial": {
-            "en": "Maximum 10 photos allowed extra selected photos were not added, please review your photos."
+            "en": "Maximum 10 photos allowed. Extra selected photos were not added. Please review your photos"
           }
         },
         "helperText": {
@@ -6767,7 +6822,7 @@
         },
         "warningMessages": {
           "maxFilesPartial": {
-            "en": "Maximum 10 photos allowed extra selected photos were not added, please review your photos."
+            "en": "Maximum 10 photos allowed. Extra selected photos were not added. Please review your photos"
           }
         },
         "helperText": {
@@ -6925,6 +6980,14 @@
           }
         },
         "navigateTo": "summary",
+        "progressDialog": {
+          "title": {
+            "en": ""
+          },
+          "message": {
+            "en": "Saving…\nDo not leave this page while we save the selected date"
+          }
+        },
         "confirm": {
           "title": {
             "en": ""
@@ -7782,6 +7845,22 @@
                 }
               },
               "validationRules": [
+                {
+                  "when": {
+                    "fieldId": "LEFTOVER_KIND",
+                    "equals": [
+                      "Multi-ingredient",
+                      "Entire dish"
+                    ]
+                  },
+                  "then": {
+                    "fieldId": "LEFTOVER_PORTIONS",
+                    "noLeadingZeros": true
+                  },
+                  "message": {
+                    "en": "Enter a valid whole number without leading zeros."
+                  }
+                },
                 {
                   "when": {
                     "fieldId": "LEFTOVER_KIND",
@@ -8926,6 +9005,19 @@
               "validationRules": [
                 {
                   "when": {
+                    "fieldId": "FINAL_QTY",
+                    "notEmpty": true
+                  },
+                  "then": {
+                    "fieldId": "FINAL_QTY",
+                    "noLeadingZeros": true
+                  },
+                  "message": {
+                    "en": "Enter a valid whole number without leading zeros."
+                  }
+                },
+                {
+                  "when": {
                     "fieldId": "ORD_QTY",
                     "notEmpty": true
                   },
@@ -8953,6 +9045,29 @@
                 }
               },
               "validationRules": [
+                {
+                  "when": {
+                    "all": [
+                      {
+                        "fieldId": "__ckStep",
+                        "equals": [
+                          "leftovers"
+                        ]
+                      },
+                      {
+                        "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
+                        "notEmpty": true
+                      }
+                    ]
+                  },
+                  "then": {
+                    "fieldId": "MP_LEFTOVER_PORTIONS_CAPTURE",
+                    "noLeadingZeros": true
+                  },
+                  "message": {
+                    "en": "Enter a valid whole number without leading zeros."
+                  }
+                },
                 {
                   "when": {
                     "all": [
@@ -10125,7 +10240,7 @@
           },
           "warningMessages": {
             "maxFilesPartial": {
-              "en": "Maximum 10 photos allowed extra selected photos were not added, please review your photos."
+              "en": "Maximum 10 photos allowed. Extra selected photos were not added. Please review your photos"
             }
           },
           "helperText": {
@@ -10259,7 +10374,7 @@
           },
           "warningMessages": {
             "maxFilesPartial": {
-              "en": "Maximum 10 photos allowed extra selected photos were not added, please review your photos."
+              "en": "Maximum 10 photos allowed. Extra selected photos were not added. Please review your photos"
             }
           },
           "helperText": {
@@ -10417,10 +10532,18 @@
             }
           },
           "navigateTo": "summary",
-          "confirm": {
-            "title": {
-              "en": ""
-            },
+        "progressDialog": {
+          "title": {
+            "en": ""
+          },
+          "message": {
+            "en": "Saving…\nDo not leave this page while we save the selected date"
+          }
+        },
+        "confirm": {
+          "title": {
+            "en": ""
+          },
             "message": {
               "en": "Remember to indicate this new expiration date on individual portion containers."
             },
@@ -11248,8 +11371,11 @@
           ],
           "quietWindowMs": 30000,
           "dialog": {
+            "title": {
+              "en": ""
+            },
             "message": {
-              "en": "Leftover availability changed while you were editing. Please review your selections before continuing."
+              "en": "Leftover availability changed review new availability before continuing"
             },
             "confirmLabel": {
               "en": "OK"
@@ -12012,7 +12138,7 @@
                         "en": ""
                       },
                       "message": {
-                        "en": "Leftover availability changed before you completed your selection. Your selected quantity is no longer available. Please adjust your selections before continuing"
+                        "en": "Leftover availability changed review new availability before continuing"
                       },
                       "confirmLabel": {
                         "en": "OK"

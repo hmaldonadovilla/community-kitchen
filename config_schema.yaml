@@ -571,6 +571,15 @@ components:
                 applying the source update. If impacted records are found, the dedicated dialog is
                 shown and, on confirm, the configured `mutations` are applied to each impacted target
                 record before the current record is saved.
+            progressDialog:
+              type: object
+              properties:
+                title:
+                  $ref: '#/components/schemas/LocalizedString'
+                  description: Optional blocking overlay title while the update is saving. Set to an empty localized string to hide the title.
+                message:
+                  $ref: '#/components/schemas/LocalizedString'
+                  description: Optional blocking overlay message while the update is saving.
             ensureRecordId:
               type: boolean
               description: |
@@ -7460,6 +7469,9 @@ components:
             integer:
               type: boolean
               description: When true, enforce the target numeric value is a whole number (no decimals). Skips empty values unless required is also set.
+            noLeadingZeros:
+              type: boolean
+              description: When true, reject whole-number text values that contain leading zeros.
             allowed:
               type: array
               items:

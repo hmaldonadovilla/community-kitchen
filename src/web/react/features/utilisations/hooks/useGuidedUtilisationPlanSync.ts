@@ -283,7 +283,7 @@ export const useGuidedUtilisationPlanSync = ({
               fallbackMessage: tSystem(
                 'bank.utilisationAvailabilityChanged',
                 languageRef.current,
-                'Leftover availability changed before you completed your selection. Your selected quantity is no longer available. Please adjust your selections before continuing'
+                'Leftover availability changed review new availability before continuing'
               ),
               fallbackConfirmLabel: tSystem('common.ok', languageRef.current, 'OK'),
               fallbackCancelLabel: tSystem('common.cancel', languageRef.current, 'Cancel')
@@ -571,7 +571,7 @@ export const useGuidedUtilisationPlanSync = ({
               fallbackMessage: tSystem(
                 'bank.utilisationAvailabilityChanged',
                 languageRef.current,
-                'Leftover availability changed before you completed your selection. Your selected quantity is no longer available. Please adjust your selections before continuing'
+                'Leftover availability changed review new availability before continuing'
               ),
               fallbackConfirmLabel: tSystem('common.ok', languageRef.current, 'OK'),
               fallbackCancelLabel: tSystem('common.cancel', languageRef.current, 'Cancel')

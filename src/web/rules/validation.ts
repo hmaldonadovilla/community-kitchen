@@ -34,6 +34,11 @@ const defaultRuleMessages = {
     en: 'Please enter a whole number.',
     fr: 'Veuillez entrer un nombre entier.',
     nl: 'Voer een geheel getal in.'
+  },
+  noLeadingZeros: {
+    en: 'Enter a valid whole number without leading zeros.',
+    fr: 'Enter a valid whole number without leading zeros.',
+    nl: 'Enter a valid whole number without leading zeros.'
   }
 };
 
@@ -71,6 +76,13 @@ const toFiniteNumber = (raw: unknown): number | null => {
   }
   const n = Number(scalar);
   return Number.isFinite(n) ? n : null;
+};
+
+const hasWholeNumberLeadingZeros = (raw: unknown): boolean => {
+  if (typeof raw !== 'string') return false;
+  const text = raw.trim();
+  if (!text) return false;
+  return /^0\d+$/.test(text);
 };
 
 export interface ValidationContext extends VisibilityContext {
@@ -113,6 +125,17 @@ export function checkRule(
     .map(v => v.trim())
     .filter(Boolean);
   const hasMinusOnly = stringVals.some(v => v === '-' || v === '-.' || v === '-,');
+
+  if ((thenCfg as any)?.noLeadingZeros === true && values.some(hasWholeNumberLeadingZeros)) {
+    return (
+      customMessage ||
+      resolveLocalizedString(
+        defaultRuleMessages.noLeadingZeros,
+        language,
+        'Enter a valid whole number without leading zeros.'
+      )
+    );
+  }
 
   const resolveMinSpec = (): { limit: number; label: number | string; source?: string } | null => {
     if (thenCfg?.min !== undefined) {

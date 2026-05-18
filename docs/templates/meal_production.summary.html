@@ -198,86 +198,39 @@
     cursor: not-allowed;
   }
 
-  .ck-expiration-override-controls {
-    display: inline-flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .ck-expiration-override-button {
+  .ck-expiration-override-picker {
+    position: relative;
+    display: inline-grid;
+    vertical-align: middle;
     margin-left: 2px;
   }
 
+  .ck-expiration-override-picker[aria-disabled="true"] {
+    opacity: 0.65;
+    cursor: not-allowed;
+  }
+
+  .ck-expiration-override-label {
+    pointer-events: none;
+  }
+
   .ck-date-input {
-    min-height: 32px;
-    padding: 5px 8px;
-    border: 1px solid currentColor;
-    border-radius: var(--radius-control, 8px);
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    min-height: 100%;
+    padding: 0;
+    margin: 0;
+    border: 0;
     background: transparent;
-    color: inherit;
+    color: transparent;
     font: inherit;
+    cursor: pointer;
+    opacity: 0;
   }
 
   .ck-date-input:disabled {
-    opacity: 0.65;
-  }
-
-  .ck-calendar {
-    display: inline-flex;
-    flex-direction: column;
-    gap: 6px;
-    min-width: 260px;
-    padding: 8px;
-    border: 1px solid currentColor;
-    border-radius: var(--radius-control, 8px);
-    background: var(--surface, #fff);
-    color: inherit;
-  }
-
-  .ck-calendar-header {
-    display: grid;
-    grid-template-columns: 32px minmax(0, 1fr) 32px;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .ck-calendar-month {
-    text-align: center;
-    font-weight: 500;
-  }
-
-  .ck-calendar-grid {
-    display: grid;
-    grid-template-columns: repeat(7, minmax(30px, 1fr));
-    gap: 2px;
-  }
-
-  .ck-calendar-weekday {
-    min-height: 24px;
-    text-align: center;
-    font-size: calc(var(--ck-font-label) * 0.85);
-    opacity: 0.75;
-  }
-
-  .ck-calendar-nav,
-  .ck-calendar-day {
-    min-height: 32px;
-    border: 1px solid transparent;
-    border-radius: var(--radius-control, 8px);
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    cursor: pointer;
-  }
-
-  .ck-calendar-day[data-selected="true"] {
-    border-color: currentColor;
-    font-weight: 500;
-  }
-
-  .ck-calendar-day:disabled {
-    opacity: 0.35;
     cursor: not-allowed;
   }
 
@@ -328,30 +281,21 @@
         <span class="ck-label">{{LABEL(MP_EXP_DATE)}}:</span>
         <span class="ck-value" data-expiration-date-value>{{MP_EXP_DATE}}</span>
         <span class="ck-manual-marker ck-hidden" data-expiration-manual-marker>(*)</span>
+        <label
+          class="ck-expiration-override-picker ck-hidden"
+          data-expiration-override-button
+          data-expiration-override-controls
+        >
+          <span class="ck-action-button ck-expiration-override-label" aria-hidden="true">Override</span>
+          <input type="date" class="ck-date-input" data-expiration-override-date aria-label="Override expiration date" />
+        </label>
         <button
           type="button"
-          class="ck-action-button ck-expiration-override-button ck-hidden"
-          data-expiration-override-button
+          class="ck-hidden"
+          data-ck-action="MP_OVERRIDE_EXP_DATE"
+          data-ck-action-value-field="MP_EXP_DATE_OVERRIDE"
+          data-ck-action-value-source="[data-expiration-override-date]"
         >Override</button>
-        <span class="ck-expiration-override-controls ck-hidden" data-expiration-override-controls>
-          <input type="date" class="ck-hidden" data-expiration-override-date aria-label="Override expiration date" tabindex="-1" />
-          <span class="ck-calendar ck-hidden" data-expiration-calendar tabindex="-1" role="dialog" aria-label="Override expiration date calendar">
-            <span class="ck-calendar-header">
-              <button type="button" class="ck-calendar-nav" data-expiration-calendar-prev aria-label="Previous month">&lt;</button>
-              <span class="ck-calendar-month" data-expiration-calendar-month></span>
-              <button type="button" class="ck-calendar-nav" data-expiration-calendar-next aria-label="Next month">&gt;</button>
-            </span>
-            <span class="ck-calendar-grid" data-expiration-calendar-grid></span>
-          </span>
-          <button
-            type="button"
-            class="ck-hidden"
-            data-ck-action="MP_OVERRIDE_EXP_DATE"
-            data-ck-action-value-field="MP_EXP_DATE_OVERRIDE"
-            data-ck-action-value-source="[data-expiration-override-date]"
-            data-ck-action-value-required="true"
-          >Override</button>
-        </span>
         <span class="ck-expiration-override-error ck-hidden" data-expiration-override-error></span>
       </div>
       <div class="ck-meta-item ck-meta-item-inline ck-meta-item--full">
@@ -448,10 +392,6 @@
   <div class="ck-section">
     <div class="ck-action-row">
       <button type="button" class="ck-action-button" data-ck-action="ING_PREVIEW">Ingredients needed</button>
-    </div>
-    <div class="ck-total-row ck-evidence-row">
-      <div class="ck-label">{{LABEL(ING_EVD)}}</div>
-      <div class="ck-value">{{FILES_ICON(ING_EVD)}}</div>
     </div>
     <div class="ck-hidden" data-top-core-temp-raw>{{MP_COOK_TEMP}}</div>
     <span class="ck-hidden" data-top-temp-photos="{{TEMP_EVD}}"></span>
@@ -646,9 +586,6 @@
       var day = String(date.getUTCDate()).padStart(2, '0');
       return year + '-' + month + '-' + day;
     };
-    var formatIsoFromParts = function (year, monthIndex, day) {
-      return String(year) + '-' + String(monthIndex + 1).padStart(2, '0') + '-' + String(day).padStart(2, '0');
-    };
     var weekdayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     var monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     var formatIsoDateLabel = function (iso) {
@@ -665,25 +602,20 @@
     var expirationControls = root.querySelector('[data-expiration-override-controls]');
     var expirationVisibleButton = root.querySelector('[data-expiration-override-button]');
     var expirationDateInput = root.querySelector('[data-expiration-override-date]');
-    var expirationCalendar = root.querySelector('[data-expiration-calendar]');
-    var expirationCalendarGrid = root.querySelector('[data-expiration-calendar-grid]');
-    var expirationCalendarMonth = root.querySelector('[data-expiration-calendar-month]');
-    var expirationCalendarPrev = root.querySelector('[data-expiration-calendar-prev]');
-    var expirationCalendarNext = root.querySelector('[data-expiration-calendar-next]');
     var expirationErrorNode = root.querySelector('[data-expiration-override-error]');
     var expirationOverrideButton = root.querySelector('[data-ck-action="MP_OVERRIDE_EXP_DATE"]');
-    var now = new Date();
-    var calendarDisplayYear = now.getFullYear();
-    var calendarDisplayMonth = now.getMonth();
-    var selectedExpirationIso = '';
     var productionDateIso = parseDisplayDateToIso(productionDateNode ? productionDateNode.textContent : '');
     var defaultOffsetDays = Number(toText(expirationDefaultOffsetNode ? expirationDefaultOffsetNode.textContent : ''));
-    var defaultExpirationText = toText(expirationValueNode ? expirationValueNode.textContent : '');
-    var defaultExpirationIso = productionDateIso && Number.isFinite(defaultOffsetDays)
-      ? addDaysIso(productionDateIso, defaultOffsetDays)
-      : parseDisplayDateToIso(defaultExpirationText);
+    var defaultExpirationIso =
+      productionDateIso && Number.isFinite(defaultOffsetDays)
+        ? addDaysIso(productionDateIso, defaultOffsetDays)
+        : parseDisplayDateToIso(expirationValueNode ? expirationValueNode.textContent : '');
+    var isDefaultExpirationIso = function (candidateIso) {
+      return Boolean(defaultExpirationIso && candidateIso && candidateIso === defaultExpirationIso);
+    };
     var overrideText = toText(expirationOverrideNode ? expirationOverrideNode.textContent : '');
-    var hasManualExpiration = hasMeaningfulValue(overrideText);
+    var overrideIso = parseDisplayDateToIso(overrideText);
+    var hasManualExpiration = hasMeaningfulValue(overrideText) && !isDefaultExpirationIso(overrideIso);
     if (hasManualExpiration && expirationValueNode) {
       expirationValueNode.textContent = overrideText;
     }
@@ -694,16 +626,10 @@
     var canOverrideExpiration = isAdminRequest && !isFinalReportSentStatus;
     if (expirationControls) {
       expirationControls.classList.toggle('ck-hidden', !isAdminRequest);
+      expirationControls.setAttribute('aria-disabled', canOverrideExpiration ? 'false' : 'true');
     }
     if (expirationDateInput) {
       expirationDateInput.disabled = !canOverrideExpiration;
-      expirationDateInput.value = '';
-      if (productionDateIso) expirationDateInput.min = productionDateIso;
-    }
-    if (expirationVisibleButton) {
-      expirationVisibleButton.classList.toggle('ck-hidden', !isAdminRequest);
-      expirationVisibleButton.disabled = !canOverrideExpiration;
-      expirationVisibleButton.setAttribute('aria-disabled', canOverrideExpiration ? 'false' : 'true');
     }
     if (expirationOverrideButton) {
       expirationOverrideButton.disabled = !canOverrideExpiration;
@@ -717,85 +643,56 @@
     var clearExpirationError = function () {
       showExpirationError('');
     };
-    var hideExpirationDateInput = function () {
-      selectedExpirationIso = '';
-      if (expirationDateInput) expirationDateInput.value = '';
-      if (expirationCalendar) expirationCalendar.classList.add('ck-hidden');
+    var preparedExpirationIso = '';
+    var expirationInputPreparedAt = 0;
+    var getLocalTodayIso = function () {
+      var date = new Date();
+      var year = String(date.getFullYear());
+      var month = String(date.getMonth() + 1).padStart(2, '0');
+      var day = String(date.getDate()).padStart(2, '0');
+      return year + '-' + month + '-' + day;
     };
-    var selectExpirationDate = function (candidateIso, button) {
-      selectedExpirationIso = candidateIso;
-      if (expirationDateInput) expirationDateInput.value = candidateIso;
-      if (expirationCalendarGrid) {
-        Array.prototype.slice.call(expirationCalendarGrid.querySelectorAll('[data-expiration-calendar-day]')).forEach(function (dayButton) {
-          dayButton.setAttribute('data-selected', dayButton.getAttribute('data-date') === candidateIso ? 'true' : 'false');
-        });
-      }
-      if (button && typeof button.focus === 'function') button.focus();
+    var getDisplayedExpirationIso = function () {
+      return parseDisplayDateToIso(expirationValueNode ? expirationValueNode.textContent : '') || defaultExpirationIso || '';
     };
-    var renderExpirationCalendar = function () {
-      if (!expirationCalendarGrid || !expirationCalendarMonth) return;
-      expirationCalendarMonth.textContent = monthLabels[calendarDisplayMonth] + ' ' + calendarDisplayYear;
-      expirationCalendarGrid.textContent = '';
-      weekdayLabels.forEach(function (weekday) {
-        var label = document.createElement('span');
-        label.className = 'ck-calendar-weekday';
-        label.textContent = weekday;
-        expirationCalendarGrid.appendChild(label);
-      });
-      var firstWeekday = new Date(calendarDisplayYear, calendarDisplayMonth, 1).getDay();
-      for (var emptyIndex = 0; emptyIndex < firstWeekday; emptyIndex += 1) {
-        expirationCalendarGrid.appendChild(document.createElement('span'));
-      }
-      var daysInMonth = new Date(calendarDisplayYear, calendarDisplayMonth + 1, 0).getDate();
-      for (var day = 1; day <= daysInMonth; day += 1) {
-        var iso = formatIsoFromParts(calendarDisplayYear, calendarDisplayMonth, day);
-        var button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'ck-calendar-day';
-        button.textContent = String(day);
-        button.setAttribute('data-expiration-calendar-day', 'true');
-        button.setAttribute('data-date', iso);
-        button.setAttribute('data-selected', selectedExpirationIso === iso ? 'true' : 'false');
-        button.setAttribute('aria-label', formatIsoDateLabel(iso));
-        if ((productionDateIso && iso < productionDateIso) || (defaultExpirationIso && iso === defaultExpirationIso)) {
-          button.disabled = true;
-        } else {
-          button.addEventListener('click', function (event) {
-            var target = event.currentTarget;
-            selectExpirationDate(target.getAttribute('data-date') || '', target);
-          });
-        }
-        expirationCalendarGrid.appendChild(button);
-      }
+    var syncExpirationDateInputValue = function () {
+      if (!expirationDateInput) return;
+      preparedExpirationIso = getDisplayedExpirationIso();
+      expirationDateInput.value = preparedExpirationIso;
     };
-    var showExpirationDateInput = function () {
-      if (!canOverrideExpiration || !expirationCalendar) return;
+    var prepareExpirationDateInput = function () {
+      if (!canOverrideExpiration || !expirationDateInput) return;
       clearExpirationError();
-      selectedExpirationIso = '';
-      if (expirationDateInput) expirationDateInput.value = '';
-      var currentMonth = new Date();
-      calendarDisplayYear = currentMonth.getFullYear();
-      calendarDisplayMonth = currentMonth.getMonth();
-      renderExpirationCalendar();
-      expirationCalendar.classList.remove('ck-hidden');
-      expirationCalendar.focus();
+      syncExpirationDateInputValue();
+      expirationInputPreparedAt = Date.now();
     };
     var validateExpirationCandidate = function (candidateIso) {
       if (!candidateIso) return '';
       if (productionDateIso && candidateIso < productionDateIso) {
         return 'The new date cannot be before the production date (' + formatIsoDateLabel(productionDateIso) + ')';
       }
-      if (defaultExpirationIso && candidateIso === defaultExpirationIso) {
-        return 'The new date must be different from the default expiration date (' + formatIsoDateLabel(defaultExpirationIso) + ')';
-      }
       return '';
     };
     var commitExpirationCandidate = function () {
       if (!canOverrideExpiration) return;
-      var candidateIso = selectedExpirationIso || toText(expirationDateInput ? expirationDateInput.value : '');
+      var candidateIso = toText(expirationDateInput ? expirationDateInput.value : '');
       if (!candidateIso) {
         clearExpirationError();
-        hideExpirationDateInput();
+        syncExpirationDateInputValue();
+        return;
+      }
+      if (candidateIso === preparedExpirationIso) {
+        clearExpirationError();
+        syncExpirationDateInputValue();
+        return;
+      }
+      if (
+        expirationInputPreparedAt &&
+        Date.now() - expirationInputPreparedAt < 700 &&
+        candidateIso === getLocalTodayIso()
+      ) {
+        clearExpirationError();
+        syncExpirationDateInputValue();
         return;
       }
       var validationMessage = validateExpirationCandidate(candidateIso);
@@ -805,54 +702,42 @@
       }
       clearExpirationError();
       if (expirationValueNode) expirationValueNode.textContent = formatIsoDateLabel(candidateIso);
-      if (manualMarker) manualMarker.classList.remove('ck-hidden');
-      if (manualLegend) manualLegend.classList.remove('ck-hidden');
+      var candidateIsDefault = isDefaultExpirationIso(candidateIso);
+      if (manualMarker) manualMarker.classList.toggle('ck-hidden', candidateIsDefault);
+      if (manualLegend) manualLegend.classList.toggle('ck-hidden', candidateIsDefault);
+      if (expirationDateInput) expirationDateInput.value = candidateIsDefault ? '' : candidateIso;
       if (expirationOverrideButton) expirationOverrideButton.click();
-      hideExpirationDateInput();
+      syncExpirationDateInputValue();
     };
     var commitExpirationCandidateAfterFocusLeaves = function () {
       setTimeout(function () {
-        if (!expirationCalendar || expirationCalendar.classList.contains('ck-hidden')) return;
+        if (!expirationControls || expirationControls.classList.contains('ck-hidden')) return;
         var activeElement = document.activeElement;
-        if (expirationCalendar.contains(activeElement) || activeElement === expirationVisibleButton) return;
+        if (expirationControls.contains(activeElement) || activeElement === expirationVisibleButton) return;
+        if (!expirationDateInput || !expirationDateInput.value || expirationDateInput.value === preparedExpirationIso) return;
         commitExpirationCandidate();
       }, 0);
     };
-    if (expirationVisibleButton) {
-      expirationVisibleButton.addEventListener('click', showExpirationDateInput);
-    }
-    if (expirationCalendar) {
-      expirationCalendar.addEventListener('focusout', commitExpirationCandidateAfterFocusLeaves);
-      expirationCalendar.addEventListener('keydown', function (event) {
+    if (expirationDateInput) {
+      if (window.PointerEvent) {
+        expirationDateInput.addEventListener('pointerdown', prepareExpirationDateInput);
+      } else {
+        expirationDateInput.addEventListener('touchstart', prepareExpirationDateInput);
+        expirationDateInput.addEventListener('mousedown', prepareExpirationDateInput);
+      }
+      expirationDateInput.addEventListener('focus', prepareExpirationDateInput);
+      expirationDateInput.addEventListener('blur', commitExpirationCandidateAfterFocusLeaves);
+      expirationDateInput.addEventListener('keydown', function (event) {
         if (event.key === 'Enter') {
           event.preventDefault();
-          if (selectedExpirationIso) commitExpirationCandidate();
+          commitExpirationCandidate();
         } else if (event.key === 'Escape') {
           clearExpirationError();
-          hideExpirationDateInput();
-          expirationVisibleButton && expirationVisibleButton.focus();
+          syncExpirationDateInputValue();
+          expirationDateInput.blur();
         }
       });
-    }
-    if (expirationCalendarPrev) {
-      expirationCalendarPrev.addEventListener('click', function () {
-        calendarDisplayMonth -= 1;
-        if (calendarDisplayMonth < 0) {
-          calendarDisplayMonth = 11;
-          calendarDisplayYear -= 1;
-        }
-        renderExpirationCalendar();
-      });
-    }
-    if (expirationCalendarNext) {
-      expirationCalendarNext.addEventListener('click', function () {
-        calendarDisplayMonth += 1;
-        if (calendarDisplayMonth > 11) {
-          calendarDisplayMonth = 0;
-          calendarDisplayYear += 1;
-        }
-        renderExpirationCalendar();
-      });
+      syncExpirationDateInputValue();
     }
 
     var listContainer = root.querySelector('[data-ck-meal-list]');

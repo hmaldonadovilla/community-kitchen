@@ -20,7 +20,7 @@ describe('staging integrity dialogs and list legend config', () => {
     en: 'The photos you changed are not saved yet. Close without saving them?'
   };
   const expectedMealProductionUploadPartialWarning = {
-    en: 'Maximum 10 photos allowed extra selected photos were not added, please review your photos.'
+    en: 'Maximum 10 photos allowed. Extra selected photos were not added. Please review your photos'
   };
   const collectObjects = (value: any, predicate: (entry: any) => boolean, acc: any[] = []): any[] => {
     if (Array.isArray(value)) {

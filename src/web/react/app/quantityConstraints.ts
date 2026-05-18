@@ -68,16 +68,24 @@ export function formatNumericConstraintValue(value: number, integerOnly: boolean
   return value.toFixed(6).replace(/\.?0+$/, '');
 }
 
+export function hasInvalidWholeNumberLeadingZeros(raw: unknown): boolean {
+  const text = `${raw ?? ''}`.trim();
+  if (!text) return false;
+  return /^0\d+$/.test(text);
+}
+
 export function sanitizeNumericDraft(
   raw: string,
   options?: {
     integerOnly?: boolean;
     minValue?: number | null;
     maxValue?: number | null;
+    rejectLeadingZeros?: boolean;
   }
 ): string {
   const text = `${raw || ''}`;
   if (!text.trim()) return '';
+  if (options?.rejectLeadingZeros === true && hasInvalidWholeNumberLeadingZeros(text)) return '';
 
   const integerOnly = options?.integerOnly === true;
   let sanitized = '';

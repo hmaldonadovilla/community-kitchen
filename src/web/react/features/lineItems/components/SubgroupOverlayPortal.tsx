@@ -1306,6 +1306,25 @@ export const SubgroupOverlayPortal: React.FC<SubgroupOverlayPortalProps> = ({
                                         disabled={submitting}
                                         readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                                         ariaLabel={resolveFieldLabel(field, language, field.id)}
+                                        onInvalidInput={({ reason, value }) => {
+                                          const message =
+                                            reason === 'leadingZeros'
+                                              ? tSystem(
+                                                  'validation.wholeNumberNoLeadingZeros',
+                                                  language,
+                                                  'Enter a valid whole number without leading zeros.'
+                                                )
+                                              : tSystem('validation.numberOnly', language, 'Only numbers are allowed in this field.');
+                                          setErrors(prev => {
+                                            const next = { ...prev };
+                                            const existing = next[fieldPath];
+                                            if (existing && existing !== message) return prev;
+                                            if (existing === message) return prev;
+                                            next[fieldPath] = message;
+                                            return next;
+                                          });
+                                          onDiagnostic?.('field.number.invalidInput', { scope: 'subgroupOverlay', fieldPath, reason, value });
+                                        }}
                                         onChange={next => handleLineFieldChange(subGroupDef, subRow.id, field, next)}
                                       />
                                       {renderErrors()}
@@ -2047,6 +2066,25 @@ export const SubgroupOverlayPortal: React.FC<SubgroupOverlayPortalProps> = ({
                               disabled={submitting}
                               readOnly={!!field.valueMap || (field as any)?.readOnly === true}
                               ariaLabel={resolveFieldLabel(field, language, field.id)}
+                              onInvalidInput={({ reason, value }) => {
+                                const message =
+                                  reason === 'leadingZeros'
+                                    ? tSystem(
+                                        'validation.wholeNumberNoLeadingZeros',
+                                        language,
+                                        'Enter a valid whole number without leading zeros.'
+                                      )
+                                    : tSystem('validation.numberOnly', language, 'Only numbers are allowed in this field.');
+                                setErrors(prev => {
+                                  const next = { ...prev };
+                                  const existing = next[fieldPath];
+                                  if (existing && existing !== message) return prev;
+                                  if (existing === message) return prev;
+                                  next[fieldPath] = message;
+                                  return next;
+                                });
+                                onDiagnostic?.('field.number.invalidInput', { scope: 'subgroupOverlay', fieldPath, reason, value });
+                              }}
                               onChange={next => handleLineFieldChange(subGroupDef, subRow.id, field, next)}
                             />
                             {renderErrors()}

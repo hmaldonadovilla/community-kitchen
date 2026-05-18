@@ -156,7 +156,8 @@ export const SourceFirstSentenceParts: React.FC<{
                   selectAllOnFocus
                   sanitize={raw =>
                     sanitizeNumericDraft(raw, {
-                      integerOnly: allowsIntegerOnly
+                      integerOnly: allowsIntegerOnly,
+                      rejectLeadingZeros: allowsIntegerOnly
                     })
                   }
                   minWidth={minWidth}

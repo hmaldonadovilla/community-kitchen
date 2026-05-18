@@ -76,6 +76,7 @@ export type UpdateRecordActionRequest = {
   set: UpdateRecordActionSet;
   ensureRecordId?: boolean;
   busyTitle?: string;
+  busyMessage?: string;
   submitMode?: 'default' | 'dependencyGuard';
 };
 
@@ -154,10 +155,12 @@ export async function runUpdateRecordAction(deps: UpdateRecordActionDeps, req: U
   const pipelineStartMark = `ck.updateRecord.action.start.${Date.now()}`;
   perfMarkIfEnabled(perfEnabled, pipelineStartMark);
   const language = deps.refs.languageRef.current;
-  const busyTitle = (req.busyTitle || '').toString() || deps.tSystem('common.loading', language, 'Loading…');
+  const busyTitle =
+    req.busyTitle !== undefined ? (req.busyTitle || '').toString() : deps.tSystem('common.loading', language, 'Loading…');
+  const busyMessage = (req.busyMessage || '').toString() || deps.tSystem('draft.savingShort', language, 'Saving…');
   const busySeq = deps.busy.lock({
     title: busyTitle,
-    message: deps.tSystem('draft.savingShort', language, 'Saving…'),
+    message: busyMessage,
     kind: 'updateRecord',
     diagnosticMeta: { buttonId: req.buttonId, qIdx: req.qIdx ?? null }
   });
@@ -311,7 +314,7 @@ export async function runUpdateRecordAction(deps: UpdateRecordActionDeps, req: U
     deps.setDraftSave({ phase: 'saving' });
     deps.setStatus(deps.tSystem('actions.saving', language, 'Saving…'));
     deps.setStatusLevel('info');
-    deps.busy.setMessage(busySeq, deps.tSystem('draft.savingShort', language, 'Saving…'));
+    deps.busy.setMessage(busySeq, busyMessage);
 
     try {
       const draft = buildDraftPayload({

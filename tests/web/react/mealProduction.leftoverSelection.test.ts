@@ -65,8 +65,9 @@ describe('meal production leftover selection config', () => {
         dataSourceIds: ['Leftover Bank Data'],
         quietWindowMs: 30000,
         dialog: expect.objectContaining({
+          title: { en: '' },
           message: expect.objectContaining({
-            en: 'Leftover availability changed while you were editing. Please review your selections before continuing.'
+            en: 'Leftover availability changed review new availability before continuing'
           }),
           showCancel: false
         })
@@ -350,7 +351,7 @@ describe('meal production leftover selection config', () => {
         conflictDialog: expect.objectContaining({
           title: { en: '' },
           message: {
-            en: 'Leftover availability changed before you completed your selection. Your selected quantity is no longer available. Please adjust your selections before continuing'
+            en: 'Leftover availability changed review new availability before continuing'
           },
           confirmLabel: { en: 'OK' },
           showCancel: false,

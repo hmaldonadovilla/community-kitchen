@@ -636,12 +636,20 @@ export const LineItemTableModeRenderer: React.FC<LineItemTableModeRendererProps>
             ariaLabel={resolveFieldLabel(field, language, field.id)}
             placeholder={placeholder}
             onInvalidInput={({ reason, value }) => {
+              const invalidMessage =
+                reason === 'leadingZeros'
+                  ? tSystem(
+                      'validation.wholeNumberNoLeadingZeros',
+                      language,
+                      'Enter a valid whole number without leading zeros.'
+                    )
+                  : numericOnlyMessage;
               setErrors(prev => {
                 const next = { ...prev };
                 const existing = next[fieldPath];
-                if (existing && existing !== numericOnlyMessage) return prev;
-                if (existing === numericOnlyMessage) return prev;
-                next[fieldPath] = numericOnlyMessage;
+                if (existing && existing !== invalidMessage && existing !== numericOnlyMessage) return prev;
+                if (existing === invalidMessage) return prev;
+                next[fieldPath] = invalidMessage;
                 return next;
               });
               onDiagnostic?.('field.number.invalidInput', { scope: 'line', fieldPath, reason, value });

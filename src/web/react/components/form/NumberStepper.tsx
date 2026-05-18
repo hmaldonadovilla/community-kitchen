@@ -1,10 +1,13 @@
 import React, { useCallback, useRef } from 'react';
 import { isAllowedNumberInputKey, isAllowedNumberInputText } from './numberInput';
+import { hasInvalidWholeNumberLeadingZeros } from '../../app/quantityConstraints';
+
+type InvalidNumberInputReason = 'key' | 'paste' | 'leadingZeros';
 
 export const NumberStepper: React.FC<{
   value: string;
   onChange: (next: string) => void;
-  onInvalidInput?: (args: { reason: 'key' | 'paste'; value: string }) => void;
+  onInvalidInput?: (args: { reason: InvalidNumberInputReason; value: string }) => void;
   disabled?: boolean;
   readOnly?: boolean;
   step?: number;
@@ -49,7 +52,7 @@ export const NumberStepper: React.FC<{
     }, 0);
   }, [selectAllOnFocus]);
 
-  const handleInvalidText = (args: { reason: 'key' | 'paste'; value: string }) => {
+  const handleInvalidText = (args: { reason: InvalidNumberInputReason; value: string }) => {
     if (!onInvalidInput) return;
     const valueText = (args.value || '').toString();
     if (!valueText.trim()) return;
@@ -65,7 +68,15 @@ export const NumberStepper: React.FC<{
         type={inputType || 'number'}
         inputMode={inputMode}
         value={value}
-        onChange={e => onChange(e.target.value)}
+        onChange={e => {
+          const next = e.target.value;
+          if (hasInvalidWholeNumberLeadingZeros(next)) {
+            onChange('');
+            handleInvalidText({ reason: 'leadingZeros', value: next });
+            return;
+          }
+          onChange(next);
+        }}
         onFocus={e => {
           if (!selectAllOnFocus) return;
           focusSelectPendingRef.current = true;

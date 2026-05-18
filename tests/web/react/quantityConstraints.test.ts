@@ -145,6 +145,11 @@ describe('quantityConstraints', () => {
     expect(sanitizeNumericDraft('', { integerOnly: true, maxValue: 8 })).toBe('');
   });
 
+  it('rejects integer drafts with leading zeroes when configured', () => {
+    expect(sanitizeNumericDraft('003', { integerOnly: true, maxValue: 8, rejectLeadingZeros: true })).toBe('');
+    expect(sanitizeNumericDraft('3', { integerOnly: true, maxValue: 8, rejectLeadingZeros: true })).toBe('3');
+  });
+
   it('clamps decimal numeric drafts to max', () => {
     expect(sanitizeNumericDraft('300.5', { maxValue: 250 })).toBe('250');
     expect(sanitizeNumericDraft('12,50', { maxValue: 20 })).toBe('12.50');

@@ -464,12 +464,20 @@ export const buildTopQuestionRenderer = (deps: TopQuestionRendererDeps) => {
                 onInvalidInput={
                   isEditableField
                     ? ({ reason, value }) => {
+                  const invalidMessage =
+                    reason === 'leadingZeros'
+                      ? tSystem(
+                          'validation.wholeNumberNoLeadingZeros',
+                          language,
+                          'Enter a valid whole number without leading zeros.'
+                        )
+                      : numericOnlyMessage;
                   setErrors(prev => {
                     const next = { ...prev };
                     const existing = next[q.id];
-                    if (existing && existing !== numericOnlyMessage) return prev;
-                    if (existing === numericOnlyMessage) return prev;
-                    next[q.id] = numericOnlyMessage;
+                    if (existing && existing !== invalidMessage && existing !== numericOnlyMessage) return prev;
+                    if (existing === invalidMessage) return prev;
+                    next[q.id] = invalidMessage;
                     return next;
                   });
                   onDiagnostic?.('field.number.invalidInput', { scope: 'top', fieldId: q.id, reason, value });

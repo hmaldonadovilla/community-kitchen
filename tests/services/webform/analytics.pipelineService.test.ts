@@ -165,7 +165,8 @@ describe('AnalyticsPipelineService', () => {
                     { ING: 'Beans', QTY: '1.5', UNIT: 'kg', CAT: 'Legumes' },
                     { ING: 'Salt', QTY: '100', UNIT: 'Tbsp' },
                     { ING: 'Sugar', QTY: '20', UNIT: 'Tbsp' },
-                    { ING: 'Rice', QTY: '1500', UNIT: 'gr' }
+                    { ING: 'Rice', QTY: '900', UNIT: 'gr' },
+                    { ING: 'Rice', QTY: '600', UNIT: 'gr' }
                   ]
                 },
                 {
@@ -302,7 +303,7 @@ describe('AnalyticsPipelineService', () => {
       ['Beans', 3.5, 'kg', 'Legumes'],
       ['Rice', 1.5, 'kg', 'Dry carbohydrates'],
       ['Salt', 1.8, 'kg', 'Herbs'],
-      ['Sugar', 250, 'gr', 'Herbs']
+      ['Sugar', 0.25, 'kg', 'Herbs']
     ]);
     expect(createFile).toHaveBeenCalledTimes(1);
     expect((global as any).SpreadsheetApp.openById).toHaveBeenCalledWith('temp-spreadsheet-id');

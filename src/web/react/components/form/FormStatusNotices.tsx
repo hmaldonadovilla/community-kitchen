@@ -108,7 +108,7 @@ export const FormStatusNotices: React.FC<{
           borderRadius: 14,
           border: statusTone === 'error' ? '1px solid var(--danger)' : '1px solid var(--border)',
           background: 'transparent',
-          color: statusTone === 'error' ? 'var(--danger)' : 'var(--text)',
+          color: statusTone === 'error' ? 'var(--danger)' : statusTone === 'success' ? 'var(--accent)' : 'var(--text)',
           fontWeight: 600,
           cursor: statusTone === 'error' && Object.keys(errors || {}).length ? 'pointer' : undefined
         }}
