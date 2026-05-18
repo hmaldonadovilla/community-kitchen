@@ -79,6 +79,21 @@ const valueByField = (values: Record<string, any> | undefined, fieldId: string):
   return Object.prototype.hasOwnProperty.call(values, id) ? values[id] : '';
 };
 
+const hasReportValue = (value: any): boolean => {
+  if (value === undefined || value === null) return false;
+  if (typeof value === 'string') return value.trim() !== '';
+  return true;
+};
+
+const preferredValueByField = (
+  preferredValues: Record<string, any> | undefined,
+  fallbackValues: Record<string, any> | undefined,
+  fieldId: string
+): any => {
+  const preferred = valueByField(preferredValues, fieldId);
+  return hasReportValue(preferred) ? preferred : valueByField(fallbackValues, fieldId);
+};
+
 const displayValue = (values: Record<string, any> | undefined, fieldId: string, displayFieldId?: string): any => {
   const raw = valueByField(values, fieldId);
   const displayField = toText(displayFieldId);
@@ -92,6 +107,17 @@ const displayValue = (values: Record<string, any> | undefined, fieldId: string, 
 const frozenLabel = (bankValues: Record<string, any>, report: AnalyticsGeneratedBankReportConfig): string => {
   const frozenValue = normalizeToken(report.frozenStorageValue || 'Frozen');
   return normalizeToken(valueByField(bankValues, report.storageFieldId)) === frozenValue
+    ? report.yesLabel || 'YES'
+    : report.noLabel || 'NO';
+};
+
+const frozenLabelFromPreferredValues = (
+  preferredValues: Record<string, any> | undefined,
+  fallbackValues: Record<string, any>,
+  report: AnalyticsGeneratedBankReportConfig
+): string => {
+  const frozenValue = normalizeToken(report.frozenStorageValue || 'Frozen');
+  return normalizeToken(preferredValueByField(preferredValues, fallbackValues, report.storageFieldId)) === frozenValue
     ? report.yesLabel || 'YES'
     : report.noLabel || 'NO';
 };
@@ -133,6 +159,41 @@ const findCookPrepContext = (
     if (!prepRow) continue;
     if (normalizeToken(prepRow[report.prepTypeFieldId]) !== cookValue) return null;
     return { mealRow, prepRow, siblingPrepRows };
+  }
+  return null;
+};
+
+const findLineItemRowById = (raw: any, targetRowId: string, visited = new Set<any>()): Record<string, any> | null => {
+  const target = toText(targetRowId);
+  if (!target || raw === undefined || raw === null) return null;
+
+  if (typeof raw === 'string') {
+    const rows = parseLineItemRows(raw);
+    for (const row of rows) {
+      const match = findLineItemRowById(row, target, visited);
+      if (match) return match;
+    }
+    return null;
+  }
+
+  if (typeof raw !== 'object') return null;
+  if (visited.has(raw)) return null;
+  visited.add(raw);
+
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      const match = findLineItemRowById(item, target, visited);
+      if (match) return match;
+    }
+    return null;
+  }
+
+  const candidate = raw as Record<string, any>;
+  if (rowId(candidate) === target) return candidate;
+
+  for (const value of Object.values(candidate)) {
+    const match = findLineItemRowById(value, target, visited);
+    if (match) return match;
   }
   return null;
 };
@@ -209,13 +270,14 @@ export const aggregateGeneratedBankReport = (args: {
     }
 
     if (isKind(bankValues, report, singleKinds)) {
+      const sourceRow = findLineItemRowById(sourceValues, toText(valueByField(bankValues, report.bankSourceRowIdFieldId)));
       includedSourceRecordIds.add(sourceRecordId);
       siRows.push([
         ...baseCells,
-        valueByField(bankValues, report.singleLeftoverNameFieldId),
-        valueByField(bankValues, report.singleLeftoverQuantityFieldId),
-        valueByField(bankValues, report.singleLeftoverUnitFieldId),
-        frozenLabel(bankValues, report)
+        preferredValueByField(sourceRow || undefined, bankValues, report.singleLeftoverNameFieldId),
+        preferredValueByField(sourceRow || undefined, bankValues, report.singleLeftoverQuantityFieldId),
+        preferredValueByField(sourceRow || undefined, bankValues, report.singleLeftoverUnitFieldId),
+        frozenLabelFromPreferredValues(sourceRow || undefined, bankValues, report)
       ]);
     }
   });

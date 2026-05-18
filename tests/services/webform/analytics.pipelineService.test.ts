@@ -630,6 +630,15 @@ describe('AnalyticsPipelineService', () => {
                 { __ckRowId: 'leftover-used', PREP_TYPE: 'Single-ingredient' }
               ]
             }
+          ],
+          MP_LEFTOVER_CAPTURE_LI: [
+            {
+              __ckRowId: 'single-1',
+              LEFTOVER_INGREDIENT: 'Rice',
+              LEFTOVER_QTY: 3,
+              LEFTOVER_UNIT: 'kg',
+              LEFTOVER_STORAGE: 'Frozen'
+            }
           ]
         }
       }
@@ -659,8 +668,8 @@ describe('AnalyticsPipelineService', () => {
           LEFTOVER_SOURCE_RECORD_ID: 'mp-1',
           LEFTOVER_SOURCE_ROW_ID: 'single-1',
           LEFTOVER_INGREDIENT: 'Rice',
-          LEFTOVER_QTY: 3,
-          LEFTOVER_UNIT: 'kg',
+          LEFTOVER_QTY: 1,
+          LEFTOVER_UNIT: 'gr',
           LEFTOVER_STORAGE: 'Chilled'
         }
       }
@@ -775,7 +784,7 @@ describe('AnalyticsPipelineService', () => {
     ]);
     expect(writtenBySheet['Generated SI leftovers']).toEqual([
       ['Meal Production date', 'Customer', 'Service', 'Responsible cook', 'SI leftover name', 'SI leftover quantity', 'SI leftover unit', 'Frozen'],
-      ['Mon,11-May-2026', 'HUB', 'Lunch', 'Akkara', 'Rice', 3, 'kg', 'NO']
+      ['Mon,11-May-2026', 'HUB', 'Lunch', 'Akkara', 'Rice', 3, 'kg', 'YES']
     ]);
   });
 

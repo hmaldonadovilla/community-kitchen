@@ -269,6 +269,19 @@ const resolveSingleChoiceValue = (raw: FieldValue): string => {
   return raw.toString().trim();
 };
 
+const fingerprintValue = (raw: unknown): string => {
+  if (raw === undefined || raw === null) return '';
+  if (Array.isArray(raw)) return `[${raw.map(fingerprintValue).join('|')}]`;
+  if (typeof raw === 'object') {
+    try {
+      return JSON.stringify(raw);
+    } catch {
+      return Object.prototype.toString.call(raw);
+    }
+  }
+  return raw.toString();
+};
+
 export const computeRowNonMatchOptions = (args: {
   fields: any[];
   rowValues: Record<string, FieldValue>;
@@ -307,6 +320,95 @@ export const computeRowNonMatchOptions = (args: {
     });
   });
   return normalizeStringList(nonMatchKeys);
+};
+
+export const buildLineItemNonMatchOptionsSignature = (args: {
+  definition: WebFormDefinition;
+  values: Record<string, FieldValue>;
+  lineItems: LineItemState;
+  subgroupSelectors?: Record<string, string>;
+}): string => {
+  const { definition, values, lineItems, subgroupSelectors = {} } = args;
+  const parts: string[] = [];
+
+  const visitRows = (visitArgs: {
+    groupKey: string;
+    groupCfg: any;
+    rows: LineItemRowState[];
+    parentValues?: Record<string, FieldValue>;
+    isSubgroup: boolean;
+  }): void => {
+    const { groupKey, groupCfg, rows, parentValues, isSubgroup } = visitArgs;
+    const fields = (groupCfg?.fields || []) as any[];
+    const anchorFieldId =
+      groupCfg?.anchorFieldId !== undefined && groupCfg?.anchorFieldId !== null
+        ? groupCfg.anchorFieldId.toString()
+        : undefined;
+    const sourceFieldId = resolveNonMatchSourceFieldId(fields, anchorFieldId);
+    const sourceField = sourceFieldId ? fields.find(f => (f?.id ?? '').toString() === sourceFieldId) : undefined;
+
+    const selectorId =
+      groupCfg?.sectionSelector?.id !== undefined && groupCfg?.sectionSelector?.id !== null
+        ? groupCfg.sectionSelector.id.toString()
+        : undefined;
+    const selectorValue = selectorId ? (isSubgroup ? subgroupSelectors[groupKey] : (values as any)[selectorId]) : undefined;
+
+    if (sourceField?.optionFilter && isOrMatchMode(sourceField.optionFilter)) {
+      rows.forEach(row => {
+        const rowValues = (row?.values || {}) as Record<string, FieldValue>;
+        const dependencyValues = resolveDependencyValues({
+          filter: sourceField.optionFilter,
+          rowValues,
+          topValues: values,
+          parentValues,
+          selectorId,
+          selectorValue
+        });
+        parts.push(
+          [
+            groupKey,
+            row.id,
+            sourceFieldId,
+            fingerprintValue((rowValues as any)[sourceFieldId]),
+            dependencyValues.map(fingerprintValue).join('|')
+          ].join('::')
+        );
+      });
+    }
+
+    const subGroups = (groupCfg?.subGroups || []) as any[];
+    if (!subGroups.length) return;
+    rows.forEach(parentRow => {
+      const nextParentValues = parentRow?.values || {};
+      subGroups.forEach(sub => {
+        const subId = resolveSubgroupKey(sub as any);
+        if (!subId) return;
+        const subKey = buildSubgroupKey(groupKey, parentRow.id, subId);
+        const subRows = lineItems[subKey] || [];
+        if (!subRows.length) return;
+        visitRows({
+          groupKey: subKey,
+          groupCfg: sub,
+          rows: subRows,
+          parentValues: nextParentValues,
+          isSubgroup: true
+        });
+      });
+    });
+  };
+
+  (definition.questions || [])
+    .filter(q => q.type === 'LINE_ITEM_GROUP')
+    .forEach(group => {
+      visitRows({
+        groupKey: group.id,
+        groupCfg: group.lineItemConfig,
+        rows: lineItems[group.id] || [],
+        isSubgroup: false
+      });
+    });
+
+  return parts.join('##');
 };
 
 export const recomputeLineItemNonMatchOptions = (args: {

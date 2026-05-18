@@ -1932,6 +1932,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   const autoSaveHoldRef = useRef<{ hold: boolean; reason?: string }>({ hold: false });
   const prevAutoSaveHoldRef = useRef<boolean>(false);
   const prevAutoSaveHoldReasonRef = useRef<string>('');
+  const lastAutoSaveBlockedHoldLogRef = useRef<string>('');
   const lastUserInteractionRef = useRef<number>(0);
   const lastLocalRecordMutationAtRef = useRef<number>(0);
   const lastExternalRecordSyncAtRef = useRef<number>(0);
@@ -2161,6 +2162,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         token: args.token
       };
       logEvent(args.eventName, args.details);
+    },
+    [logEvent]
+  );
+
+  const logAutoSaveBlockedByHold = useCallback(
+    (reason: string) => {
+      const holdReason = autoSaveHoldRef.current.reason || '';
+      const signature = `${reason}::${holdReason}`;
+      if (lastAutoSaveBlockedHoldLogRef.current === signature) return;
+      lastAutoSaveBlockedHoldLogRef.current = signature;
+      logEvent('autosave.blocked.hold', { reason, holdReason: holdReason || null });
     },
     [logEvent]
   );
@@ -7374,7 +7386,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       if (autoSaveHoldRef.current?.hold) {
         autoSaveQueuedRef.current = true;
         autoSaveDirtyRef.current = true;
-        logEvent('autosave.blocked.hold', { reason, holdReason: autoSaveHoldRef.current.reason || null });
+        logAutoSaveBlockedByHold(reason);
         return;
       }
 
@@ -7836,6 +7848,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       formKey,
       ingredientsFormActive,
       language,
+      logAutoSaveBlockedByHold,
       logEvent,
       markPostPersistAutoSaveSuppress,
       markRecordFreshnessServerTouch,
@@ -8740,6 +8753,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     if (prev === next && previousReason === nextReason) return;
     prevAutoSaveHoldRef.current = next;
     prevAutoSaveHoldReasonRef.current = nextReason;
+    lastAutoSaveBlockedHoldLogRef.current = '';
     if (!prev || next) return; // only act on true -> false
 
     const releasedReasons = previousReason
@@ -8976,7 +8990,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         globalThis.clearTimeout(autoSaveTimerRef.current);
         autoSaveTimerRef.current = null;
       }
-      logEvent('autosave.blocked.hold', { reason: 'debouncedTrigger', holdReason: autoSaveHoldRef.current.reason || null });
+      logAutoSaveBlockedByHold('debouncedTrigger');
       return;
     }
 
@@ -9080,6 +9094,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     formKey,
     isClosedRecord,
     language,
+    logAutoSaveBlockedByHold,
     renderedAutoSaveStateFingerprint,
     rememberAutoSaveSeenState,
     scheduleLatestAutoSave,

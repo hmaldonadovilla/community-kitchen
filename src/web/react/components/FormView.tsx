@@ -101,6 +101,7 @@ import { applyValueMapsToForm, coerceDefaultValue } from './form/valueMaps';
 import type { OrderedEntryTarget } from './form/orderedEntry';
 import {
   buildLineContextId,
+  buildLineItemNonMatchOptionsSignature,
   buildSubgroupKey,
   cascadeRemoveLineItemRows,
   computeRowNonMatchOptions,
@@ -4666,6 +4667,25 @@ const FormView: React.FC<FormViewProps> = ({
 
   // visualViewport bottom inset is handled globally in App.tsx so the bottom action bar works across views.
 
+  const overlayEscapeStateRef = useRef({
+    fileOpen: fileOverlay.open,
+    infoOpen: infoOverlay.open,
+    subgroupOpen: subgroupOverlay.open,
+    closeFileOverlay,
+    closeInfoOverlay,
+    attemptCloseSubgroupOverlay,
+    attemptCloseLineItemGroupOverlay
+  });
+  overlayEscapeStateRef.current = {
+    fileOpen: fileOverlay.open,
+    infoOpen: infoOverlay.open,
+    subgroupOpen: subgroupOverlay.open,
+    closeFileOverlay,
+    closeInfoOverlay,
+    attemptCloseSubgroupOverlay,
+    attemptCloseLineItemGroupOverlay
+  };
+
   useEffect(() => {
     const anyOpen = lineItemGroupOverlay.open || subgroupOverlay.open || infoOverlay.open || fileOverlay.open;
     if (!anyOpen) return;
@@ -4674,19 +4694,20 @@ const FormView: React.FC<FormViewProps> = ({
     document.body.style.overflow = 'hidden';
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (fileOverlay.open) {
-          closeFileOverlay();
+        const state = overlayEscapeStateRef.current;
+        if (state.fileOpen) {
+          state.closeFileOverlay();
           return;
         }
-        if (infoOverlay.open) {
-          closeInfoOverlay();
+        if (state.infoOpen) {
+          state.closeInfoOverlay();
           return;
         }
-        if (subgroupOverlay.open) {
-          attemptCloseSubgroupOverlay('escape');
+        if (state.subgroupOpen) {
+          state.attemptCloseSubgroupOverlay('escape');
           return;
         }
-        attemptCloseLineItemGroupOverlay('escape');
+        state.attemptCloseLineItemGroupOverlay('escape');
       }
     };
     document.addEventListener('keydown', onKeyDown);
@@ -4695,10 +4716,6 @@ const FormView: React.FC<FormViewProps> = ({
       document.removeEventListener('keydown', onKeyDown);
     };
   }, [
-    closeFileOverlay,
-    closeInfoOverlay,
-    attemptCloseLineItemGroupOverlay,
-    attemptCloseSubgroupOverlay,
     fileOverlay.open,
     infoOverlay.open,
     lineItemGroupOverlay.open,
@@ -4935,12 +4952,23 @@ const FormView: React.FC<FormViewProps> = ({
     onDiagnostic
   });
 
+  const nonMatchRecomputeSignature = useMemo(
+    () =>
+      buildLineItemNonMatchOptionsSignature({
+        definition,
+        values,
+        lineItems,
+        subgroupSelectors
+      }),
+    [definition, values, lineItems, subgroupSelectors]
+  );
+
   useEffect(() => {
     if (submitting) return;
     const res = recomputeLineItemNonMatchOptions({
       definition,
-      values,
-      lineItems,
+      values: valuesRef.current,
+      lineItems: lineItemsRef.current,
       subgroupSelectors
     });
     if (!res.changed) return;
@@ -4948,7 +4976,7 @@ const FormView: React.FC<FormViewProps> = ({
     onDiagnostic?.('optionFilter.nonMatch.reconcile', {
       updatedRows: res.updatedRows
     });
-  }, [definition, values, lineItems, subgroupSelectors, submitting, setLineItems, onDiagnostic]);
+  }, [definition, nonMatchRecomputeSignature, subgroupSelectors, submitting, setLineItems, onDiagnostic, valuesRef, lineItemsRef]);
 
   const computeParagraphDisclaimerUpdates = useCallback(
     (

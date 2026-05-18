@@ -48,13 +48,18 @@ export const useAppViewportState = (args: {
         typeof window.matchMedia === 'function'
           ? window.matchMedia('(orientation: landscape)').matches
           : undefined;
-      setViewportState(
-        resolveMobileViewportState({
-          width: window.innerWidth,
-          height: window.innerHeight,
-          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
-          orientationLandscape
-        })
+      const nextState = resolveMobileViewportState({
+        width: window.innerWidth,
+        height: window.innerHeight,
+        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
+        orientationLandscape
+      });
+      setViewportState(prev =>
+        prev.isMobile === nextState.isMobile &&
+        prev.isCompact === nextState.isCompact &&
+        prev.isLandscape === nextState.isLandscape
+          ? prev
+          : nextState
       );
     };
     updateMobile();
