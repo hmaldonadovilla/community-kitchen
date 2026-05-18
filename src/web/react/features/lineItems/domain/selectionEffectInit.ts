@@ -23,6 +23,21 @@ export interface SelectionEffectInitTarget {
   signature: string;
 }
 
+export const dedupeSelectionEffectInitTargets = (targets: SelectionEffectInitTarget[]): SelectionEffectInitTarget[] => {
+  const seen = new Set<string>();
+  return targets.filter(target => {
+    const key = [
+      target.groupKey,
+      target.rowId || '',
+      target.field?.id || '',
+      toStableSignatureValue(target.rawValue)
+    ].join('::');
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
 const hasSelectionEffectInitialValue = (rawValue: FieldValue): boolean =>
   Array.isArray(rawValue)
     ? rawValue.length > 0

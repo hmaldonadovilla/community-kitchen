@@ -1297,85 +1297,108 @@ function applyValuesFromDataSource({
   }
 
   const fetchOptions = buildDataSourceFetchOptions(effect, { preferLookupSourceValue });
-  const applyResponse = (res: any) => {
-      const rows = extractRowsFromDataSourceResponse(res);
-      if (!rows.length) {
-        if (effect.clearOnNoMatch) {
-          Object.keys(fieldMapping).forEach(fieldId => {
-            ctx.setValue?.({ fieldId, value: null, lineItem });
-          });
-        }
-        return;
-      }
-      const sampleRow = rows[0];
-      const lookupFields = resolveLookupFields(effect, question, sampleRow);
-      if (!lookupFields.length) {
-        if (debug && typeof console !== 'undefined') {
-          console.warn('[SelectionEffects] setValuesFromDataSource unable to resolve lookupField', {
-            questionId: question.id,
-            effect
-          });
-        }
-        return;
-      }
-      const lookupSourceFieldId =
-        typeof effect.lookupSourceFieldId === 'string' ? effect.lookupSourceFieldId.toString().trim() : '';
-      const lookupSourceValue =
-        lookupSourceFieldId && lineItem?.rowValues
-          ? (lineItem.rowValues as Record<string, any>)[lookupSourceFieldId]
-          : undefined;
-      const lookupCandidates = buildLookupCandidates({
-        normalizedSelections,
-        lookupFields,
-        lookupSourceValue,
+  const applyMappedValues = (mappedValues: Record<string, PresetValue | null>) => {
+    const entries = Object.entries(mappedValues);
+    if (!entries.length) return;
+    if (ctx.setValues) {
+      ctx.setValues({
+        values: mappedValues,
         lineItem,
-        preferLookupSourceValue
+        skipSelectionEffects: preferLookupSourceValue === true
       });
-      if (!lookupCandidates.length) {
-        if (effect.clearOnNoMatch) {
-          Object.keys(fieldMapping).forEach(fieldId => {
-            ctx.setValue?.({ fieldId, value: null, lineItem });
-          });
-        }
-        return;
-      }
-
-      const match = findSourceRowByLookup({ rows, lookupFields, lookupCandidates });
-      if (!match) {
-        if (effect.clearOnNoMatch) {
-          Object.keys(fieldMapping).forEach(fieldId => {
-            ctx.setValue?.({ fieldId, value: null, lineItem });
-          });
-        }
-        if (debug && typeof console !== 'undefined') {
-          console.warn('[SelectionEffects] setValuesFromDataSource no matching row', {
-            questionId: question.id,
-            selectedValue: lookupCandidates[lookupCandidates.length - 1],
-            lookupFields,
-            sourceId: sourceConfig.id || null
-          });
-        }
-        return;
-      }
-      const matchedRow = match.row;
-
-      Object.keys(fieldMapping).forEach(fieldId => {
-        const sourceField = fieldMapping[fieldId];
-        const rawValue = getValueFromSourceRow(matchedRow, sourceField);
-        const nextValue = rawValue === undefined ? null : (asSourceMappedPresetValue(rawValue) ?? null);
-        ctx.setValue?.({ fieldId, value: nextValue, lineItem });
+      return;
+    }
+    entries.forEach(([fieldId, value]) => {
+      ctx.setValue?.({
+        fieldId,
+        value,
+        lineItem,
+        skipSelectionEffects: preferLookupSourceValue === true
       });
-
+    });
+  };
+  const clearMappedValues = () => {
+    const nextValues: Record<string, PresetValue | null> = {};
+    Object.keys(fieldMapping).forEach(fieldId => {
+      nextValues[fieldId] = null;
+    });
+    applyMappedValues(nextValues);
+  };
+  const applyResponse = (res: any) => {
+    const rows = extractRowsFromDataSourceResponse(res);
+    if (!rows.length) {
+      if (effect.clearOnNoMatch) {
+        clearMappedValues();
+      }
+      return;
+    }
+    const sampleRow = rows[0];
+    const lookupFields = resolveLookupFields(effect, question, sampleRow);
+    if (!lookupFields.length) {
       if (debug && typeof console !== 'undefined') {
-        console.info('[SelectionEffects] setValuesFromDataSource applied', {
+        console.warn('[SelectionEffects] setValuesFromDataSource unable to resolve lookupField', {
           questionId: question.id,
-          selectedValue: match.selectedValue,
-          lookupField: match.lookupField,
-          fieldMapping,
-          sourceId: sourceConfig.id || null,
-          targetScope: lineItem?.groupId ? 'lineItem' : 'top'
+          effect
         });
       }
+      return;
+    }
+    const lookupSourceFieldId =
+      typeof effect.lookupSourceFieldId === 'string' ? effect.lookupSourceFieldId.toString().trim() : '';
+    const lookupSourceValue =
+      lookupSourceFieldId && lineItem?.rowValues
+        ? (lineItem.rowValues as Record<string, any>)[lookupSourceFieldId]
+        : undefined;
+    const lookupCandidates = buildLookupCandidates({
+      normalizedSelections,
+      lookupFields,
+      lookupSourceValue,
+      lineItem,
+      preferLookupSourceValue
+    });
+    if (!lookupCandidates.length) {
+      if (effect.clearOnNoMatch) {
+        clearMappedValues();
+      }
+      return;
+    }
+
+    const match = findSourceRowByLookup({ rows, lookupFields, lookupCandidates });
+    if (!match) {
+      if (effect.clearOnNoMatch) {
+        clearMappedValues();
+      }
+      if (debug && typeof console !== 'undefined') {
+        console.warn('[SelectionEffects] setValuesFromDataSource no matching row', {
+          questionId: question.id,
+          selectedValue: lookupCandidates[lookupCandidates.length - 1],
+          lookupFields,
+          sourceId: sourceConfig.id || null
+        });
+      }
+      return;
+    }
+    const matchedRow = match.row;
+
+    const nextValues: Record<string, PresetValue | null> = {};
+    Object.keys(fieldMapping).forEach(fieldId => {
+      const sourceField = fieldMapping[fieldId];
+      const rawValue = getValueFromSourceRow(matchedRow, sourceField);
+      const nextValue = rawValue === undefined ? null : (asSourceMappedPresetValue(rawValue) ?? null);
+      nextValues[fieldId] = nextValue;
+    });
+    applyMappedValues(nextValues);
+
+    if (debug && typeof console !== 'undefined') {
+      console.info('[SelectionEffects] setValuesFromDataSource applied', {
+        questionId: question.id,
+        selectedValue: match.selectedValue,
+        lookupField: match.lookupField,
+        fieldMapping,
+        sourceId: sourceConfig.id || null,
+        targetScope: lineItem?.groupId ? 'lineItem' : 'top'
+      });
+    }
   };
 
   const cachedResponse = fetchOptions

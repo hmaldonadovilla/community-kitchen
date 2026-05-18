@@ -3,6 +3,10 @@ import {
   buildLineItemNonMatchOptionsSignature,
   recomputeLineItemNonMatchOptions
 } from '../../../src/web/react/app/lineItems';
+import {
+  buildCanonicalNonMatchWarningLineItems,
+  collectNonMatchWarningPaths
+} from '../../../src/web/react/app/nonMatchWarningFields';
 
 const definition = {
   questions: [
@@ -93,5 +97,18 @@ describe('line item non-match option metadata', () => {
     expect(first.lineItems.INGREDIENTS[0].values[ROW_NON_MATCH_OPTIONS_KEY]).toEqual(['Vegan']);
     expect(second.changed).toBe(false);
     expect(second.updatedRows).toBe(0);
+  });
+
+  it('collects warning paths from a canonical view without requiring stored row metadata', () => {
+    const values = { DISH_TYPE: 'Vegan' } as any;
+    const lineItems = {
+      INGREDIENTS: [{ id: 'row-1', values: { ING: 'Cheese', QTY: 1, UNIT: 'kg' } }]
+    } as any;
+
+    const canonical = buildCanonicalNonMatchWarningLineItems({ definition, values, lineItems });
+    const paths = collectNonMatchWarningPaths({ definition, lineItems: canonical });
+
+    expect(paths).toEqual(new Set(['INGREDIENTS__ING__row-1']));
+    expect(lineItems.INGREDIENTS[0].values[ROW_NON_MATCH_OPTIONS_KEY]).toBeUndefined();
   });
 });

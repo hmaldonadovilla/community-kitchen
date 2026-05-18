@@ -232,15 +232,17 @@ import {
   type FieldChangeDialogTargetUpdate
 } from './app/fieldChangeDialog';
 import { buildFieldChangeDialogInputsAction } from './app/fieldChangeDialogInputs';
-import { resolveNonMatchWarningFieldIds } from './app/nonMatchWarningFields';
+import {
+  buildCanonicalNonMatchWarningLineItems,
+  collectNonMatchWarningPaths
+} from './app/nonMatchWarningFields';
 import {
   buildInitialLineItems,
-  buildSubgroupKey,
   parseSubgroupKey,
-  parseRowNonMatchOptions,
   resolveSubgroupKey,
   ROW_NON_MATCH_OPTIONS_KEY
 } from './app/lineItems';
+import { preserveSelectionEffectSourceMappedValues } from './app/selectionEffectSourceMetadata';
 import { normalizeRecordValues } from './app/records';
 import { applyValueMapsToForm } from './app/valueMaps';
 import { applyClearOnChange, isClearOnChangeEnabled } from './app/clearOnChange';
@@ -3505,44 +3507,25 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         typeof next === 'function'
           ? (next as (prev: LineItemState) => LineItemState)(lineItemsRef.current)
           : next;
-      lineItemsRef.current = resolved;
-      setLineItems(resolved);
+      const preserved = preserveSelectionEffectSourceMappedValues({
+        definition,
+        previousLineItems: lineItemsRef.current,
+        nextLineItems: resolved
+      });
+      lineItemsRef.current = preserved;
+      setLineItems(preserved);
     },
-    [setLineItems]
+    [definition, setLineItems]
   );
 
   useEffect(() => {
     if (view !== 'form') return;
-    const nextPaths = new Set<string>();
-    (definition.questions || []).forEach(q => {
-      if (q.type !== 'LINE_ITEM_GROUP') return;
-      const targetFieldIds = resolveNonMatchWarningFieldIds(q.lineItemConfig?.fields || []);
-      const rows = lineItems[q.id] || [];
-      if (targetFieldIds.length) {
-        rows.forEach(row => {
-          const nonMatch = parseRowNonMatchOptions((row as any)?.values?.[ROW_NON_MATCH_OPTIONS_KEY]);
-          if (!nonMatch.length) return;
-          targetFieldIds.forEach(fid => nextPaths.add(`${q.id}__${fid}__${row.id}`));
-        });
-      }
-      const subGroups = q.lineItemConfig?.subGroups || [];
-      if (!subGroups.length) return;
-      rows.forEach(row => {
-        subGroups.forEach(sub => {
-          const subId = resolveSubgroupKey(sub as any);
-          if (!subId) return;
-          const subTargetFieldIds = resolveNonMatchWarningFieldIds((sub as any)?.fields || []);
-          if (!subTargetFieldIds.length) return;
-          const subKey = buildSubgroupKey(q.id, row.id, subId);
-          const subRows = lineItems[subKey] || [];
-          subRows.forEach(subRow => {
-            const nonMatch = parseRowNonMatchOptions((subRow as any)?.values?.[ROW_NON_MATCH_OPTIONS_KEY]);
-            if (!nonMatch.length) return;
-            subTargetFieldIds.forEach(fid => nextPaths.add(`${subKey}__${fid}__${subRow.id}`));
-          });
-        });
-      });
+    const warningLineItems = buildCanonicalNonMatchWarningLineItems({
+      definition,
+      values,
+      lineItems
     });
+    const nextPaths = collectNonMatchWarningPaths({ definition, lineItems: warningLineItems });
 
     const prevPaths = nonMatchWarningPathsRef.current;
     let changed = prevPaths.size !== nextPaths.size;
@@ -3571,7 +3554,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         definition,
         language,
         values,
-        lineItems,
+        lineItems: warningLineItems,
         phase: 'submit',
         uiView: 'edit'
       });

@@ -4,6 +4,7 @@ import { loadOptionsFromDataSource, optionKey } from '../../../core';
 import type { FieldValue, LangCode, WebFormDefinition, WebQuestionDefinition } from '../../../types';
 import { runSelectionEffects as runSelectionEffectsHelper } from '../../app/selectionEffects';
 import { runSelectionEffectsForAncestors } from '../../app/runSelectionEffectsForAncestors';
+import { preserveSelectionEffectSourceMappedValues } from '../../app/selectionEffectSourceMetadata';
 import type { LineItemState, OptionState } from '../../types';
 
 const SELECTION_EFFECT_INIT_AUTOSAVE_SUPPRESS_MS = 30000;
@@ -84,6 +85,33 @@ export const useAppSelectionEffects = (args: {
     };
   }, [selectionEffectAsyncPendingCountRef, setSelectionEffectAsyncPendingCount]);
 
+  const setSelectionEffectValues = useCallback(
+    (next: Record<string, FieldValue> | ((prev: Record<string, FieldValue>) => Record<string, FieldValue>)) => {
+      setValues(prev => {
+        const resolved = typeof next === 'function' ? next(prev) : next;
+        valuesRef.current = resolved;
+        return resolved;
+      });
+    },
+    [setValues, valuesRef]
+  );
+
+  const setSelectionEffectLineItems = useCallback(
+    (next: LineItemState | ((prev: LineItemState) => LineItemState)) => {
+      setLineItems(prev => {
+        const resolved = typeof next === 'function' ? next(prev) : next;
+        const preserved = preserveSelectionEffectSourceMappedValues({
+          definition,
+          previousLineItems: prev,
+          nextLineItems: resolved
+        });
+        lineItemsRef.current = preserved;
+        return preserved;
+      });
+    },
+    [definition, lineItemsRef, setLineItems]
+  );
+
   function runSelectionEffects(
     question: WebQuestionDefinition,
     value: FieldValue,
@@ -145,8 +173,8 @@ export const useAppSelectionEffects = (args: {
       language,
       values: currentValues,
       lineItems: currentLineItems,
-      setValues,
-      setLineItems,
+      setValues: setSelectionEffectValues,
+      setLineItems: setSelectionEffectLineItems,
       onLineItemsMutated: ({ sourceGroupKey, prevLineItems, nextLineItems, nextValues }) => {
         globalThis.setTimeout(() => {
           runSelectionEffectsForAncestors({

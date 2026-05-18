@@ -29,6 +29,7 @@ import {
   applyLineItemDedupConflictErrors,
   isLineItemDedupErrorMessage
 } from '../../lineItems/domain/lineItemDedupErrors';
+import { shouldSkipSelectionEffectInitValueWrite } from '../domain/selectionEffectInitMutation';
 
 type UserEditResult = { deferMutation?: boolean; skipSelectionEffects?: boolean };
 
@@ -263,6 +264,78 @@ export function useFormFieldChangeHandlers({
     }
   };
 
+  const runLineFieldSelectionEffects = (args: {
+    group: WebQuestionDefinition;
+    rowId: string;
+    field: any;
+    value: FieldValue;
+    currentLineItems: LineItemState;
+    nextValues: Record<string, FieldValue>;
+    syncedLineItems: LineItemState;
+    updatedRowValues: Record<string, FieldValue>;
+    changeSource: 'user' | 'selectionEffectInit';
+  }) => {
+    if (!onSelectionEffect) return;
+    const { group, rowId, field, value, currentLineItems, nextValues, syncedLineItems, updatedRowValues, changeSource } = args;
+    const selectionEffectRowValues = (() => {
+      const merged: Record<string, FieldValue> = { ...updatedRowValues };
+      const mergeMissing = (source?: Record<string, FieldValue>) => {
+        if (!source) return;
+        Object.entries(source).forEach(([key, val]) => {
+          if (Object.prototype.hasOwnProperty.call(merged, key)) return;
+          merged[key] = val;
+        });
+      };
+      let currentKey = group.id;
+      let info = parseSubgroupKey(currentKey);
+      while (info) {
+        const currentInfo = info;
+        const parentRows = syncedLineItems[currentInfo.parentGroupKey] || [];
+        const parentRow = parentRows.find(r => r.id === currentInfo.parentRowId);
+        mergeMissing((parentRow?.values || {}) as Record<string, FieldValue>);
+        currentKey = currentInfo.parentGroupKey;
+        info = parseSubgroupKey(currentKey);
+      }
+      return merged;
+    })();
+    const effectFields = (group.lineItemConfig?.fields || []).filter(hasSelectionEffects);
+    if (effectFields.length) {
+      effectFields.forEach(effectField => {
+        const isSourceField = effectField.id === field.id;
+        const dependsOnChangedField = !isSourceField && selectionEffectDependsOnField(effectField, field.id);
+        if (!isSourceField && !dependsOnChangedField) {
+          return;
+        }
+        const contextId = buildLineContextId(group.id, rowId, effectField.id);
+        const currentValue = updatedRowValues[effectField.id] as FieldValue;
+        const effectQuestion = effectField as unknown as WebQuestionDefinition;
+        const opts = {
+          contextId,
+          lineItem: { groupId: group.id, rowId, rowValues: selectionEffectRowValues },
+          forceContextReset: true,
+          ...(changeSource === 'selectionEffectInit' ? { preferLookupSourceValue: true } : {}),
+          snapshots: {
+            values: nextValues,
+            lineItems: syncedLineItems
+          }
+        };
+        if (!isSourceField && dependsOnChangedField) {
+          onSelectionEffect(effectQuestion, currentValue ?? null, opts);
+          return;
+        }
+        const isClearingSource = isSourceField && isEmptyValue(value as FieldValue);
+        const payloadValue = isSourceField
+          ? isClearingSource
+            ? null
+            : currentValue ?? null
+          : currentValue ?? null;
+        onSelectionEffect(effectQuestion, payloadValue, opts);
+      });
+    }
+
+    runSelectionEffectsForAncestorRows(group.id, currentLineItems, syncedLineItems, { mode: 'change', topValues: nextValues });
+  };
+
   const handleLineFieldChange = (
     group: WebQuestionDefinition,
     rowId: string,
@@ -313,6 +386,10 @@ export function useFormFieldChangeHandlers({
       return;
     }
     let userEditResult: UserEditResult | void = undefined;
+    const currentLineItems = lineItemsRef.current;
+    const currentValues = valuesRef.current;
+    const existingRows = currentLineItems[group.id] || [];
+    const currentRow = existingRows.find(r => r.id === rowId);
     if (changeSource === 'selectionEffectInit') {
       onAutomatedMutation?.({
         scope: 'line',
@@ -336,13 +413,30 @@ export function useFormFieldChangeHandlers({
       });
     }
     clearOverlayOpenActionSuppression(`${group.id}__${field?.id || ''}__${rowId}`);
+    if (
+      currentRow &&
+      shouldSkipSelectionEffectInitValueWrite({
+        source: changeSource,
+        currentValue: (currentRow.values || {})[field.id],
+        nextValue: value
+      })
+    ) {
+      runLineFieldSelectionEffects({
+        group,
+        rowId,
+        field,
+        value,
+        currentLineItems,
+        nextValues: currentValues,
+        syncedLineItems: currentLineItems,
+        updatedRowValues: ((currentRow.values || {}) as Record<string, FieldValue>) || {},
+        changeSource
+      });
+      return;
+    }
     if (onStatusClear) onStatusClear();
     if (userEditResult?.deferMutation) return;
     const skipSelectionEffects = userEditResult?.skipSelectionEffects === true;
-    const currentLineItems = lineItemsRef.current;
-    const currentValues = valuesRef.current;
-    const existingRows = currentLineItems[group.id] || [];
-    const currentRow = existingRows.find(r => r.id === rowId);
     let nextRowValues: Record<string, FieldValue> = { ...(currentRow?.values || {}), [field.id]: value };
     if (changeSource !== 'selectionEffectInit') {
       nextRowValues = clearSelectionEffectSourceMetadata(nextRowValues, field, (field?.id || '').toString());
@@ -485,71 +579,17 @@ export function useFormFieldChangeHandlers({
       return next;
     });
     if (onSelectionEffect && !skipSelectionEffects) {
-      const selectionEffectRowValues = (() => {
-        const merged: Record<string, FieldValue> = { ...updatedRowValues };
-        const mergeMissing = (source?: Record<string, FieldValue>) => {
-          if (!source) return;
-          Object.entries(source).forEach(([key, val]) => {
-            if (Object.prototype.hasOwnProperty.call(merged, key)) return;
-            merged[key] = val;
-          });
-        };
-        let currentKey = group.id;
-        let info = parseSubgroupKey(currentKey);
-        while (info) {
-          const currentInfo = info;
-          const parentRows = syncedLineItems[currentInfo.parentGroupKey] || [];
-          const parentRow = parentRows.find(r => r.id === currentInfo.parentRowId);
-          mergeMissing((parentRow?.values || {}) as Record<string, FieldValue>);
-          currentKey = currentInfo.parentGroupKey;
-          info = parseSubgroupKey(currentKey);
-        }
-        return merged;
-      })();
-      const effectFields = (group.lineItemConfig?.fields || []).filter(hasSelectionEffects);
-      if (effectFields.length) {
-        effectFields.forEach(effectField => {
-          const isSourceField = effectField.id === field.id;
-          const dependsOnChangedField = !isSourceField && selectionEffectDependsOnField(effectField, field.id);
-          if (!isSourceField && !dependsOnChangedField) {
-            return;
-          }
-          const contextId = buildLineContextId(group.id, rowId, effectField.id);
-          const currentValue = updatedRowValues[effectField.id] as FieldValue;
-          const effectQuestion = effectField as unknown as WebQuestionDefinition;
-          if (!isSourceField && dependsOnChangedField) {
-            onSelectionEffect(effectQuestion, currentValue ?? null, {
-              contextId,
-              lineItem: { groupId: group.id, rowId, rowValues: selectionEffectRowValues },
-              forceContextReset: true,
-              ...(changeSource === 'selectionEffectInit' ? { preferLookupSourceValue: true } : {}),
-              snapshots: {
-                values: nextValues,
-                lineItems: syncedLineItems
-              }
-            });
-            return;
-          }
-          const isClearingSource = isSourceField && isEmptyValue(value as FieldValue);
-          const payloadValue = isSourceField
-            ? isClearingSource
-              ? null
-              : currentValue ?? null
-            : currentValue ?? null;
-          onSelectionEffect(effectQuestion, payloadValue, {
-            contextId,
-            lineItem: { groupId: group.id, rowId, rowValues: selectionEffectRowValues },
-            forceContextReset: true,
-            ...(changeSource === 'selectionEffectInit' ? { preferLookupSourceValue: true } : {}),
-            snapshots: {
-              values: nextValues,
-              lineItems: syncedLineItems
-            }
-          });
-        });
-      }
-
-      runSelectionEffectsForAncestorRows(group.id, currentLineItems, syncedLineItems, { mode: 'change', topValues: nextValues });
+      runLineFieldSelectionEffects({
+        group,
+        rowId,
+        field,
+        value,
+        currentLineItems,
+        nextValues,
+        syncedLineItems,
+        updatedRowValues,
+        changeSource
+      });
     } else if (skipSelectionEffects) {
       onDiagnostic?.('field.change.selectionEffects.held', {
         scope: 'line',

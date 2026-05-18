@@ -1,6 +1,10 @@
 import { buildSubgroupKey } from '../../src/web/react/app/lineItems';
 import { CK_RECIPE_INGREDIENTS_DIRTY_KEY } from '../../src/web/react/app/recipeIngredientsDirty';
-import { collectSelectionEffectInitTargets } from '../../src/web/react/features/lineItems/domain/selectionEffectInit';
+import {
+  collectComputedSelectionEffectInitTargets,
+  collectSelectionEffectInitTargets,
+  dedupeSelectionEffectInitTargets
+} from '../../src/web/react/features/lineItems/domain/selectionEffectInit';
 import { WebQuestionDefinition } from '../../src/types';
 
 const buildMealQuestion = (effectOverrides: Record<string, any> = {}): WebQuestionDefinition =>
@@ -186,6 +190,32 @@ describe('selection effect init source sync', () => {
         rawValue: 'Old carrots'
       })
     );
+  });
+
+  it('deduplicates normal and computed init targets for the same hydrated source-sync row', () => {
+    const question = buildRecipeIngredientsQuestion({
+      sourceSync: { refreshOnInit: true, stopWhen: { fieldId: 'status', equals: 'Disabled' } }
+    });
+    const lineItems = {
+      INGREDIENTS: [
+        {
+          id: 'ingredient_1',
+          values: {
+            ING: 'Old carrots',
+            CAT: 'Tins',
+            ING_SOURCE_ID: 'product-1',
+            ING_SOURCE_UPDATED_AT: '2026-01-01T00:00:00.000Z'
+          }
+        }
+      ]
+    } as any;
+    const topValues = { status: 'Active' };
+    const directTargets = collectSelectionEffectInitTargets(question, lineItems, topValues);
+    const computedTargets = collectComputedSelectionEffectInitTargets(question, lineItems, topValues);
+
+    expect(directTargets).toHaveLength(1);
+    expect(computedTargets).toHaveLength(1);
+    expect(dedupeSelectionEffectInitTargets([...directTargets, ...computedTargets])).toHaveLength(1);
   });
 
   it('does not replay hydrated setValuesFromDataSource rows when sourceSync.stopWhen matches', () => {

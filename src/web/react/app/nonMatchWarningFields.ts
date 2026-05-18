@@ -1,4 +1,12 @@
-import { ROW_NON_MATCH_OPTIONS_KEY } from './lineItems';
+import type { FieldValue, WebFormDefinition } from '../../types';
+import type { LineItemState } from '../types';
+import {
+  buildSubgroupKey,
+  parseRowNonMatchOptions,
+  recomputeLineItemNonMatchOptions,
+  resolveSubgroupKey,
+  ROW_NON_MATCH_OPTIONS_KEY
+} from './lineItems';
 
 /**
  * Finds fields whose warning validation depends on row non-match metadata.
@@ -35,4 +43,54 @@ export const resolveNonMatchWarningFieldIds = (fields: any[]): string[] => {
     if (hasRule) ids.push(fid);
   });
   return ids;
+};
+
+export const buildCanonicalNonMatchWarningLineItems = (args: {
+  definition: WebFormDefinition;
+  values: Record<string, FieldValue>;
+  lineItems: LineItemState;
+  subgroupSelectors?: Record<string, string>;
+}): LineItemState =>
+  recomputeLineItemNonMatchOptions({
+    definition: args.definition,
+    values: args.values,
+    lineItems: args.lineItems,
+    subgroupSelectors: args.subgroupSelectors
+  }).lineItems;
+
+export const collectNonMatchWarningPaths = (args: {
+  definition: WebFormDefinition;
+  lineItems: LineItemState;
+}): Set<string> => {
+  const nextPaths = new Set<string>();
+  (args.definition.questions || []).forEach(q => {
+    if (q.type !== 'LINE_ITEM_GROUP') return;
+    const targetFieldIds = resolveNonMatchWarningFieldIds(q.lineItemConfig?.fields || []);
+    const rows = args.lineItems[q.id] || [];
+    if (targetFieldIds.length) {
+      rows.forEach(row => {
+        const nonMatch = parseRowNonMatchOptions((row as any)?.values?.[ROW_NON_MATCH_OPTIONS_KEY]);
+        if (!nonMatch.length) return;
+        targetFieldIds.forEach(fid => nextPaths.add(`${q.id}__${fid}__${row.id}`));
+      });
+    }
+    const subGroups = q.lineItemConfig?.subGroups || [];
+    if (!subGroups.length) return;
+    rows.forEach(row => {
+      subGroups.forEach(sub => {
+        const subId = resolveSubgroupKey(sub as any);
+        if (!subId) return;
+        const subTargetFieldIds = resolveNonMatchWarningFieldIds((sub as any)?.fields || []);
+        if (!subTargetFieldIds.length) return;
+        const subKey = buildSubgroupKey(q.id, row.id, subId);
+        const subRows = args.lineItems[subKey] || [];
+        subRows.forEach(subRow => {
+          const nonMatch = parseRowNonMatchOptions((subRow as any)?.values?.[ROW_NON_MATCH_OPTIONS_KEY]);
+          if (!nonMatch.length) return;
+          subTargetFieldIds.forEach(fid => nextPaths.add(`${subKey}__${fid}__${subRow.id}`));
+        });
+      });
+    });
+  });
+  return nextPaths;
 };

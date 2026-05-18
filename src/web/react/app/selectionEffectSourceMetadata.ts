@@ -1,4 +1,7 @@
-import { FieldValue } from '../../types';
+import { FieldValue, WebFormDefinition } from '../../types';
+import { LineItemState } from '../types';
+import { parseSubgroupKey, resolveSubgroupKey } from './lineItems';
+import { isEmptyValue } from '../utils/values';
 
 const normalizeString = (raw: unknown): string => {
   if (raw === undefined || raw === null) return '';
@@ -71,4 +74,105 @@ export const clearSelectionEffectSourceMetadata = (
     changed = true;
   });
   return changed ? next : rowValues;
+};
+
+const collectSourceMappedValuePreserveRules = (
+  fields: any[]
+): Array<{ sourceFieldId: string; mappedFieldIds: string[] }> => {
+  const rules: Array<{ sourceFieldId: string; mappedFieldIds: string[] }> = [];
+  (fields || []).forEach(field => {
+    const sourceFieldId = normalizeString(field?.id);
+    if (!sourceFieldId) return;
+    const effects = Array.isArray(field?.selectionEffects) ? field.selectionEffects : [];
+    effects.forEach((effect: any) => {
+      if (!effect || effect.type !== 'setValuesFromDataSource') return;
+      const fieldMapping = effect.fieldMapping && typeof effect.fieldMapping === 'object' ? effect.fieldMapping : {};
+      const mappedFieldIds = Object.keys(fieldMapping)
+        .map(normalizeString)
+        .filter(fieldId => fieldId && fieldId !== sourceFieldId);
+      if (!mappedFieldIds.length) return;
+      rules.push({ sourceFieldId, mappedFieldIds });
+    });
+  });
+  return rules;
+};
+
+const resolveLineItemFieldsForGroupKey = (definition: WebFormDefinition, groupKey: string): any[] => {
+  const parsed = parseSubgroupKey(groupKey);
+  if (!parsed) {
+    const root = (definition.questions || []).find(q => q.id === groupKey && q.type === 'LINE_ITEM_GROUP');
+    return (root?.lineItemConfig?.fields || []) as any[];
+  }
+
+  const root = (definition.questions || []).find(q => q.id === parsed.rootGroupId && q.type === 'LINE_ITEM_GROUP');
+  if (!root) return [];
+  let current: any = root;
+  for (let i = 0; i < parsed.path.length; i += 1) {
+    const subId = parsed.path[i];
+    const subGroups = (current?.lineItemConfig?.subGroups || current?.subGroups || []) as any[];
+    const match = subGroups.find(sub => resolveSubgroupKey(sub as any) === subId);
+    if (!match) return [];
+    current = match;
+  }
+  return (current?.fields || current?.lineItemConfig?.fields || []) as any[];
+};
+
+const areEquivalentFieldValues = (left: FieldValue, right: FieldValue): boolean => {
+  if (left === right) return true;
+  if (Array.isArray(left) || Array.isArray(right)) {
+    const leftList = Array.isArray(left) ? left : [];
+    const rightList = Array.isArray(right) ? right : [];
+    return leftList.length === rightList.length && leftList.every((entry, idx) => entry === rightList[idx]);
+  }
+  return false;
+};
+
+export const preserveSelectionEffectSourceMappedValues = (args: {
+  definition: WebFormDefinition;
+  previousLineItems: LineItemState;
+  nextLineItems: LineItemState;
+}): LineItemState => {
+  const previousLineItems = args.previousLineItems || {};
+  const nextLineItems = args.nextLineItems || {};
+  let updatedState = nextLineItems;
+
+  Object.keys(nextLineItems).forEach(groupKey => {
+    const rows = nextLineItems[groupKey] || [];
+    if (!Array.isArray(rows) || !rows.length) return;
+    const fields = resolveLineItemFieldsForGroupKey(args.definition, groupKey);
+    const rules = collectSourceMappedValuePreserveRules(fields);
+    if (!rules.length) return;
+
+    const previousRowsById = new Map((previousLineItems[groupKey] || []).map(row => [row.id, row]));
+    let nextRows = rows;
+    rows.forEach((row, rowIndex) => {
+      const previousRow = previousRowsById.get(row.id);
+      if (!previousRow) return;
+      const rowValues = (row.values || {}) as Record<string, FieldValue>;
+      const previousValues = (previousRow.values || {}) as Record<string, FieldValue>;
+      let nextValues = rowValues;
+
+      rules.forEach(rule => {
+        if (!areEquivalentFieldValues(previousValues[rule.sourceFieldId], rowValues[rule.sourceFieldId])) return;
+        rule.mappedFieldIds.forEach(fieldId => {
+          const previousValue = previousValues[fieldId];
+          if (isEmptyValue(previousValue)) return;
+          if (!isEmptyValue(rowValues[fieldId])) return;
+          if (nextValues === rowValues) nextValues = { ...rowValues };
+          nextValues[fieldId] = previousValue;
+        });
+      });
+
+      if (nextValues === rowValues) return;
+      if (updatedState === nextLineItems) updatedState = { ...nextLineItems };
+      if (nextRows === rows) nextRows = rows.slice();
+      nextRows[rowIndex] = { ...row, values: nextValues };
+    });
+
+    if (nextRows !== rows) {
+      updatedState[groupKey] = nextRows;
+    }
+  });
+
+  return updatedState;
 };

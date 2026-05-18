@@ -1863,7 +1863,14 @@ describe('selectionEffects setValue', () => {
           lineItemConfig: {
             fields: [
               { id: 'ING', type: 'CHOICE', label: { en: 'Ingredient', fr: 'Ingredient', nl: 'Ingredient' }, required: false },
-              { id: 'CAT', type: 'TEXT', label: { en: 'Category', fr: 'Category', nl: 'Category' }, required: false },
+              { id: 'QTY', type: 'NUMBER', label: { en: 'Quantity', fr: 'Quantity', nl: 'Quantity' }, required: false },
+              {
+                id: 'CAT',
+                type: 'TEXT',
+                label: { en: 'Category', fr: 'Category', nl: 'Category' },
+                required: false,
+                selectionEffects: [{ type: 'setValue', fieldId: 'QTY', value: '99' }]
+              } as any,
               { id: 'ALLERGEN', type: 'TEXT', label: { en: 'Allergen', fr: 'Allergen', nl: 'Allergen' }, required: false },
               { id: 'ING_SOURCE_ID', type: 'TEXT', label: { en: 'Source id', fr: 'Source id', nl: 'Source id' }, required: false },
               {
@@ -1885,6 +1892,7 @@ describe('selectionEffects setValue', () => {
           id: 'ingredient_1',
           values: {
             ING: 'Old carrots',
+            QTY: '7',
             CAT: 'Tins',
             ALLERGEN: '',
             ING_SOURCE_ID: 'product-1',
@@ -1896,7 +1904,9 @@ describe('selectionEffects setValue', () => {
     const setValues = (next: any) => {
       values = typeof next === 'function' ? next(values) : next;
     };
+    let setLineItemsCallCount = 0;
     const setLineItems = (next: any) => {
+      setLineItemsCallCount += 1;
       lineItems = typeof next === 'function' ? next(lineItems) : next;
     };
 
@@ -1936,6 +1946,7 @@ describe('selectionEffects setValue', () => {
           rowId: 'ingredient_1',
           rowValues: {
             ING: 'Old carrots',
+            QTY: '7',
             CAT: 'Tins',
             ALLERGEN: '',
             ING_SOURCE_ID: 'product-1',
@@ -1949,17 +1960,20 @@ describe('selectionEffects setValue', () => {
     });
 
     await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => setTimeout(resolve, 0));
 
     expect(fetchDataSource).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'Ingredients Data', formKey: 'Config: Ingredients Management' }),
       'EN',
       { forceRefresh: true }
     );
+    expect(setLineItemsCallCount).toBe(1);
     expect(lineItems.INGREDIENTS[0].values).toEqual(
       expect.objectContaining({
         ING_SOURCE_ID: 'product-1',
         ING_SOURCE_UPDATED_AT: '2026-04-24T12:00:00.000Z',
         ING: 'Updated carrots',
+        QTY: '7',
         CAT: 'Fresh vegetables',
         ALLERGEN: 'None'
       })

@@ -5,7 +5,8 @@ import type { LineItemState } from '../../../types';
 import {
   collectComputedSelectionEffectInitTargets,
   collectSelectionEffectInitTargets,
-  collectSubgroupSeedInitTargets
+  collectSubgroupSeedInitTargets,
+  dedupeSelectionEffectInitTargets
 } from '../domain/selectionEffectInit';
 
 type RecordMetaForSelectionInit = {
@@ -68,11 +69,11 @@ export const useLineItemSelectionEffectInit = ({
 
   React.useEffect(() => {
     if (submitting) return;
-    const targets = [
+    const targets = dedupeSelectionEffectInitTargets([
       ...collectSelectionEffectInitTargets(initSourceQuestion, lineItems, selectionEffectInitTopValues),
       ...collectSubgroupSeedInitTargets(initSourceQuestion, lineItems),
       ...collectComputedSelectionEffectInitTargets(initSourceQuestion, lineItems, selectionEffectInitTopValues)
-    ];
+    ]);
     if (!targets.length) {
       initializedSelectionEffectsRef.current.clear();
       return;

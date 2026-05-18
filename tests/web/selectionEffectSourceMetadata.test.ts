@@ -1,6 +1,7 @@
 import {
   clearSelectionEffectSourceMetadata,
-  collectSelectionEffectSourceMetadataFieldIds
+  collectSelectionEffectSourceMetadataFieldIds,
+  preserveSelectionEffectSourceMappedValues
 } from '../../src/web/react/app/selectionEffectSourceMetadata';
 
 describe('selection effect source metadata', () => {
@@ -78,5 +79,112 @@ describe('selection effect source metadata', () => {
       CAT: 'Dry goods',
       ALLERGEN: 'None'
     });
+  });
+
+  it('preserves refreshed source mapped fields when a stale row update keeps the same source value', () => {
+    const definition: any = {
+      questions: [
+        {
+          id: 'INGREDIENTS',
+          type: 'LINE_ITEM_GROUP',
+          lineItemConfig: {
+            fields: [
+              {
+                id: 'ING',
+                selectionEffects: [
+                  {
+                    type: 'setValuesFromDataSource',
+                    lookupSourceFieldId: 'ING_SOURCE_ID',
+                    fieldMapping: {
+                      ING_SOURCE_ID: 'id',
+                      ING_SOURCE_UPDATED_AT: 'updatedAt',
+                      ING: 'INGREDIENT_NAME',
+                      CAT: 'CATEGORY',
+                      ALLERGEN: 'ALLERGEN'
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    };
+
+    const previousLineItems: any = {
+      INGREDIENTS: [
+        {
+          id: 'row-1',
+          values: {
+            ING: 'Black pepper',
+            CAT: 'Herbs - spices - condiments',
+            ALLERGEN: 'None',
+            ING_SOURCE_ID: 'ingredient-1',
+            ING_SOURCE_UPDATED_AT: '2026-02-10T16:13:54.500Z'
+          }
+        }
+      ]
+    };
+    const staleNextLineItems: any = {
+      INGREDIENTS: [
+        {
+          id: 'row-1',
+          values: {
+            ING: 'Black pepper',
+            CAT: '',
+            ALLERGEN: ''
+          }
+        }
+      ]
+    };
+
+    expect(
+      preserveSelectionEffectSourceMappedValues({
+        definition,
+        previousLineItems,
+        nextLineItems: staleNextLineItems
+      })
+    ).toEqual(previousLineItems);
+  });
+
+  it('does not preserve source mapped fields after the source selection changes', () => {
+    const definition: any = {
+      questions: [
+        {
+          id: 'INGREDIENTS',
+          type: 'LINE_ITEM_GROUP',
+          lineItemConfig: {
+            fields: [
+              {
+                id: 'ING',
+                selectionEffects: [
+                  {
+                    type: 'setValuesFromDataSource',
+                    fieldMapping: {
+                      CAT: 'CATEGORY',
+                      ALLERGEN: 'ALLERGEN'
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    };
+
+    const nextLineItems: any = {
+      INGREDIENTS: [{ id: 'row-1', values: { ING: 'Tomato', CAT: '', ALLERGEN: '' } }]
+    };
+
+    expect(
+      preserveSelectionEffectSourceMappedValues({
+        definition,
+        previousLineItems: {
+          INGREDIENTS: [{ id: 'row-1', values: { ING: 'Black pepper', CAT: 'Spices', ALLERGEN: 'None' } }]
+        } as any,
+        nextLineItems
+      })
+    ).toBe(nextLineItems);
   });
 });
