@@ -87,7 +87,7 @@ describe('WebFormService', () => {
       [],
       [],
       ['Form Title', 'Configuration Sheet Name', 'Destination Tab Name', 'Description', 'Form ID', 'Edit URL', 'Published URL', 'Follow-up Config (JSON)'],
-      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', ''],
+      ['Delivery Form', 'Config: Delivery', 'Deliveries', 'Desc', '', '', '', JSON.stringify({ dedupDeleteOnKeyChange: true })],
       ['Leftover Bank', bankFormKey, 'Test Leftover Bank Data', 'Desc', '', '', '', ''],
       ['Leftover Utilisation', utilisationFormKey, 'Test Leftover Utilisation Data', 'Desc', '', '', '', '']
     ];
@@ -4530,6 +4530,86 @@ describe('WebFormService', () => {
 
     const updatedBank = service.fetchSubmissionById(bankFormKey, (bank.meta?.id || '').toString());
     expect((updatedBank?.values as any)?.LEFTOVER_PORTIONS).toBe(5);
+  });
+
+  test('saveSubmissionWithId applies an embedded utilisation release plan when deleting a source record', () => {
+    const { bankFormKey, utilisationFormKey } = setupBankUtilisationForms();
+    const source = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-DELETE-PLAN',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME',
+      __ckSaveMode: 'draft',
+      __ckStatus: 'In progress'
+    } as any);
+    expect(source.success).toBe(true);
+
+    const bank = service.saveSubmissionWithId({
+      formKey: bankFormKey,
+      language: 'EN',
+      LEFTOVER_ID: 'LE-DELETE',
+      LEFTOVER_STATUS: 'available',
+      LEFTOVER_KIND: 'Entire dish',
+      LEFTOVER_PORTIONS: 9
+    } as any);
+    expect(bank.success).toBe(true);
+
+    const utilised = service.upsertBankUtilisation({
+      resourceFormKey: bankFormKey,
+      resourceRecordId: (bank.meta?.id || '').toString(),
+      resourceItemId: 'LE-DELETE',
+      resourceKind: 'Entire dish',
+      quantity: 4,
+      sourceFormKey: 'Config: Delivery',
+      sourceRecordId: 'REC-DELETE-PLAN',
+      sourceParentGroupId: 'MP_MEALS_REQUEST',
+      sourceParentRowId: 'ROW-DELETE',
+      sourceOutputGroupId: 'MP_TYPE_LI',
+      sourceOutputRowId: 'MP_TYPE_LI_DELETE',
+      utilisationFormKey
+    });
+    expect(utilised.success).toBe(true);
+    expect((service.fetchSubmissionById(bankFormKey, (bank.meta?.id || '').toString())?.values as any)?.LEFTOVER_PORTIONS).toBe(5);
+
+    const deleted = service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-DELETE-PLAN',
+      __ckDeleteRecordId: 'REC-DELETE-PLAN',
+      __ckSaveMode: 'draft',
+      __ckMutationPlan: {
+        utilisationPlan: {
+          sourceFormKey: 'Config: Delivery',
+          sourceRecordId: 'REC-DELETE-PLAN',
+          utilisationFormKey,
+          managedScopes: [
+            {
+              sourceParentGroupId: 'MP_MEALS_REQUEST',
+              sourceParentRowId: 'ROW-DELETE',
+              sourceOutputGroupId: 'MP_TYPE_LI'
+            }
+          ],
+          utilisations: [],
+          refreshMode: 'revisionOnly'
+        }
+      }
+    } as any);
+
+    expect(deleted.success).toBe(true);
+    expect((deleted as any).utilisationResult).toEqual(expect.objectContaining({
+      success: true,
+      utilisationsReleased: 1
+    }));
+    const sheet = ss.getSheetByName('Deliveries');
+    expect(sheet).toBeDefined();
+    expect(sheet!.getLastRow()).toBe(1);
+    const updatedBank = service.fetchSubmissionById(bankFormKey, (bank.meta?.id || '').toString());
+    expect((updatedBank?.values as any)?.LEFTOVER_PORTIONS).toBe(9);
+    const utilisation = service.fetchSubmissionById(utilisationFormKey, (utilised.utilisationId || '').toString());
+    expect((utilisation?.values as any)?.STATUS).toBe('released');
   });
 
   test('saveSubmissionWithId rejects embedded utilisation conflicts before saving the source draft', () => {

@@ -1,6 +1,12 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 
-import type { FieldValue, LangCode, WebFormDefinition, WebFormSubmission } from '../../types';
+import type {
+  FieldValue,
+  LangCode,
+  WebFormDefinition,
+  WebFormSubmission
+} from '../../types';
+import type { BankUtilisationPlanRequest } from '../../../types';
 import type { LineItemState, OptionState } from '../types';
 import {
   buildDraftPayload,
@@ -13,6 +19,11 @@ import { reconcileAutoAddModeGroups } from './autoAddModeOverlay';
 import { computeDedupKeyFingerprint } from './dedupPrecheck';
 import { isDeleteOnKeyChangeSettledForRecord } from './dedupRaceGuards';
 import { clearCachesAfterDedupDeleteOnKeyChange } from './dedupDeleteOnKeyChangeCache';
+import {
+  buildGuidedUtilisationManagedRowRemovalScopes,
+  buildStepBankUtilisationPlan,
+  detectGuidedUtilisationManagedRowRemovals
+} from '../features/utilisations/stepUtilisationPlan';
 
 type DiagnosticLogger = (event: string, payload?: Record<string, unknown>) => void;
 
@@ -27,6 +38,38 @@ type SubmissionMeta = {
 };
 
 type UploadQueuePromise = Promise<{ success: boolean; message?: string; items?: string[]; value?: string }>;
+
+export const buildDedupDeleteUtilisationReleasePlan = (args: {
+  definition: WebFormDefinition;
+  formKey: string;
+  recordId: string;
+  previousLineItems: LineItemState;
+}): BankUtilisationPlanRequest | null => {
+  const impacts = detectGuidedUtilisationManagedRowRemovals({
+    definition: args.definition,
+    stepId: '',
+    mode: 'all',
+    previousLineItems: args.previousLineItems || {},
+    nextLineItems: {}
+  });
+  const releaseScopes = buildGuidedUtilisationManagedRowRemovalScopes(impacts);
+  if (!releaseScopes.length) return null;
+  const plan = buildStepBankUtilisationPlan({
+    definition: args.definition,
+    stepId: '',
+    formKey: args.formKey,
+    recordId: args.recordId,
+    mode: 'all',
+    lineItems: {},
+    previousManagedScopes: releaseScopes
+  });
+  if (!plan || !Array.isArray(plan.managedScopes) || !plan.managedScopes.length) return null;
+  return {
+    ...plan,
+    utilisations: [],
+    refreshMode: 'revisionOnly'
+  };
+};
 
 /**
  * Owner: App shell save/dedup orchestration.
@@ -148,8 +191,13 @@ export const triggerDedupDeleteOnKeyChangeAction = async (args: {
   if (!dedupDeleteOnKeyChangeEnabledLocal) return false;
   if (submittingRef.current) return false;
   const extraMeta = args.extra ? { ...args.extra } : {};
+  const releaseLineItemsSnapshot =
+    (extraMeta as any).releaseLineItems && typeof (extraMeta as any).releaseLineItems === 'object'
+      ? ((extraMeta as any).releaseLineItems as LineItemState)
+      : null;
   const forceDelete = (extraMeta as any).force === true;
   const requestedRecordId = ((extraMeta as any).recordId || '').toString().trim();
+  if ((extraMeta as any).releaseLineItems !== undefined) delete (extraMeta as any).releaseLineItems;
   if ((extraMeta as any).force !== undefined) delete (extraMeta as any).force;
   if ((extraMeta as any).recordId !== undefined) delete (extraMeta as any).recordId;
 
@@ -293,6 +341,29 @@ export const triggerDedupDeleteOnKeyChangeAction = async (args: {
     }) as any;
     payload.__ckSaveMode = 'draft';
     payload.__ckDeleteRecordId = existingRecordId;
+    const utilisationReleasePlan = buildDedupDeleteUtilisationReleasePlan({
+      definition,
+      formKey,
+      recordId: existingRecordId,
+      previousLineItems: releaseLineItemsSnapshot || lineItemsRef.current
+    });
+    if (utilisationReleasePlan) {
+      const currentMutationPlan =
+        payload.__ckMutationPlan && typeof payload.__ckMutationPlan === 'object' ? payload.__ckMutationPlan : {};
+      payload.__ckMutationPlan = {
+        ...currentMutationPlan,
+        utilisationPlan: utilisationReleasePlan
+      };
+      logEvent('dedupDeleteOnKeyChange.utilisationReleasePlan.attached', {
+        source,
+        recordId: existingRecordId,
+        managedScopeCount: Array.isArray(utilisationReleasePlan.managedScopes)
+          ? utilisationReleasePlan.managedScopes.length
+          : 0,
+        forceDelete,
+        ...extraMeta
+      });
+    }
     const baseVersion = recordDataVersionRef.current;
     if (Number.isFinite(Number(baseVersion)) && Number(baseVersion) > 0) {
       payload.__ckClientDataVersion = Number(baseVersion);

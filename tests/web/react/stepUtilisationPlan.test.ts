@@ -396,6 +396,99 @@ describe('buildStepBankUtilisationPlan', () => {
     ]);
   });
 
+  test('detects managed output-row removals when ordered quantity clears a nested prep subgroup', () => {
+    const definition: any = {
+      steps: {
+        mode: 'guided',
+        items: [
+          {
+            id: 'leftoverForm',
+            include: [
+              {
+                kind: 'lineGroup',
+                id: 'MP_MEALS_REQUEST',
+                dataSourceRows: [
+                  {
+                    id: 'leftoverBankRows',
+                    outputGroupId: 'MP_TYPE_LI',
+                    outputKeyFieldId: 'LEFTOVER_ID',
+                    quantityFieldId: 'LEFTOVER_USE_QTY',
+                    dataSource: { formKey: 'Config: Leftover Bank' },
+                    utilisation: {
+                      enabled: true,
+                      commitMode: 'step',
+                      resourceRecordIdFieldId: 'LEFTOVER_RECORD_ID'
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            id: 'orderInfo',
+            include: [{ kind: 'lineGroup', id: 'MP_MEALS_REQUEST' }]
+          }
+        ]
+      }
+    };
+
+    const impacts = detectGuidedUtilisationManagedRowRemovals({
+      definition,
+      stepId: 'orderInfo',
+      mode: 'all',
+      previousLineItems: {
+        MP_MEALS_REQUEST: [{ id: 'MEAL-1', values: { ORD_QTY: 12 } }],
+        'MP_MEALS_REQUEST::MEAL-1::MP_TYPE_LI': [
+          {
+            id: 'OUT-1',
+            values: {
+              LEFTOVER_ID: 'MI-12',
+              LEFTOVER_RECORD_ID: 'BANK-MI-12',
+              LEFTOVER_USE_QTY: 6
+            }
+          }
+        ]
+      } as any,
+      nextLineItems: {
+        MP_MEALS_REQUEST: [{ id: 'MEAL-1', values: { ORD_QTY: 0 } }]
+      } as any
+    });
+
+    expect(impacts).toEqual([
+      {
+        stepId: 'leftoverForm',
+        parentGroupId: 'MP_MEALS_REQUEST',
+        parentRowId: 'MEAL-1',
+        outputGroupId: 'MP_TYPE_LI',
+        removedRowIds: ['OUT-1']
+      }
+    ]);
+    expect(
+      buildStepBankUtilisationPlan({
+        definition,
+        stepId: 'orderInfo',
+        formKey: 'Config: Meal Production',
+        recordId: 'MP-ORD-0',
+        mode: 'all',
+        previousManagedScopes: buildGuidedUtilisationManagedRowRemovalScopes(impacts),
+        lineItems: {
+          MP_MEALS_REQUEST: [{ id: 'MEAL-1', values: { ORD_QTY: 0 } }]
+        } as any
+      })
+    ).toEqual(expect.objectContaining({
+      sourceFormKey: 'Config: Meal Production',
+      sourceRecordId: 'MP-ORD-0',
+      managedScopes: [
+        {
+          sourceParentGroupId: 'MP_MEALS_REQUEST',
+          sourceParentRowId: 'MEAL-1',
+          sourceOutputGroupId: 'MP_TYPE_LI'
+        }
+      ],
+      utilisations: []
+    }));
+  });
+
   test('limits managed output-row removal detection to the active guided step', () => {
     const definition: any = {
       steps: {

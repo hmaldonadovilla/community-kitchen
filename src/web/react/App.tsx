@@ -328,6 +328,7 @@ import {
   resolveOptimisticStatusTransitionForActions
 } from './app/followupParallel';
 import {
+  cloneLineItemStateSnapshot,
   mergeGuidedUtilisationLineItemsFromSnapshot
 } from './features/utilisations/stepUtilisationPlan';
 import {
@@ -959,6 +960,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             (dedupIdentityFieldIdsRef.current[topFieldId] || dedupIdentityFieldIdsRef.current[topFieldId.toLowerCase()]) &&
             dedupDeleteEnabled
         );
+        const releaseLineItemsBeforeDestructiveChange = isTopDedupKeyChange
+          ? cloneLineItemStateSnapshot(lineItemsRef.current)
+          : null;
 
         if (isTopDedupKeyChange) {
           dedupDeleteOnKeyChangePendingRef.current = true;
@@ -1236,7 +1240,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         if (isTopDedupKeyChange) {
           await triggerDedupDeleteOnKeyChange('fieldChangeDialog.confirm', {
             fieldId: topFieldId,
-            fieldPath: pending.fieldPath
+            fieldPath: pending.fieldPath,
+            ...(releaseLineItemsBeforeDestructiveChange
+              ? { releaseLineItems: releaseLineItemsBeforeDestructiveChange }
+              : {})
           });
         }
 

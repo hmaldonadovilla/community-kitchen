@@ -96,6 +96,110 @@ describe('Cloud Run SubmitEffectsRepository', () => {
     });
   });
 
+  test('saveSubmissionWithId applies the supplied utilisation plan when deleting a source record', async () => {
+    const events: string[] = [];
+    const deleteSave = createDeferred();
+    const utilisationApply = createDeferred();
+    const saveSubmissionWithId = jest.fn(() => {
+      events.push('deleteSave.start');
+      return deleteSave.promise;
+    });
+    const applyPlan = jest.fn(() => {
+      events.push('utilisationApply.start');
+      return utilisationApply.promise;
+    });
+    const repository = new SubmitEffectsRepository({
+      submissionRepository: {
+        getFormContext: jest.fn(() => ({
+          formKey: 'Config: Meal Production',
+          form: {},
+          questions: []
+        })),
+        saveSubmissionWithId
+      },
+      bankUtilisationRepository: { applyPlan }
+    });
+
+    const resultPromise = repository.saveSubmissionWithId({
+      formKey: 'Config: Meal Production',
+      language: 'EN',
+      id: 'meal-1',
+      __ckDeleteRecordId: 'meal-1',
+      __ckSaveMode: 'draft',
+      __ckMutationPlan: {
+        utilisationPlan: {
+          sourceFormKey: 'Config: Meal Production',
+          sourceRecordId: 'meal-1',
+          managedScopes: [
+            {
+              sourceParentGroupId: 'MP_MEALS_REQUEST',
+              sourceParentRowId: 'ROW-1',
+              sourceOutputGroupId: 'MP_TYPE_LI'
+            }
+          ],
+          utilisations: [],
+          refreshMode: 'revisionOnly'
+        }
+      }
+    });
+
+    await Promise.resolve();
+    expect(events).toEqual(['deleteSave.start', 'utilisationApply.start']);
+    expect(saveSubmissionWithId).toHaveBeenCalledWith(
+      expect.objectContaining({
+        __ckDeleteRecordId: 'meal-1',
+        __ckSkipSubmitEffects: true
+      })
+    );
+    expect(saveSubmissionWithId).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        __ckMutationPlan: expect.anything()
+      })
+    );
+    expect(applyPlan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceFormKey: 'Config: Meal Production',
+        sourceRecordId: 'meal-1',
+        managedScopes: [
+          {
+            sourceParentGroupId: 'MP_MEALS_REQUEST',
+            sourceParentRowId: 'ROW-1',
+            sourceOutputGroupId: 'MP_TYPE_LI'
+          }
+        ],
+        utilisations: [],
+        refreshMode: 'none'
+      })
+    );
+
+    utilisationApply.resolve({
+      success: true,
+      message: 'Bank utilisations updated.',
+      utilisationsApplied: 0,
+      utilisationsReleased: 1
+    });
+    deleteSave.resolve({
+      success: true,
+      message: 'Deleted previous record.',
+      meta: { id: 'meal-1', operation: 'delete' }
+    });
+
+    await expect(resultPromise).resolves.toMatchObject({
+      success: true,
+      utilisationResult: {
+        success: true,
+        utilisationsReleased: 1
+      },
+      meta: {
+        utilisationPlan: {
+          success: true,
+          sourceRecordId: 'meal-1',
+          utilisationsReleased: 1
+        }
+      }
+    });
+  });
+
   test('status-only close updates status without saving source payload and uses saved record for submit effects', async () => {
     const saveStatusOnlyWithId = jest.fn(async () => ({
       success: true,
