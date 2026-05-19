@@ -351,7 +351,7 @@ describe('meal production leftover selection config', () => {
         conflictDialog: expect.objectContaining({
           title: { en: '' },
           message: {
-            en: 'Leftover availability changed review new availability before continuing'
+            en: 'Leftover availability changed before you completed your selection. Your selected quantity is no longer available. Please adjust your selections before continuing'
           },
           confirmLabel: { en: 'OK' },
           showCancel: false,
@@ -593,7 +593,7 @@ describe('meal production leftover selection config', () => {
 
     expect(target?.label?.en).toBe('Multi-ingredient leftovers');
     expect(target?.helperText?.en).toBe(
-      'Leave empty if there are no leftovers, then click Complete.\nTo record multi-ingredient leftovers, enter a value > 0. Rename if needed and deselect ingredients not included.\nTick ❄️ if freezing (expiry: +3 months). Leave unticked for refrigerated storage (expiry: 3 days).\nTo record single-ingredient leftovers, follow instructions at the bottom of the page otherwise click Complete to generate the Leftover ID.'
+      'Leave empty if there are no leftovers, then click Complete.\nTo record multi-ingredient leftovers, enter a value > 0. Rename if needed and deselect ingredients not included.\nTick ❄️ if freezing (expiry: +3 months). Leave unticked for refrigerated storage (expiry: 3 days unless overridden).\nTo record single-ingredient leftovers, follow instructions at the bottom of the page otherwise click Complete to generate the Leftover ID.'
     );
     expect((target?.fields || []).map((entry: any) => (typeof entry === 'string' ? entry : entry?.id))).toEqual(
       expect.arrayContaining([
