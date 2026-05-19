@@ -41,7 +41,7 @@
         },
         "email": {
           "recipients": [
-            "hmaldonadovilla@outlook.com",
+            "hmaldonadovilla@gmail.com",
             "que0106@gmail.com"
           ],
           "from": "operations@communitykitchen.be",
@@ -74,7 +74,7 @@
         },
         "email": {
           "recipients": [
-            "hmaldonadovilla@outlook.com",
+            "hmaldonadovilla@gmail.com",
             "que0106@gmail.com"
           ],
           "from": "operations@communitykitchen.be",
@@ -113,15 +113,19 @@
               "DIST_NAME"
             ],
             "cachePolicy": "versioned",
-            "prefetchOnHome": true
+            "prefetchOnHome": true,
+            "forceRefreshMaxCacheAgeMs": 86400000,
+            "forceRefreshCacheScope": "dataSource"
           }
         }
       ],
       "emailCc": [
-        "hmaldonadovilla@outlook.com"
+        "hmaldonadovilla@gmail.com",
+        "que0106@gmail.com"
       ],
       "emailBcc": [
-        "hmaldonadovilla@outlook.com"
+        "hmaldonadovilla@gmail.com",
+        "que0106@gmail.com"
       ],
       "statusFieldId": "Status",
       "statusTransitions": {
@@ -3437,7 +3441,7 @@
           },
           "email": {
             "recipients": [
-              "hmaldonadovilla@outlook.com",
+              "hmaldonadovilla@gmail.com",
               "que0106@gmail.com"
             ],
             "from": "operations@communitykitchen.be",
@@ -3491,7 +3495,7 @@
           },
           "email": {
             "recipients": [
-              "hmaldonadovilla@outlook.com",
+              "hmaldonadovilla@gmail.com",
               "que0106@gmail.com"
             ],
             "from": "operations@communitykitchen.be",
@@ -3594,7 +3598,7 @@
           },
           "email": {
             "recipients": [
-              "hmaldonadovilla@outlook.com",
+              "hmaldonadovilla@gmail.com",
               "que0106@gmail.com"
             ],
             "from": "operations@communitykitchen.be",
@@ -3675,7 +3679,7 @@
           },
           "email": {
             "recipients": [
-              "hmaldonadovilla@outlook.com",
+              "hmaldonadovilla@gmail.com",
               "que0106@gmail.com"
             ],
             "from": "operations@communitykitchen.be",
@@ -3857,7 +3861,7 @@
           },
           "email": {
             "recipients": [
-              "hmaldonadovilla@outlook.com",
+              "hmaldonadovilla@gmail.com",
               "que0106@gmail.com"
             ],
             "from": "operations@communitykitchen.be",
@@ -3992,7 +3996,9 @@
           "value": "NICKNAME"
         },
         "cachePolicy": "versioned",
-        "prefetchOnHome": true
+        "prefetchOnHome": true,
+        "forceRefreshMaxCacheAgeMs": 86400000,
+        "forceRefreshCacheScope": "dataSource"
       },
       "changeDialog": {
         "when": {
@@ -7274,6 +7280,9 @@
         "ensureRecordId": true,
         "navigateTo": "form",
         "confirm": {
+          "title": {
+            "en": ""
+          },
           "message": {
             "en": "Lock order details?\nCustomer, date, service, reponsible cook, and ordered portions cannot be changed if you lock. Do you wish to continue?"
           },
@@ -7284,7 +7293,16 @@
             "en": "No, do not lock order details"
           },
           "primaryAction": "cancel"
-        }
+        },
+        "progressDialog": {
+          "title": {
+            "en": ""
+          },
+          "message": {
+            "en": "Do not leave this page while we lock order information"
+          }
+        },
+        "suppressStatusFeedback": true
       },
       "qFr": "Lock Order information",
       "qNl": "Lock Order information"
@@ -7327,6 +7345,9 @@
         },
         "navigateTo": "form",
         "confirm": {
+          "title": {
+            "en": ""
+          },
           "message": {
             "en": "Unlock order details?\nUnlocking will allow any user to change Order details. Do you wish to continue?"
           },
@@ -7337,7 +7358,16 @@
             "en": "No, keep the Order details locked"
           },
           "primaryAction": "cancel"
-        }
+        },
+        "progressDialog": {
+          "title": {
+            "en": ""
+          },
+          "message": {
+            "en": "Do not leave this page while we un-lock order information"
+          }
+        },
+        "suppressStatusFeedback": true
       }
     },
     {
@@ -7492,7 +7522,9 @@
             "value": "NICKNAME"
           },
           "cachePolicy": "versioned",
-          "prefetchOnHome": true
+          "prefetchOnHome": true,
+          "forceRefreshMaxCacheAgeMs": 86400000,
+          "forceRefreshCacheScope": "dataSource"
         },
         "changeDialog": {
           "when": {
@@ -10858,6 +10890,9 @@
           "ensureRecordId": true,
           "navigateTo": "form",
           "confirm": {
+            "title": {
+              "en": ""
+            },
             "message": {
               "en": "Lock order details?\nCustomer, date, service, reponsible cook, and ordered portions cannot be changed if you lock. Do you wish to continue?"
             },
@@ -10868,7 +10903,16 @@
               "en": "No, do not lock order details"
             },
             "primaryAction": "cancel"
-          }
+          },
+          "progressDialog": {
+            "title": {
+              "en": ""
+            },
+            "message": {
+              "en": "Do not leave this page while we lock order information"
+            }
+          },
+          "suppressStatusFeedback": true
         },
         "qFr": "Lock Order information",
         "qNl": "Lock Order information"
@@ -10911,6 +10955,9 @@
           },
           "navigateTo": "form",
           "confirm": {
+            "title": {
+              "en": ""
+            },
             "message": {
               "en": "Unlock order details?\nUnlocking will allow any user to change Order details. Do you wish to continue?"
             },
@@ -10921,7 +10968,16 @@
               "en": "No, keep the Order details locked"
             },
             "primaryAction": "cancel"
-          }
+          },
+          "progressDialog": {
+            "title": {
+              "en": ""
+            },
+            "message": {
+              "en": "Do not leave this page while we un-lock order information"
+            }
+          },
+          "suppressStatusFeedback": true
         }
       },
       {
@@ -11242,15 +11298,19 @@
               "DIST_NAME"
             ],
             "cachePolicy": "versioned",
-            "prefetchOnHome": true
+            "prefetchOnHome": true,
+            "forceRefreshMaxCacheAgeMs": 86400000,
+            "forceRefreshCacheScope": "dataSource"
           }
         }
       ],
       "emailCc": [
-        "hmaldonadovilla@outlook.com"
+        "hmaldonadovilla@gmail.com",
+        "que0106@gmail.com"
       ],
       "emailBcc": [
-        "hmaldonadovilla@outlook.com"
+        "hmaldonadovilla@gmail.com",
+        "que0106@gmail.com"
       ],
       "statusFieldId": "Status",
       "statusTransitions": {

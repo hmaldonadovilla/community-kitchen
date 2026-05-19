@@ -623,6 +623,8 @@ describe('meal production bundled HTML rendering', () => {
     expect(res.html).toContain('data-si-leftover-ingredient>Rice</span>');
     expect(res.html).toContain('data-si-leftover-qty>250</span>');
     expect(res.html).toContain('collectSourceGeneratedLeftovers');
+    expect(res.html).toContain("return 'MI-' + fallbackCounters.mi;");
+    expect(res.html).toContain("return 'SI-' + fallbackCounters.si;");
   });
 
   it('backfills missing ingredient category and allergen metadata at render time for actual bundled meal production records', () => {

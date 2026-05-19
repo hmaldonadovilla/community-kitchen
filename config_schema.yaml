@@ -581,6 +581,11 @@ components:
                 message:
                   $ref: '#/components/schemas/LocalizedString'
                   description: Optional blocking overlay message while the update is saving.
+            suppressStatusFeedback:
+              type: boolean
+              description: |
+                When true, suppress the form-level Saving/Saved status banner for this updateRecord
+                action. Blocking progress dialogs and error messages still appear.
             ensureRecordId:
               type: boolean
               description: |
@@ -3088,6 +3093,30 @@ components:
         persistMaxAgeMinutes:
           type: number
           description: Optional persisted datasource cache max age in minutes.
+        forceRefreshMaxCacheAgeMs:
+          type: number
+          minimum: 0
+          description: |
+            Optional max age in milliseconds for reusing a fresh cached datasource response even when
+            a caller requests `forceRefresh`.
+
+            Use this for stable master data, such as customers or recipes, that is already prefetched
+            at page load and should not refetch during ordinary form edits. Leave it unset for
+            transactional sources that must always be re-read.
+        forceRefreshMaxCacheAgeMinutes:
+          type: number
+          minimum: 0
+          description: Optional max age in minutes for datasource-level force-refresh cache reuse.
+        forceRefreshCacheScope:
+          type: string
+          enum: [signature, dataSource]
+          description: |
+            Scope used when `forceRefreshMaxCacheAgeMs` allows a forced refresh to reuse fresh cache.
+
+            - `signature` (default): reuse only the exact datasource configuration/projection.
+            - `dataSource`: allow another fresh projection for the same datasource id, language, and
+              cache version. Use only for stable master data where sibling projections are acceptable
+              for ordinary UI refresh paths.
         sheetId:
           type: string
           description: Optional sheet id when sourcing from another spreadsheet file.

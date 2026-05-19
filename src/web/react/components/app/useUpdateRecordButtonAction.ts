@@ -218,7 +218,8 @@ export const useUpdateRecordButtonAction = (args: {
             ensureRecordId: cfg?.ensureRecordId === true,
             busyTitle,
             busyMessage,
-            submitMode
+            submitMode,
+            suppressStatusFeedback: cfg?.suppressStatusFeedback === true
           }
         )
           .catch(() => {

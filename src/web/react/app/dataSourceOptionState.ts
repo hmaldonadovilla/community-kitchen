@@ -48,3 +48,8 @@ export const pruneOptionStateForDataSource = <T extends Record<string, any>>(arg
 
   return removedKeys.length ? { state: next as T, removedKeys } : { state: args.state, removedKeys: [] };
 };
+
+export const shouldClearOptionStateAfterDataSourceCacheClear = (event: Event): boolean => {
+  const detail = ((event as CustomEvent)?.detail || {}) as { includePersisted?: unknown };
+  return detail.includePersisted !== false;
+};

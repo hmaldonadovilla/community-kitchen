@@ -115,7 +115,9 @@
               "NICKNAME",
               "DIST_EMAIL",
               "DIST_NAME"
-            ]
+            ],
+            "forceRefreshMaxCacheAgeMs": 86400000,
+            "forceRefreshCacheScope": "dataSource"
           }
         }
       ],
@@ -2261,7 +2263,9 @@
         "limit": 100,
         "mapping": {
           "value": "NICKNAME"
-        }
+        },
+        "forceRefreshMaxCacheAgeMs": 86400000,
+        "forceRefreshCacheScope": "dataSource"
       },
       "changeDialog": {
         "when": {
@@ -4645,7 +4649,16 @@
             "en": "No, do not lock order details"
           },
           "primaryAction": "cancel"
-        }
+        },
+        "progressDialog": {
+          "title": {
+            "en": ""
+          },
+          "message": {
+            "en": "Do not leave this page while we lock order information"
+          }
+        },
+        "suppressStatusFeedback": true
       }
     },
     {
@@ -4700,7 +4713,16 @@
             "en": "No, keep the Order details locked"
           },
           "primaryAction": "cancel"
-        }
+        },
+        "progressDialog": {
+          "title": {
+            "en": ""
+          },
+          "message": {
+            "en": "Do not leave this page while we un-lock order information"
+          }
+        },
+        "suppressStatusFeedback": true
       }
     }
   ],
@@ -4790,7 +4812,9 @@
           "limit": 100,
           "mapping": {
             "value": "NICKNAME"
-          }
+          },
+          "forceRefreshMaxCacheAgeMs": 86400000,
+          "forceRefreshCacheScope": "dataSource"
         },
         "changeDialog": {
           "when": {
@@ -7160,7 +7184,16 @@
               "en": "No, do not lock order details"
             },
             "primaryAction": "cancel"
-          }
+          },
+          "progressDialog": {
+            "title": {
+              "en": ""
+            },
+            "message": {
+              "en": "Do not leave this page while we lock order information"
+            }
+          },
+          "suppressStatusFeedback": true
         },
         "qEn": "Lock Order information",
         "qFr": "Lock Order information",
@@ -7218,7 +7251,16 @@
               "en": "No, keep the Order details locked"
             },
             "primaryAction": "cancel"
-          }
+          },
+          "progressDialog": {
+            "title": {
+              "en": ""
+            },
+            "message": {
+              "en": "Do not leave this page while we un-lock order information"
+            }
+          },
+          "suppressStatusFeedback": true
         }
       }
     ],
@@ -7528,7 +7570,9 @@
               "NICKNAME",
               "DIST_EMAIL",
               "DIST_NAME"
-            ]
+            ],
+            "forceRefreshMaxCacheAgeMs": 86400000,
+            "forceRefreshCacheScope": "dataSource"
           }
         }
       ],

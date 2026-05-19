@@ -390,6 +390,30 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(confirm?.primaryAction).toBe('cancel');
     };
 
+    const assertOrderLockProgressDialogs = (questions: any[]) => {
+      const lock = findQuestion(questions, 'MP_READY_FOR_PRODUCTION');
+      const unlock = findQuestion(questions, 'MP_UNLOCK_FOR_EDIT');
+      expect(lock?.button?.progressDialog?.title?.en).toBe('');
+      expect(lock?.button?.progressDialog?.message?.en).toBe(
+        'Do not leave this page while we lock order information'
+      );
+      expect(lock?.button?.suppressStatusFeedback).toBe(true);
+      expect(unlock?.button?.progressDialog?.title?.en).toBe('');
+      expect(unlock?.button?.progressDialog?.message?.en).toBe(
+        'Do not leave this page while we un-lock order information'
+      );
+      expect(unlock?.button?.suppressStatusFeedback).toBe(true);
+    };
+
+    const assertDistributorDataSourceCache = (root: any) => {
+      const distributorSources = collectObjects(root, (entry: any) => entry?.id === 'Distributor Data');
+      expect(distributorSources.length).toBeGreaterThan(0);
+      distributorSources.forEach((source: any) => {
+        expect(source.forceRefreshMaxCacheAgeMs).toBe(86400000);
+        expect(source.forceRefreshCacheScope).toBe('dataSource');
+      });
+    };
+
     const assertGuidedStepLayout = (root: any, questions: any[]) => {
       const items = Array.isArray(root?.steps?.items) ? root.steps.items : [];
       expect(root?.steps?.waitForUploadsDialog?.title?.en).toBe('');
@@ -994,6 +1018,9 @@ describe('staging integrity dialogs and list legend config', () => {
     assertSearchPresets(cfg.definition?.questions || []);
     assertUnlockDialog(cfg.questions);
     assertUnlockDialog(cfg.definition?.questions || []);
+    assertOrderLockProgressDialogs(cfg.questions);
+    assertOrderLockProgressDialogs(cfg.definition?.questions || []);
+    assertDistributorDataSourceCache(cfg);
     assertGuidedStepLayout(cfg.form, cfg.questions);
     assertGuidedStepLayout(cfg.definition, cfg.definition?.questions || []);
 

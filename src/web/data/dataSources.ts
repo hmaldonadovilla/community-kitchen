@@ -18,6 +18,7 @@ type FetchDataSourceOptions = {
   shouldCommit?: () => boolean;
   forceRefreshMaxCacheAgeMs?: number;
 };
+type ForceRefreshCacheScope = 'signature' | 'dataSource';
 const cache: Map<CacheKey, any> = new Map();
 const cacheSavedAtMs: Map<CacheKey, number> = new Map();
 const inflight: Map<CacheKey, Promise<any>> = new Map();
@@ -172,9 +173,20 @@ const deleteInMemoryCache = (cacheKey: CacheKey): void => {
   cacheSavedAtMs.delete(cacheKey);
 };
 
-const resolveForceRefreshMaxCacheAgeMs = (opts?: FetchDataSourceOptions): number | null => {
+const resolveForceRefreshMaxCacheAgeMs = (opts: FetchDataSourceOptions | undefined, config: DataSourceConfig): number | null => {
   const raw = Number(opts?.forceRefreshMaxCacheAgeMs);
-  return Number.isFinite(raw) && raw >= 0 ? raw : null;
+  if (Number.isFinite(raw) && raw >= 0) return raw;
+  const configRaw = Number((config as any)?.forceRefreshMaxCacheAgeMs);
+  if (Number.isFinite(configRaw) && configRaw >= 0) return configRaw;
+  const configMinutes = Number((config as any)?.forceRefreshMaxCacheAgeMinutes);
+  if (Number.isFinite(configMinutes) && configMinutes >= 0) return configMinutes * 60 * 1000;
+  return null;
+};
+
+const resolveForceRefreshCacheScope = (config: DataSourceConfig): ForceRefreshCacheScope => {
+  const raw = ((config as any)?.forceRefreshCacheScope || '').toString().trim().toLowerCase();
+  if (raw === 'datasource' || raw === 'data-source' || raw === 'data_source') return 'dataSource';
+  return 'signature';
 };
 
 const peekFreshInMemoryCache = (cacheKey: CacheKey, maxAgeMs: number | null): any | null => {
@@ -183,6 +195,92 @@ const peekFreshInMemoryCache = (cacheKey: CacheKey, maxAgeMs: number | null): an
   if (!Number.isFinite(savedAtMs)) return null;
   if (Date.now() - Number(savedAtMs) > maxAgeMs) return null;
   return cache.get(cacheKey) ?? null;
+};
+
+const isFreshSavedAt = (savedAtMs: number | null | undefined, maxAgeMs: number | null): boolean => {
+  if (maxAgeMs === null || !Number.isFinite(Number(savedAtMs))) return false;
+  return Date.now() - Number(savedAtMs) <= maxAgeMs;
+};
+
+const hasMorePages = (response: any): boolean =>
+  Boolean(response && typeof response === 'object' && typeof (response as any).nextPageToken === 'string' && (response as any).nextPageToken);
+
+const compareReusableDataSourceCandidates = (
+  a: { savedAtMs: number; itemCount: number; response: any },
+  b: { savedAtMs: number; itemCount: number; response: any }
+): number => {
+  const aPositive = a.itemCount > 0 ? 1 : 0;
+  const bPositive = b.itemCount > 0 ? 1 : 0;
+  if (aPositive !== bPositive) return bPositive - aPositive;
+  return b.savedAtMs - a.savedAtMs;
+};
+
+const peekFreshSiblingInMemoryCache = (
+  config: DataSourceConfig,
+  language: LangCode,
+  cacheKey: CacheKey,
+  maxAgeMs: number | null
+): { response: any; savedAtMs: number } | null => {
+  if (maxAgeMs === null || resolveForceRefreshCacheScope(config) !== 'dataSource') return null;
+  const idPart = (config?.id || 'default').toString();
+  const langPart = (language || 'EN').toString().toUpperCase();
+  const prefix = `${idPart}::${langPart}::${resolveClientCacheVersion()}::`;
+  const candidates: Array<{ savedAtMs: number; itemCount: number; response: any }> = [];
+  for (const [candidateKey, response] of cache.entries()) {
+    if (candidateKey === cacheKey) continue;
+    if (!candidateKey.startsWith(prefix)) continue;
+    if (!response || hasMorePages(response)) continue;
+    const savedAtMs = Number(cacheSavedAtMs.get(candidateKey));
+    if (!isFreshSavedAt(savedAtMs, maxAgeMs)) continue;
+    candidates.push({
+      savedAtMs,
+      itemCount: resolveCachedItemCount(response) ?? 0,
+      response
+    });
+  }
+  if (!candidates.length) return null;
+  candidates.sort(compareReusableDataSourceCandidates);
+  const best = candidates[0];
+  return best ? { response: best.response, savedAtMs: best.savedAtMs } : null;
+};
+
+const loadFreshSiblingPersistedEnvelope = (
+  config: DataSourceConfig,
+  language: LangCode,
+  cacheKey: CacheKey,
+  maxAgeMs: number | null
+): { response: any; savedAtMs: number | null } | null => {
+  if (maxAgeMs === null || resolveForceRefreshCacheScope(config) !== 'dataSource') return null;
+  if (!shouldUsePersistedCache(config)) return null;
+  if (typeof window === 'undefined' || !window.localStorage) return null;
+  try {
+    const exactKey = getPersistKey(config, language);
+    const prefix = getPersistKeyPrefix(config, language);
+    const candidates: Array<{ savedAtMs: number; itemCount: number; response: any }> = [];
+    for (let i = 0; i < window.localStorage.length; i += 1) {
+      const candidateKey = window.localStorage.key(i);
+      if (!candidateKey || candidateKey === exactKey || !candidateKey.startsWith(prefix)) continue;
+      const raw = window.localStorage.getItem(candidateKey);
+      if (!raw) continue;
+      const parsed = parsePersistEnvelope(raw);
+      if (!parsed || parsed.legacy || !parsed.response || hasMorePages(parsed.response)) continue;
+      const savedAtMs = Number(parsed.savedAtMs);
+      if (!isFreshSavedAt(savedAtMs, maxAgeMs)) continue;
+      candidates.push({
+        savedAtMs,
+        itemCount: resolveCachedItemCount(parsed.response) ?? 0,
+        response: parsed.response
+      });
+    }
+    if (!candidates.length) return null;
+    candidates.sort(compareReusableDataSourceCandidates);
+    const best = candidates[0];
+    if (!best) return null;
+    setInMemoryCache(cacheKey, best.response, best.savedAtMs);
+    return { response: best.response, savedAtMs: best.savedAtMs };
+  } catch {
+    return null;
+  }
 };
 
 const emitCacheUpdated = (config: DataSourceConfig, language: LangCode, itemCount: number): void => {
@@ -219,7 +317,7 @@ const prunePersistedSiblingKeys = (
   keysToRemove.forEach(candidate => {
     try {
       storage.removeItem(candidate);
-    } catch (_) {
+    } catch {
       // ignore
     }
   });
@@ -246,7 +344,7 @@ const loadPersistedEnvelope = (
     ) {
       try {
         window.localStorage.removeItem(targetKey);
-      } catch (_) {
+      } catch {
         // ignore
       }
       return null;
@@ -456,7 +554,7 @@ export async function fetchDataSource(
   const cacheKey = key(config, language);
   const mode = ((config as any)?.mode || '').toString().trim().toLowerCase();
   const autoPage = mode === 'options';
-  const forceRefreshMaxCacheAgeMs = resolveForceRefreshMaxCacheAgeMs(opts);
+  const forceRefreshMaxCacheAgeMs = resolveForceRefreshMaxCacheAgeMs(opts, config);
 
   if (opts?.forceRefresh && forceRefreshMaxCacheAgeMs !== null) {
     const freshCached = peekFreshInMemoryCache(cacheKey, forceRefreshMaxCacheAgeMs);
@@ -467,6 +565,35 @@ export async function fetchDataSource(
         itemCount: resolveCachedItemCount(freshCached) ?? 0
       });
       return freshCached;
+    }
+    const freshPersisted = loadPersistedEnvelope(config, language);
+    if (freshPersisted?.response && isFreshSavedAt(freshPersisted.savedAtMs, forceRefreshMaxCacheAgeMs)) {
+      setInMemoryCache(cacheKey, freshPersisted.response, freshPersisted.savedAtMs);
+      emitLog('info', '[DataSource] force refresh reused fresh persisted cache', {
+        id: config.id,
+        maxCacheAgeMs: forceRefreshMaxCacheAgeMs,
+        itemCount: resolveCachedItemCount(freshPersisted.response) ?? 0
+      });
+      return freshPersisted.response;
+    }
+    const freshSiblingCached = peekFreshSiblingInMemoryCache(config, language, cacheKey, forceRefreshMaxCacheAgeMs);
+    if (freshSiblingCached?.response) {
+      setInMemoryCache(cacheKey, freshSiblingCached.response, freshSiblingCached.savedAtMs);
+      emitLog('info', '[DataSource] force refresh reused fresh sibling cache', {
+        id: config.id,
+        maxCacheAgeMs: forceRefreshMaxCacheAgeMs,
+        itemCount: resolveCachedItemCount(freshSiblingCached.response) ?? 0
+      });
+      return freshSiblingCached.response;
+    }
+    const freshSiblingPersisted = loadFreshSiblingPersistedEnvelope(config, language, cacheKey, forceRefreshMaxCacheAgeMs);
+    if (freshSiblingPersisted?.response) {
+      emitLog('info', '[DataSource] force refresh reused fresh sibling persisted cache', {
+        id: config.id,
+        maxCacheAgeMs: forceRefreshMaxCacheAgeMs,
+        itemCount: resolveCachedItemCount(freshSiblingPersisted.response) ?? 0
+      });
+      return freshSiblingPersisted.response;
     }
   }
 

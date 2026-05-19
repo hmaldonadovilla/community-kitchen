@@ -79,7 +79,10 @@ import { useButtonTextWrapObserver } from './components/app/useButtonTextWrapObs
 import { useReadyForProductionUnlockConfig } from './components/app/useReadyForProductionUnlockConfig';
 import { useAppStatusTransitions } from './components/app/useAppStatusTransitions';
 import { useAppCustomButtons } from './components/app/useAppCustomButtons';
-import { pruneOptionStateForDataSource } from './app/dataSourceOptionState';
+import {
+  pruneOptionStateForDataSource,
+  shouldClearOptionStateAfterDataSourceCacheClear
+} from './app/dataSourceOptionState';
 import { useOpenUrlFieldAction } from './components/app/useOpenUrlFieldAction';
 import { useAppReportPreviewActions } from './components/app/useAppReportPreviewActions';
 import { useAppSubmitDialogConfig } from './components/app/useAppSubmitDialogConfig';
@@ -3962,8 +3965,14 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         });
       }
     };
-    const handleCleared = () => {
+    const handleCleared = (event: Event) => {
       bump();
+      if (!shouldClearOptionStateAfterDataSourceCacheClear(event)) {
+        logEvent('options.cacheSync.preserved', {
+          reason: 'dataSource.cache.memoryOnlyClear'
+        });
+        return;
+      }
       setOptionState({});
       setTooltipState({});
       logEvent('options.cacheSync.cleared');

@@ -1131,6 +1131,25 @@ export interface UpdateRecordButtonConfig {
   */
   dependencyGuard?: UpdateRecordDependencyGuardConfig;
   /**
+   * Optional blocking overlay copy while the update is running.
+   */
+  progressDialog?: {
+    title?: LocalizedString | string;
+    message?: LocalizedString | string;
+  };
+  /**
+   * Legacy alias for `progressDialog`.
+   */
+  waitDialog?: {
+    title?: LocalizedString | string;
+    message?: LocalizedString | string;
+  };
+  /**
+   * When true, suppress the form-level Saving/Saved status banner for this action.
+   * Error feedback is still shown.
+   */
+  suppressStatusFeedback?: boolean;
+  /**
    * When true, ensure a persisted draft record id exists before applying the update.
    *
    * Useful for create-flow buttons that mutate status immediately after the user completes
@@ -3480,6 +3499,19 @@ export interface DataSourceConfig {
    */
   persistMaxAgeMs?: number;
   persistMaxAgeMinutes?: number;
+  /**
+   * Optional max age for reusing a fresh cached response even when a caller asks for
+   * `forceRefresh`. Use this for stable master data that may be touched by generic
+   * sync effects but should not refetch during ordinary form edits.
+   */
+  forceRefreshMaxCacheAgeMs?: number;
+  forceRefreshMaxCacheAgeMinutes?: number;
+  /**
+   * Scope used when reusing a fresh cached response for a forced refresh.
+   * - signature (default): only reuse the exact datasource configuration.
+   * - dataSource: allow another fresh projection for the same datasource id/language/cache version.
+   */
+  forceRefreshCacheScope?: 'signature' | 'dataSource';
   formKey?: string; // optional form key when sourcing from another form's submissions
   sheetId?: string; // optional sheet id when sourcing from another file
   tabName?: string; // tab name for the source table

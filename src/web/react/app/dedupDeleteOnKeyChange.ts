@@ -2,9 +2,6 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react';
 
 import type { FieldValue, LangCode, WebFormDefinition, WebFormSubmission } from '../../types';
 import type { LineItemState, OptionState } from '../types';
-import { invalidateClientSharedDataCaches } from '../api';
-import { clearHomeListLocalCache } from './homeListLocalCache';
-import { clearDateSearchLocalCacheFamily } from './dateSearchLocalCache';
 import {
   buildDraftPayload,
   resolveExistingRecordId
@@ -15,6 +12,7 @@ import { applyValueMapsToForm } from './valueMaps';
 import { reconcileAutoAddModeGroups } from './autoAddModeOverlay';
 import { computeDedupKeyFingerprint } from './dedupPrecheck';
 import { isDeleteOnKeyChangeSettledForRecord } from './dedupRaceGuards';
+import { clearCachesAfterDedupDeleteOnKeyChange } from './dedupDeleteOnKeyChangeCache';
 
 type DiagnosticLogger = (event: string, payload?: Record<string, unknown>) => void;
 
@@ -125,8 +123,6 @@ export const triggerDedupDeleteOnKeyChangeAction = async (args: {
     autoSaveUserEditedRef,
     dedupBaselineSignatureRef,
     optionStateRef,
-    tooltipStateRef,
-    preloadPromisesRef,
     homeListLocalCacheKey,
     setSelectedRecordId,
     setSelectedRecordSnapshot,
@@ -140,8 +136,6 @@ export const triggerDedupDeleteOnKeyChangeAction = async (args: {
     setValidationWarnings,
     setValidationAttempted,
     setValidationNoticeHidden,
-    setOptionState,
-    setTooltipState,
     waitForActiveDraftSaveTransactions,
     submitCurrentRecordMutation,
     rememberAutoSaveSeenState,
@@ -365,30 +359,13 @@ export const triggerDedupDeleteOnKeyChangeAction = async (args: {
     setValidationWarnings({ top: [], byField: {} });
     setValidationAttempted(false);
     setValidationNoticeHidden(false);
-    try {
-      invalidateClientSharedDataCaches({
-        includePersistedDataSources: true,
-        includeHtmlRenderCache: true
-      });
-      clearHomeListLocalCache(homeListLocalCacheKey);
-      clearDateSearchLocalCacheFamily({ formKey, listView: definition.listView });
-      setOptionState({});
-      setTooltipState({});
-      optionStateRef.current = {};
-      tooltipStateRef.current = {};
-      preloadPromisesRef.current = {};
-      logEvent('cache.client.clear', {
-        scope: 'dedupDeleteOnKeyChange',
-        recordId: existingRecordId,
-        optionsCleared: true
-      });
-    } catch (cacheErr: any) {
-      logEvent('cache.client.clear.error', {
-        scope: 'dedupDeleteOnKeyChange',
-        recordId: existingRecordId,
-        message: cacheErr?.message || cacheErr?.toString?.() || 'unknown'
-      });
-    }
+    clearCachesAfterDedupDeleteOnKeyChange({
+      definition,
+      formKey,
+      homeListLocalCacheKey,
+      recordId: existingRecordId,
+      logEvent
+    });
 
     logEvent('dedupDeleteOnKeyChange.delete.success', {
       source,

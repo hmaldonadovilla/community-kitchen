@@ -454,15 +454,28 @@
       var unit = toText(values.LEFTOVER_UNIT || '');
       return unit ? qty + ' ' + unit : qty;
     };
-    var buildGeneratedLeftoverLabel = function (entry) {
+    var resolveGeneratedLeftoverDisplayId = function (entry, fallbackCounters) {
       var values = entry && typeof entry.values === 'object' ? entry.values : {};
       var leftoverId = toText(values.LEFTOVER_ID || (entry && entry.recordId) || '');
+      if (leftoverId) return leftoverId;
       var rawKind = toText(values.LEFTOVER_KIND || '');
       var kind = toCanonicalLeftoverKind(rawKind);
+      if (kind === MULTI_INGREDIENT_LEFTOVER_KIND && fallbackCounters) {
+        fallbackCounters.mi += 1;
+        return 'MI-' + fallbackCounters.mi;
+      }
+      if (kind === SINGLE_INGREDIENT_LEFTOVER_KIND && fallbackCounters) {
+        fallbackCounters.si += 1;
+        return 'SI-' + fallbackCounters.si;
+      }
+      return kind;
+    };
+    var buildGeneratedLeftoverLabel = function (entry, displayId) {
+      var values = entry && typeof entry.values === 'object' ? entry.values : {};
       var recipe = toText(values.LEFTOVER_RECIPE || '');
       var ingredient = toText(values.LEFTOVER_INGREDIENT || '');
       var quantity = formatGeneratedLeftoverQuantity(values);
-      return [leftoverId || kind, recipe || ingredient, quantity].filter(Boolean).join(' | ');
+      return [displayId, recipe || ingredient, quantity].filter(Boolean).join(' | ');
     };
     var collectIngredientNames = function (value, out) {
       if (value === undefined || value === null) return;
@@ -521,11 +534,10 @@
       var numericValue = Number(text.replace(/,/g, '.'));
       return Number.isFinite(numericValue) ? numericValue > 0 : true;
     };
-    var appendGeneratedLeftoverEntry = function (entry, seenIds) {
+    var appendGeneratedLeftoverEntry = function (entry, seenIds, fallbackCounters) {
       if (!generatedList) return;
-      var values = entry && typeof entry.values === 'object' ? entry.values : {};
-      var leftoverId = toText(values.LEFTOVER_ID || (entry && entry.recordId) || '');
-      var label = buildGeneratedLeftoverLabel(entry);
+      var leftoverId = resolveGeneratedLeftoverDisplayId(entry, fallbackCounters);
+      var label = buildGeneratedLeftoverLabel(entry, leftoverId);
       if (!label) return;
       var key = leftoverId || label;
       if (key && seenIds[key]) return;
@@ -1266,15 +1278,17 @@
             ? generatedByTarget['Config: Leftover Bank']
             : [];
           var seenIds = {};
+          var generatedFallbackCounters = { mi: 0, si: 0 };
           leftoverRows.forEach(function (entry) {
             var values = entry && typeof entry.values === 'object' ? entry.values : {};
             var leftoverId = toText(values.LEFTOVER_ID || entry.recordId || '');
-            if (!leftoverId || seenIds[leftoverId]) return;
-            appendGeneratedLeftoverEntry(entry, seenIds);
+            if (leftoverId && seenIds[leftoverId]) return;
+            appendGeneratedLeftoverEntry(entry, seenIds, generatedFallbackCounters);
           });
           if (!generatedList.children.length) {
+            var sourceFallbackCounters = { mi: 0, si: 0 };
             collectSourceGeneratedLeftovers().forEach(function (entry) {
-              appendGeneratedLeftoverEntry(entry, seenIds);
+              appendGeneratedLeftoverEntry(entry, seenIds, sourceFallbackCounters);
             });
           }
           if (generatedList.children.length) {
@@ -1282,8 +1296,9 @@
           }
         } else {
           var fallbackSeenIds = {};
+          var fallbackCounters = { mi: 0, si: 0 };
           collectSourceGeneratedLeftovers().forEach(function (entry) {
-            appendGeneratedLeftoverEntry(entry, fallbackSeenIds);
+            appendGeneratedLeftoverEntry(entry, fallbackSeenIds, fallbackCounters);
           });
           if (generatedList.children.length) {
             generatedSection.classList.remove('ck-hidden');

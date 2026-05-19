@@ -222,6 +222,73 @@ describe('web dataSources persistence', () => {
     expect(result?.items?.[0]?.id).toBe('recipe-1');
   });
 
+  it('honors datasource-level max age when force refresh is requested', async () => {
+    const localStorage = createLocalStorageMock();
+    (globalThis as any).window = { localStorage };
+    const tracker = installGoogleScriptRunMock(() => ({ items: [{ id: 'hub' }] }));
+
+    const { fetchDataSource, clearFetchDataSourceCache } = await import('../../../src/web/data/dataSources');
+    clearFetchDataSourceCache();
+
+    const cfg = { id: 'Distributor Data', forceRefreshMaxCacheAgeMs: 120000 } as any;
+    await fetchDataSource(cfg, 'EN', { forceRefresh: true });
+    const result = await fetchDataSource(cfg, 'EN', { forceRefresh: true });
+
+    expect(tracker.getCallCount()).toBe(1);
+    expect(result?.items?.[0]?.id).toBe('hub');
+  });
+
+  it('keeps force-refresh cache reuse scoped to the exact signature by default', async () => {
+    const localStorage = createLocalStorageMock();
+    (globalThis as any).window = { localStorage };
+    const tracker = installGoogleScriptRunMock(cfg => ({ items: [{ projection: cfg?.projection || null }] }));
+
+    const { fetchDataSource, clearFetchDataSourceCache } = await import('../../../src/web/data/dataSources');
+    clearFetchDataSourceCache();
+
+    const fullOptions = {
+      id: 'Distributor Data',
+      projection: ['DIST_NAME', 'NICKNAME'],
+      forceRefreshMaxCacheAgeMs: 120000
+    } as any;
+    const emailProjection = {
+      id: 'Distributor Data',
+      projection: ['NICKNAME', 'DIST_EMAIL'],
+      forceRefreshMaxCacheAgeMs: 120000
+    } as any;
+    await fetchDataSource(fullOptions, 'EN', { forceRefresh: true });
+    await fetchDataSource(emailProjection, 'EN', { forceRefresh: true });
+
+    expect(tracker.getCallCount()).toBe(2);
+  });
+
+  it('can reuse a fresh sibling projection for stable datasource-level force refreshes', async () => {
+    const localStorage = createLocalStorageMock();
+    (globalThis as any).window = { localStorage };
+    const tracker = installGoogleScriptRunMock(cfg => ({ items: [{ projection: cfg?.projection || null }] }));
+
+    const { fetchDataSource, clearFetchDataSourceCache } = await import('../../../src/web/data/dataSources');
+    clearFetchDataSourceCache();
+
+    const fullOptions = {
+      id: 'Distributor Data',
+      projection: ['DIST_NAME', 'NICKNAME'],
+      forceRefreshMaxCacheAgeMs: 120000,
+      forceRefreshCacheScope: 'dataSource'
+    } as any;
+    const emailProjection = {
+      id: 'Distributor Data',
+      projection: ['NICKNAME', 'DIST_EMAIL'],
+      forceRefreshMaxCacheAgeMs: 120000,
+      forceRefreshCacheScope: 'dataSource'
+    } as any;
+    await fetchDataSource(fullOptions, 'EN', { forceRefresh: true });
+    const result = await fetchDataSource(emailProjection, 'EN', { forceRefresh: true });
+
+    expect(tracker.getCallCount()).toBe(1);
+    expect(result?.items?.[0]?.projection).toEqual(['DIST_NAME', 'NICKNAME']);
+  });
+
   it('refreshes again when bounded force refresh cache is too old', async () => {
     const localStorage = createLocalStorageMock();
     (globalThis as any).window = { localStorage };

@@ -447,6 +447,7 @@ const resolveTodayIso = (): string => {
 };
 
 const resolvePipelineDateInputId = (dashboardPipelineId: string): string => `pipeline-date-${dashboardPipelineId}`;
+const PIPELINE_NOTICE_VISIBLE_MS = 3000;
 
 const readPipelineDateInputValue = (dashboardPipelineId: string): string => {
   if (typeof document === 'undefined') return '';
@@ -491,6 +492,28 @@ const AnalyticsPage: React.FC = () => {
   const [focusedPipelineId, setFocusedPipelineId] = useState<string | null>(null);
   const pendingPipelineIdsRef = useRef<Set<string>>(new Set());
   const pointerSubmittedPipelineIdRef = useRef<string | null>(null);
+  const pipelineNoticeTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  const clearPipelineNoticeTimer = (dashboardPipelineId: string): void => {
+    const timer = pipelineNoticeTimersRef.current[dashboardPipelineId];
+    if (!timer) return;
+    clearTimeout(timer);
+    delete pipelineNoticeTimersRef.current[dashboardPipelineId];
+  };
+
+  const showPipelineNotice = (dashboardPipelineId: string, notice: string): void => {
+    clearPipelineNoticeTimer(dashboardPipelineId);
+    setPipelineNotices(prev => ({ ...prev, [dashboardPipelineId]: notice }));
+    pipelineNoticeTimersRef.current[dashboardPipelineId] = setTimeout(() => {
+      delete pipelineNoticeTimersRef.current[dashboardPipelineId];
+      setPipelineNotices(prev => {
+        if (!prev[dashboardPipelineId]) return prev;
+        const next = { ...prev };
+        delete next[dashboardPipelineId];
+        return next;
+      });
+    }, PIPELINE_NOTICE_VISIBLE_MS);
+  };
 
   useEffect(() => {
     if (bootstrappedPayload) {
@@ -533,6 +556,13 @@ const AnalyticsPage: React.FC = () => {
     };
   }, [adminEnabled, bootstrappedPayload]);
 
+  useEffect(() => {
+    return () => {
+      Object.values(pipelineNoticeTimersRef.current).forEach(timer => clearTimeout(timer));
+      pipelineNoticeTimersRef.current = {};
+    };
+  }, []);
+
   const backUrl = useMemo(() => buildLandingUrl(serviceUrl, adminEnabled), [adminEnabled, serviceUrl]);
   const updatedAt = (payload?.updatedAt || '').toString().trim();
   const sections = Array.isArray(payload?.sections) ? payload.sections : [];
@@ -564,7 +594,16 @@ const AnalyticsPage: React.FC = () => {
         startDate
       });
       const notice = (result?.message || pipeline.queuedNotice || '').toString().trim();
-      setPipelineNotices(prev => ({ ...prev, [dashboardPipelineId]: notice }));
+      if (notice) {
+        showPipelineNotice(dashboardPipelineId, notice);
+      } else {
+        clearPipelineNoticeTimer(dashboardPipelineId);
+        setPipelineNotices(prev => {
+          const next = { ...prev };
+          delete next[dashboardPipelineId];
+          return next;
+        });
+      }
       setPipelineDates(prev => ({ ...prev, [dashboardPipelineId]: '' }));
       logEvent('dashboard.pipeline.queue.success', {
         ownerFormKey: pipeline.ownerFormKey,

@@ -78,6 +78,7 @@ export type UpdateRecordActionRequest = {
   busyTitle?: string;
   busyMessage?: string;
   submitMode?: 'default' | 'dependencyGuard';
+  suppressStatusFeedback?: boolean;
 };
 
 export type UpdateRecordActionDeps = {
@@ -311,9 +312,17 @@ export async function runUpdateRecordAction(deps: UpdateRecordActionDeps, req: U
       });
     }
 
-    deps.setDraftSave({ phase: 'saving' });
-    deps.setStatus(deps.tSystem('actions.saving', language, 'Saving…'));
-    deps.setStatusLevel('info');
+    if (!req.suppressStatusFeedback) {
+      deps.setDraftSave({ phase: 'saving' });
+      deps.setStatus(deps.tSystem('actions.saving', language, 'Saving…'));
+      deps.setStatusLevel('info');
+    } else {
+      deps.logEvent('button.updateRecord.statusFeedback.suppressed', {
+        buttonId: req.buttonId,
+        qIdx: req.qIdx ?? null,
+        phase: 'saving'
+      });
+    }
     deps.busy.setMessage(busySeq, busyMessage);
 
     try {
@@ -508,9 +517,17 @@ export async function runUpdateRecordAction(deps: UpdateRecordActionDeps, req: U
         rowNumber: nextRowNumber
       });
 
-      deps.setDraftSave({ phase: 'saved', updatedAt });
-      deps.setStatus(deps.tSystem('actions.saved', language, 'Saved.'));
-      deps.setStatusLevel('success');
+      if (!req.suppressStatusFeedback) {
+        deps.setDraftSave({ phase: 'saved', updatedAt });
+        deps.setStatus(deps.tSystem('actions.saved', language, 'Saved.'));
+        deps.setStatusLevel('success');
+      } else {
+        deps.logEvent('button.updateRecord.statusFeedback.suppressed', {
+          buttonId: req.buttonId,
+          qIdx: req.qIdx ?? null,
+          phase: 'saved'
+        });
+      }
 
       deps.logEvent('button.updateRecord.success', {
         buttonId: req.buttonId,

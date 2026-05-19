@@ -206,4 +206,33 @@ describe('runUpdateRecordAction', () => {
       MP_DISTRIBUTOR: 'Le Phare'
     });
   });
+
+  test('can suppress non-error Saving/Saved banner for blocking update actions', async () => {
+    const { deps, refs, logEvent } = buildDeps();
+    refs.selectedRecordIdRef.current = 'rec-1';
+    refs.lastSubmissionMetaRef.current = { id: 'rec-1', status: 'In progress', dataVersion: 1 };
+
+    await runUpdateRecordAction(deps, {
+      buttonId: 'MP_READY_FOR_PRODUCTION',
+      buttonRef: 'MP_READY_FOR_PRODUCTION',
+      navigateTo: 'form',
+      set: { values: { ORDER_LOCKED: 'Yes' } },
+      suppressStatusFeedback: true
+    });
+
+    expect(deps.setDraftSave).not.toHaveBeenCalledWith({ phase: 'saving' });
+    expect(deps.setDraftSave).not.toHaveBeenCalledWith(expect.objectContaining({ phase: 'saved' }));
+    expect(deps.setStatus).not.toHaveBeenCalledWith('Saving…');
+    expect(deps.setStatus).not.toHaveBeenCalledWith('Saved.');
+    expect(deps.setStatusLevel).not.toHaveBeenCalledWith('info');
+    expect(deps.setStatusLevel).not.toHaveBeenCalledWith('success');
+    expect(logEvent).toHaveBeenCalledWith(
+      'button.updateRecord.statusFeedback.suppressed',
+      expect.objectContaining({ buttonId: 'MP_READY_FOR_PRODUCTION', phase: 'saving' })
+    );
+    expect(logEvent).toHaveBeenCalledWith(
+      'button.updateRecord.statusFeedback.suppressed',
+      expect.objectContaining({ buttonId: 'MP_READY_FOR_PRODUCTION', phase: 'saved' })
+    );
+  });
 });
