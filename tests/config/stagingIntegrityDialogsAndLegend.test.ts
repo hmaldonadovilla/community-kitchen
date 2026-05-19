@@ -383,10 +383,11 @@ describe('staging integrity dialogs and list legend config', () => {
       const unlock = findQuestion(questions, 'MP_UNLOCK_FOR_EDIT');
       const confirm = unlock?.button?.confirm;
       expect(confirm?.message?.en).toBe(
-        'Unlocking record will allow any user to edit Order information. Do you wish to continue?'
+        'Unlock order details?\nUnlocking will allow any user to change Order details. Do you wish to continue?'
       );
-      expect(confirm?.confirmLabel?.en).toBe('Unlock record for editing');
-      expect(confirm?.cancelLabel?.en).toBe('Cancel, keep the record locked');
+      expect(confirm?.confirmLabel?.en).toBe('Yes, unlock and allow changes');
+      expect(confirm?.cancelLabel?.en).toBe('No, keep the Order details locked');
+      expect(confirm?.primaryAction).toBe('cancel');
     };
 
     const assertGuidedStepLayout = (root: any, questions: any[]) => {

@@ -688,7 +688,10 @@
             },
             {
               "kind": "question",
-              "id": "MP_READY_FOR_PRODUCTION"
+              "id": "MP_READY_FOR_PRODUCTION",
+              "qEn": "Lock Order information",
+              "qFr": "Lock Order information",
+              "qNl": "Lock Order information"
             }
           ],
           "label": {
@@ -2178,8 +2181,8 @@
         "when": {
           "all": [
             {
-              "fieldId": "status",
-              "equals": "In production"
+              "fieldId": "MP_ORDER_LOCKED",
+              "equals": "Yes"
             },
             {
               "fieldId": "__ckStep",
@@ -2188,7 +2191,9 @@
           ]
         },
         "bypassFields": [],
-        "unlockStatus": "In progress"
+        "unlockSet": {
+          "MP_ORDER_LOCKED": ""
+        }
       }
     ],
     "listViewRowClickEnabled": false
@@ -4570,11 +4575,31 @@
       }
     },
     {
+      "id": "MP_ORDER_LOCKED",
+      "type": "TEXT",
+      "qEn": "Order details locked",
+      "required": false,
+      "listView": false,
+      "options": [],
+      "status": "Active",
+      "ui": {
+        "summaryVisibility": "never"
+      },
+      "visibility": {
+        "showWhen": {
+          "fieldId": "NEVER_SHOW",
+          "equals": [
+            "1"
+          ]
+        }
+      }
+    },
+    {
       "id": "MP_READY_FOR_PRODUCTION",
       "type": "BUTTON",
-      "qEn": "Ready for Production",
-      "qFr": "Ready for Production",
-      "qNl": "Ready for Production",
+      "qEn": "Lock Order information",
+      "qFr": "Lock Order information",
+      "qNl": "Lock Order information",
       "required": false,
       "listView": false,
       "options": [],
@@ -4589,8 +4614,10 @@
               "equals": "orderInfo"
             },
             {
-              "fieldId": "status",
-              "equals": "In progress"
+              "not": {
+                "fieldId": "MP_ORDER_LOCKED",
+                "equals": "Yes"
+              }
             }
           ]
         }
@@ -4602,25 +4629,22 @@
         ],
         "tone": "primary",
         "set": {
-          "status": "In production"
+          "values": {
+            "MP_ORDER_LOCKED": "Yes"
+          }
         },
         "navigateTo": "form",
         "confirm": {
           "message": {
-            "en": "You are about to lock the customer, service, production date and ordered quantities. Once locked:\n- these fields can no longer be changed\n- production data will be protected from accidental deletion\n- This action cannot be undone.\nDo you want to continue?",
-            "fr": "You are about to lock the customer, service, production date and ordered quantities. Once locked:\n- these fields can no longer be changed\n- production data will be protected from accidental deletion\n- This action cannot be undone.\nDo you want to continue?",
-            "nl": "You are about to lock the customer, service, production date and ordered quantities. Once locked:\n- these fields can no longer be changed\n- production data will be protected from accidental deletion\n- This action cannot be undone.\nDo you want to continue?"
+            "en": "Lock order details?\nCustomer, date, service, reponsible cook, and ordered portions cannot be changed if you lock. Do you wish to continue?"
           },
           "confirmLabel": {
-            "en": "Yes, lock for production",
-            "fr": "Yes, lock for production",
-            "nl": "Yes, lock for production"
+            "en": "Yes, lock order details"
           },
           "cancelLabel": {
-            "en": "Cancel",
-            "fr": "Cancel",
-            "nl": "Cancel"
-          }
+            "en": "No, do not lock order details"
+          },
+          "primaryAction": "cancel"
         }
       }
     },
@@ -4640,8 +4664,8 @@
         "showWhen": {
           "all": [
             {
-              "fieldId": "status",
-              "equals": "In production"
+              "fieldId": "MP_ORDER_LOCKED",
+              "equals": "Yes"
             },
             {
               "fieldId": "__ckRequestParam_admin",
@@ -4660,19 +4684,22 @@
           "summaryBar"
         ],
         "set": {
-          "status": "In progress"
+          "values": {
+            "MP_ORDER_LOCKED": ""
+          }
         },
         "navigateTo": "form",
         "confirm": {
           "message": {
-            "en": "Unlock this record to return it to In progress so you can edit order details again?"
+            "en": "Unlock order details?\nUnlocking will allow any user to change Order details. Do you wish to continue?"
           },
           "confirmLabel": {
-            "en": "Unlock and edit"
+            "en": "Yes, unlock and allow changes"
           },
           "cancelLabel": {
-            "en": "Cancel"
-          }
+            "en": "No, keep the Order details locked"
+          },
+          "primaryAction": "cancel"
         }
       }
     }
@@ -7065,12 +7092,32 @@
         }
       },
       {
+        "id": "MP_ORDER_LOCKED",
+        "type": "TEXT",
+        "qEn": "Order details locked",
+        "required": false,
+        "listView": false,
+        "options": [],
+        "status": "Active",
+        "ui": {
+          "summaryVisibility": "never"
+        },
+        "visibility": {
+          "showWhen": {
+            "fieldId": "NEVER_SHOW",
+            "equals": [
+              "1"
+            ]
+          }
+        }
+      },
+      {
         "id": "MP_READY_FOR_PRODUCTION",
         "type": "BUTTON",
         "label": {
-          "en": "Ready for Production",
-          "fr": "Ready for Production",
-          "nl": "Ready for Production"
+          "en": "Lock Order information",
+          "fr": "Lock Order information",
+          "nl": "Lock Order information"
         },
         "required": false,
         "listView": false,
@@ -7082,8 +7129,10 @@
                 "equals": "orderInfo"
               },
               {
-                "fieldId": "status",
-                "equals": "In progress"
+                "not": {
+                  "fieldId": "MP_ORDER_LOCKED",
+                  "equals": "Yes"
+                }
               }
             ]
           }
@@ -7095,27 +7144,27 @@
           ],
           "tone": "primary",
           "set": {
-            "status": "In production"
+            "values": {
+              "MP_ORDER_LOCKED": "Yes"
+            }
           },
           "navigateTo": "form",
           "confirm": {
             "message": {
-              "en": "You are about to lock the customer, service, production date and ordered quantities. Once locked:\n- these fields can no longer be changed\n- production data will be protected from accidental deletion\n- This action cannot be undone.\nDo you want to continue?",
-              "fr": "You are about to lock the customer, service, production date and ordered quantities. Once locked:\n- these fields can no longer be changed\n- production data will be protected from accidental deletion\n- This action cannot be undone.\nDo you want to continue?",
-              "nl": "You are about to lock the customer, service, production date and ordered quantities. Once locked:\n- these fields can no longer be changed\n- production data will be protected from accidental deletion\n- This action cannot be undone.\nDo you want to continue?"
+              "en": "Lock order details?\nCustomer, date, service, reponsible cook, and ordered portions cannot be changed if you lock. Do you wish to continue?"
             },
             "confirmLabel": {
-              "en": "Yes, lock for production",
-              "fr": "Yes, lock for production",
-              "nl": "Yes, lock for production"
+              "en": "Yes, lock order details"
             },
             "cancelLabel": {
-              "en": "Cancel",
-              "fr": "Cancel",
-              "nl": "Cancel"
-            }
+              "en": "No, do not lock order details"
+            },
+            "primaryAction": "cancel"
           }
-        }
+        },
+        "qEn": "Lock Order information",
+        "qFr": "Lock Order information",
+        "qNl": "Lock Order information"
       },
       {
         "id": "MP_UNLOCK_FOR_EDIT",
@@ -7133,8 +7182,8 @@
           "showWhen": {
             "all": [
               {
-                "fieldId": "status",
-                "equals": "In production"
+                "fieldId": "MP_ORDER_LOCKED",
+                "equals": "Yes"
               },
               {
                 "fieldId": "__ckRequestParam_admin",
@@ -7153,19 +7202,22 @@
             "summaryBar"
           ],
           "set": {
-            "status": "In progress"
+            "values": {
+              "MP_ORDER_LOCKED": ""
+            }
           },
           "navigateTo": "form",
           "confirm": {
             "message": {
-              "en": "Unlock this record to return it to In progress so you can edit order details again?"
+              "en": "Unlock order details?\nUnlocking will allow any user to change Order details. Do you wish to continue?"
             },
             "confirmLabel": {
-              "en": "Unlock and edit"
+              "en": "Yes, unlock and allow changes"
             },
             "cancelLabel": {
-              "en": "Cancel"
-            }
+              "en": "No, keep the Order details locked"
+            },
+            "primaryAction": "cancel"
           }
         }
       }
@@ -7814,7 +7866,10 @@
             },
             {
               "kind": "question",
-              "id": "MP_READY_FOR_PRODUCTION"
+              "id": "MP_READY_FOR_PRODUCTION",
+              "qEn": "Lock Order information",
+              "qFr": "Lock Order information",
+              "qNl": "Lock Order information"
             }
           ],
           "label": {
@@ -9316,8 +9371,8 @@
         "when": {
           "all": [
             {
-              "fieldId": "status",
-              "equals": "In production"
+              "fieldId": "MP_ORDER_LOCKED",
+              "equals": "Yes"
             },
             {
               "fieldId": "__ckStep",
@@ -9326,7 +9381,9 @@
           ]
         },
         "bypassFields": [],
-        "unlockStatus": "In progress"
+        "unlockSet": {
+          "MP_ORDER_LOCKED": ""
+        }
       }
     ]
   },

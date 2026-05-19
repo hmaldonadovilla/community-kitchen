@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import {
   shouldHideField,
   optionKey,
+  peekOptionsFromDataSource,
   toOptionSet
 } from '../../core';
 import { resolveLocalizedString, resolveOptionalLocalizedString } from '../../i18n';
@@ -5232,7 +5233,7 @@ const FormView: React.FC<FormViewProps> = ({
 
   const renderOptions = (q: WebQuestionDefinition): OptionSet => {
     ensureOptions(q);
-    return optionState[optionKey(q.id)] || toOptionSet(q);
+    return optionState[optionKey(q.id)] || peekOptionsFromDataSource(q.dataSource, language) || toOptionSet(q);
   };
 
   const guidedRecordReferenceText = (() => {

@@ -24,7 +24,8 @@ import { aggregateGeneratedBankReport, type GeneratedBankReportSheet } from './g
 import {
   buildAnalyticsReportTemplatePlaceholders,
   normalizeIngredientUsageAggregateQuantity,
-  normalizeIngredientUsageQuantity
+  normalizeIngredientUsageQuantity,
+  roundReportQuantity
 } from './reportFormatting';
 
 const XLSX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -562,7 +563,7 @@ export class AnalyticsPipelineService {
         category: ''
       };
       current.quantity += normalized.quantity;
-      current.quantity = Math.round(current.quantity * 1_000_000) / 1_000_000;
+      current.quantity = roundReportQuantity(current.quantity);
       if (!current.category && row.category) current.category = row.category;
       finalGrouped.set(key, current);
     });

@@ -8,6 +8,7 @@ import {
   loadOptionsFromDataSource,
   mergeOptionStateValue,
   optionKey,
+  peekOptionsFromDataSource,
   toDependencyValue,
   toOptionSet
 } from '../../../../core';
@@ -461,7 +462,9 @@ export const LineItemGroupOverlayPortal: React.FC<LineItemGroupOverlayPortalProp
               const key = optionKey(anchorField.id, groupId);
               let opts = optionState[key];
               if (!opts && anchorField.dataSource) {
-                const loaded = await loadOptionsFromDataSource(anchorField.dataSource, language);
+                const loaded =
+                  peekOptionsFromDataSource(anchorField.dataSource, language) ||
+                  (await loadOptionsFromDataSource(anchorField.dataSource, language));
                 if (loaded) {
                   opts = loaded;
                   setOptionState(prev => mergeOptionStateValue(prev, anchorField.id, groupId, loaded));

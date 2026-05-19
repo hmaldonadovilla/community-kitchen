@@ -1,6 +1,6 @@
 import { DataSourceConfig, OptionMapRefConfig, SheetColumnRef } from '../../types';
 import { FieldValue, LangCode, OptionSet } from '../types';
-import { fetchDataSource, peekCachedDataSourcesById } from '../data/dataSources';
+import { fetchDataSource, peekCachedDataSource, peekCachedDataSourcesById } from '../data/dataSources';
 
 const DEFAULT_SPLIT_REGEX = /[,;\n]/;
 const SUPPORTED_LANGUAGES: LangCode[] = ['EN', 'FR', 'NL'];
@@ -300,6 +300,122 @@ export const buildOptionSet = (values: string[]): OptionSet | null => {
   return { en: unique, fr: unique, nl: unique };
 };
 
+export const optionSetFromDataSourceResponse = (
+  dataSource: DataSourceConfig | undefined,
+  response: unknown
+): OptionSet | null => {
+  if (!dataSource) return null;
+  const items = Array.isArray((response as any)?.items) ? (response as any).items : Array.isArray(response) ? response : [];
+  if (!items.length) return null;
+  const firstItem = items[0];
+  if (firstItem === null || typeof firstItem !== 'object') {
+    const primitiveValues = items
+      .map((value: any) => (value === null || value === undefined ? '' : value.toString()))
+      .filter(Boolean);
+    return buildOptionSet(primitiveValues);
+  }
+  const mapping = dataSource?.mapping || {};
+  const projection = Array.isArray(dataSource?.projection) ? dataSource?.projection : [];
+  const candidateKeys = Object.keys(firstItem);
+
+  const findMappingKey = (target: string): string | undefined =>
+    Object.entries(mapping).find(([, mapped]) => mapped === target)?.[0] ||
+    (mapping as any)[target];
+
+  const pickValueKey = (): string | undefined => {
+    const mappedValueKey = findMappingKey('value');
+    const mappedIdKey = findMappingKey('id');
+    if (mappedValueKey) return mappedValueKey;
+    if (mappedIdKey) return mappedIdKey;
+
+    // Prefer projection order when it contains a likely label column.
+    const preferredOrder = [
+      ...projection,
+      'Dish Name',
+      'Name',
+      'Label',
+      'Description',
+      'Title',
+      'value',
+      'id'
+    ].map(k => k.toString());
+
+    const firstStringKey = preferredOrder.find(key => {
+      if (!candidateKeys.includes(key)) return false;
+      const sample = (firstItem as any)?.[key];
+      return sample !== null && sample !== undefined && typeof sample === 'string';
+    });
+    if (firstStringKey) return firstStringKey;
+
+    const anyStringKey = candidateKeys.find(key => typeof (firstItem as any)?.[key] === 'string');
+    if (anyStringKey) return anyStringKey;
+
+    const firstPrimitive = candidateKeys.find(key => {
+      const sampleValue = (firstItem as any)?.[key];
+      return sampleValue !== null && sampleValue !== undefined && typeof sampleValue !== 'object';
+    });
+    return firstPrimitive || candidateKeys[0];
+  };
+
+  const valueKey = pickValueKey();
+  if (!valueKey) return null;
+  const labelKey = (() => {
+    const mappedLabelKey = findMappingKey('label');
+    if (!mappedLabelKey) return '';
+    return candidateKeys.includes(mappedLabelKey) ? mappedLabelKey : '';
+  })();
+  const tooltips: Record<string, string> = {};
+  const rawWithValue = items.map((row: any) => {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) return row;
+    const rawVal = row?.[valueKey];
+    const val = rawVal === null || rawVal === undefined ? '' : rawVal.toString().trim();
+    if (!val) return row;
+    const rawLabel = labelKey ? row?.[labelKey] : undefined;
+    const label = rawLabel === null || rawLabel === undefined ? '' : rawLabel.toString().trim();
+    return {
+      ...row,
+      __ckOptionValue: val,
+      ...(label ? { __ckOptionLabel: label } : {})
+    };
+  });
+  const mappedValues = items
+    .map((row: any) => {
+      const rawVal = row?.[valueKey];
+      const val = rawVal === null || rawVal === undefined ? '' : rawVal.toString().trim();
+      if (val && dataSource.tooltipField && row?.[dataSource.tooltipField] !== undefined) {
+        const tooltip = row[dataSource.tooltipField];
+        if (tooltip !== null && tooltip !== undefined && tooltip !== '') {
+          tooltips[val] = tooltip.toString();
+        }
+      }
+      return val;
+    })
+    .filter(Boolean);
+  const optionSet = buildOptionSet(mappedValues);
+  if (optionSet) {
+    optionSet.tooltips = tooltips;
+    optionSet.raw = rawWithValue;
+  }
+  return optionSet;
+};
+
+export const peekOptionsFromDataSource = (
+  dataSource: DataSourceConfig | undefined,
+  language: LangCode
+): OptionSet | null => {
+  if (!dataSource) return null;
+  const exact = peekCachedDataSource(dataSource, language);
+  const exactOptions = optionSetFromDataSourceResponse(dataSource, exact);
+  if (exactOptions) return exactOptions;
+
+  const sourceId = (dataSource.id || 'default').toString();
+  for (const candidate of peekCachedDataSourcesById(sourceId, language)) {
+    const optionSet = optionSetFromDataSourceResponse(dataSource, candidate);
+    if (optionSet) return optionSet;
+  }
+  return null;
+};
+
 export const loadOptionsFromDataSource = async (
   dataSource: DataSourceConfig | undefined,
   language: LangCode
@@ -307,98 +423,7 @@ export const loadOptionsFromDataSource = async (
   if (!dataSource) return null;
   try {
     const res = await fetchDataSource(dataSource, language);
-    const items = Array.isArray((res as any)?.items) ? (res as any).items : Array.isArray(res) ? res : [];
-    if (!items.length) return null;
-    const firstItem = items[0];
-    if (firstItem === null || typeof firstItem !== 'object') {
-      const primitiveValues = items
-        .map((value: any) => (value === null || value === undefined ? '' : value.toString()))
-        .filter(Boolean);
-      return buildOptionSet(primitiveValues);
-    }
-    const mapping = dataSource?.mapping || {};
-    const projection = Array.isArray(dataSource?.projection) ? dataSource?.projection : [];
-    const candidateKeys = Object.keys(firstItem);
-
-    const findMappingKey = (target: string): string | undefined =>
-      Object.entries(mapping).find(([, mapped]) => mapped === target)?.[0] ||
-      (mapping as any)[target];
-
-    const pickValueKey = (): string | undefined => {
-      const mappedValueKey = findMappingKey('value');
-      const mappedIdKey = findMappingKey('id');
-      if (mappedValueKey) return mappedValueKey;
-      if (mappedIdKey) return mappedIdKey;
-
-      // Prefer projection order when it contains a likely label column
-      const preferredOrder = [
-        ...projection,
-        'Dish Name',
-        'Name',
-        'Label',
-        'Description',
-        'Title',
-        'value',
-        'id'
-      ].map(k => k.toString());
-
-      const firstStringKey = preferredOrder.find(key => {
-        if (!candidateKeys.includes(key)) return false;
-        const sample = (firstItem as any)?.[key];
-        return sample !== null && sample !== undefined && typeof sample === 'string';
-      });
-      if (firstStringKey) return firstStringKey;
-
-      const anyStringKey = candidateKeys.find(key => typeof (firstItem as any)?.[key] === 'string');
-      if (anyStringKey) return anyStringKey;
-
-      const firstPrimitive = candidateKeys.find(key => {
-        const sampleValue = (firstItem as any)?.[key];
-        return sampleValue !== null && sampleValue !== undefined && typeof sampleValue !== 'object';
-      });
-      return firstPrimitive || candidateKeys[0];
-    };
-
-    const valueKey = pickValueKey();
-    if (!valueKey) return null;
-    const labelKey = (() => {
-      const mappedLabelKey = findMappingKey('label');
-      if (!mappedLabelKey) return '';
-      return candidateKeys.includes(mappedLabelKey) ? mappedLabelKey : '';
-    })();
-    const tooltips: Record<string, string> = {};
-    const rawWithValue = items.map((row: any) => {
-      if (!row || typeof row !== 'object' || Array.isArray(row)) return row;
-      const rawVal = row?.[valueKey];
-      const val = rawVal === null || rawVal === undefined ? '' : rawVal.toString().trim();
-      if (!val) return row;
-      const rawLabel = labelKey ? row?.[labelKey] : undefined;
-      const label = rawLabel === null || rawLabel === undefined ? '' : rawLabel.toString().trim();
-      return {
-        ...row,
-        __ckOptionValue: val,
-        ...(label ? { __ckOptionLabel: label } : {})
-      };
-    });
-    const mappedValues = items
-      .map((row: any) => {
-        const rawVal = row?.[valueKey];
-        const val = rawVal === null || rawVal === undefined ? '' : rawVal.toString().trim();
-        if (val && dataSource.tooltipField && row?.[dataSource.tooltipField] !== undefined) {
-          const tooltip = row[dataSource.tooltipField];
-          if (tooltip !== null && tooltip !== undefined && tooltip !== '') {
-            tooltips[val] = tooltip.toString();
-          }
-        }
-        return val;
-      })
-      .filter(Boolean);
-    const optionSet = buildOptionSet(mappedValues);
-    if (optionSet) {
-      optionSet.tooltips = tooltips;
-      optionSet.raw = rawWithValue;
-    }
-    return optionSet;
+    return optionSetFromDataSourceResponse(dataSource, res);
   } catch (_) {
     return null;
   }

@@ -110,8 +110,9 @@ export const FormFileOverlay: React.FC<{
         validate: false
       });
   const overlayReadOnly = readOnly || orderedUploadBlocked;
+  const savedItems = resolveFileOverlayItems(fileOverlay);
   const items = fileOverlay.draftItems || resolveFileOverlayItems(fileOverlay);
-  const dirty = fileItemsSignature(items) !== (fileOverlay.originalSignature || fileItemsSignature(resolveFileOverlayItems(fileOverlay)));
+  const dirty = fileItemsSignature(items) !== (fileOverlay.originalSignature || fileItemsSignature(savedItems));
   const blockUntilSaved = resolveUploadBlockUntilSaved(uploadConfig);
   const maxed = uploadConfig?.maxFiles ? items.length >= uploadConfig.maxFiles : false;
 
@@ -322,6 +323,7 @@ export const FormFileOverlay: React.FC<{
       submitting={submitting}
       readOnly={overlayReadOnly}
       items={items}
+      savedItems={savedItems}
       uploadConfig={uploadConfig}
       dirty={dirty}
       saving={fileOverlay.saving === true}

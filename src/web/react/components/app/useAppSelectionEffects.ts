@@ -1,6 +1,6 @@
 import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from 'react';
 
-import { loadOptionsFromDataSource, optionKey } from '../../../core';
+import { loadOptionsFromDataSource, optionKey, peekOptionsFromDataSource } from '../../../core';
 import type { FieldValue, LangCode, WebFormDefinition, WebQuestionDefinition } from '../../../types';
 import { runSelectionEffects as runSelectionEffectsHelper } from '../../app/selectionEffects';
 import { runSelectionEffectsForAncestors } from '../../app/runSelectionEffectsForAncestors';
@@ -62,6 +62,15 @@ export const useAppSelectionEffects = (args: {
     if (!q.dataSource) return;
     const key = optionKey(q.id);
     if (optionState[key]) return;
+    const cached = peekOptionsFromDataSource(q.dataSource, language);
+    if (cached) {
+      setOptionState(prev => ({ ...prev, [key]: cached }));
+      if (cached.tooltips) {
+        setTooltipState(prev => ({ ...prev, [key]: cached.tooltips || {} }));
+      }
+      logEvent('options.loaded.cache', { questionId: q.id, source: 'question', count: cached.en?.length || 0 });
+      return;
+    }
     loadOptionsFromDataSource(q.dataSource, language).then(res => {
       if (res) {
         setOptionState(prev => ({ ...prev, [key]: res }));

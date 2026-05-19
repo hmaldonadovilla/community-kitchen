@@ -56,8 +56,8 @@
         "type": "recordEmail",
         "enabled": true,
         "schedule": {
-          "hour": 23,
-          "minute": 48
+          "hour": 17,
+          "minute": 0
         },
         "sourceFormKey": "Config: Meal Production",
         "dateFieldId": "MP_PREP_DATE",
@@ -1070,7 +1070,10 @@
             },
             {
               "kind": "question",
-              "id": "MP_READY_FOR_PRODUCTION"
+              "id": "MP_READY_FOR_PRODUCTION",
+              "qEn": "Lock Order information",
+              "qFr": "Lock Order information",
+              "qNl": "Lock Order information"
             }
           ],
           "label": {
@@ -1084,8 +1087,8 @@
             "autoAdvance": "onValid",
             "backgroundUtilisationSyncOnAdvance": false,
             "autoAdvanceWhen": {
-              "fieldId": "status",
-              "equals": "In production"
+              "fieldId": "MP_ORDER_LOCKED",
+              "equals": "Yes"
             }
           }
         },
@@ -3278,7 +3281,7 @@
               ],
               "rows": {
                 "includeWhen": {
-                  "fieldId": "ORD_QTY",
+                  "fieldId": "MP_TO_COOK",
                   "greaterThan": 0
                 }
               },
@@ -3373,8 +3376,8 @@
         "when": {
           "all": [
             {
-              "fieldId": "status",
-              "equals": "In production"
+              "fieldId": "MP_ORDER_LOCKED",
+              "equals": "Yes"
             },
             {
               "fieldId": "__ckStep",
@@ -3383,7 +3386,9 @@
           ]
         },
         "bypassFields": [],
-        "unlockStatus": "In progress"
+        "unlockSet": {
+          "MP_ORDER_LOCKED": ""
+        }
       }
     ],
     "listViewRowClickEnabled": false,
@@ -3644,7 +3649,12 @@
             "yesLabel": "YES",
             "noLabel": "NO",
             "multiSheetName": "Generated MI leftovers",
-            "singleSheetName": "Generated SI leftovers"
+            "singleSheetName": "Generated SI leftovers",
+            "singleSourceGroupId": "MP_LEFTOVER_CAPTURE_LI",
+            "singleSourceNameFieldId": "LEFTOVER_INGREDIENT",
+            "singleSourceQuantityFieldId": "LEFTOVER_QTY",
+            "singleSourceUnitFieldId": "LEFTOVER_UNIT",
+            "singleSourceStorageFieldId": "LEFTOVER_STORAGE"
           }
         },
         {
@@ -4356,6 +4366,9 @@
                 "en": "Ingredients"
               }
             }
+          },
+          "emptyText": {
+            "en": "No ingredient selected"
           }
         },
         "minRows": 0,
@@ -7200,9 +7213,29 @@
       }
     },
     {
+      "id": "MP_ORDER_LOCKED",
+      "type": "TEXT",
+      "qEn": "Order details locked",
+      "required": false,
+      "listView": false,
+      "options": [],
+      "status": "Active",
+      "ui": {
+        "summaryVisibility": "never"
+      },
+      "visibility": {
+        "showWhen": {
+          "fieldId": "NEVER_SHOW",
+          "equals": [
+            "1"
+          ]
+        }
+      }
+    },
+    {
       "id": "MP_READY_FOR_PRODUCTION",
       "type": "BUTTON",
-      "qEn": "Ready for Production",
+      "qEn": "Lock Order information",
       "required": false,
       "listView": false,
       "options": [],
@@ -7219,8 +7252,10 @@
               "equals": "true"
             },
             {
-              "fieldId": "status",
-              "equals": "In progress"
+              "not": {
+                "fieldId": "MP_ORDER_LOCKED",
+                "equals": "Yes"
+              }
             }
           ]
         }
@@ -7232,13 +7267,15 @@
         ],
         "tone": "primary",
         "set": {
-          "status": "In production"
+          "values": {
+            "MP_ORDER_LOCKED": "Yes"
+          }
         },
         "ensureRecordId": true,
         "navigateTo": "form",
         "confirm": {
           "message": {
-            "en": "Lock order details?\nCustomer, date, service, responsible cook, and ordered portions cannot be changed after this step.\n"
+            "en": "Lock order details?\nCustomer, date, service, reponsible cook, and ordered portions cannot be changed if you lock. Do you wish to continue?"
           },
           "confirmLabel": {
             "en": "Yes, lock order details"
@@ -7248,7 +7285,9 @@
           },
           "primaryAction": "cancel"
         }
-      }
+      },
+      "qFr": "Lock Order information",
+      "qNl": "Lock Order information"
     },
     {
       "id": "MP_UNLOCK_FOR_EDIT",
@@ -7262,8 +7301,8 @@
         "showWhen": {
           "all": [
             {
-              "fieldId": "status",
-              "equals": "In production"
+              "fieldId": "MP_ORDER_LOCKED",
+              "equals": "Yes"
             },
             {
               "fieldId": "__ckRequestParam_admin",
@@ -7282,19 +7321,22 @@
           "summaryBar"
         ],
         "set": {
-          "status": "In progress"
+          "values": {
+            "MP_ORDER_LOCKED": ""
+          }
         },
         "navigateTo": "form",
         "confirm": {
           "message": {
-            "en": "Unlocking record will allow any user to edit Order information. Do you wish to continue?"
+            "en": "Unlock order details?\nUnlocking will allow any user to change Order details. Do you wish to continue?"
           },
           "confirmLabel": {
-            "en": "Unlock record for editing"
+            "en": "Yes, unlock and allow changes"
           },
           "cancelLabel": {
-            "en": "Cancel, keep the record locked"
-          }
+            "en": "No, keep the Order details locked"
+          },
+          "primaryAction": "cancel"
         }
       }
     },
@@ -7824,6 +7866,9 @@
                   "en": "Ingredients"
                 }
               }
+            },
+            "emptyText": {
+              "en": "No ingredient selected"
             }
           },
           "minRows": 0,
@@ -10608,18 +10653,18 @@
             }
           },
           "navigateTo": "summary",
-        "progressDialog": {
-          "title": {
-            "en": ""
+          "progressDialog": {
+            "title": {
+              "en": ""
+            },
+            "message": {
+              "en": "Saving…\nDo not leave this page while we save the selected date"
+            }
           },
-          "message": {
-            "en": "Saving…\nDo not leave this page while we save the selected date"
-          }
-        },
-        "confirm": {
-          "title": {
-            "en": ""
-          },
+          "confirm": {
+            "title": {
+              "en": ""
+            },
             "message": {
               "en": "Remember to indicate this new expiration date on individual portion containers."
             },
@@ -10752,9 +10797,29 @@
         }
       },
       {
+        "id": "MP_ORDER_LOCKED",
+        "type": "TEXT",
+        "qEn": "Order details locked",
+        "required": false,
+        "listView": false,
+        "options": [],
+        "status": "Active",
+        "ui": {
+          "summaryVisibility": "never"
+        },
+        "visibility": {
+          "showWhen": {
+            "fieldId": "NEVER_SHOW",
+            "equals": [
+              "1"
+            ]
+          }
+        }
+      },
+      {
         "id": "MP_READY_FOR_PRODUCTION",
         "type": "BUTTON",
-        "qEn": "Ready for Production",
+        "qEn": "Lock Order information",
         "required": false,
         "listView": false,
         "options": [],
@@ -10771,8 +10836,10 @@
                 "equals": "true"
               },
               {
-                "fieldId": "status",
-                "equals": "In progress"
+                "not": {
+                  "fieldId": "MP_ORDER_LOCKED",
+                  "equals": "Yes"
+                }
               }
             ]
           }
@@ -10784,13 +10851,15 @@
           ],
           "tone": "primary",
           "set": {
-            "status": "In production"
+            "values": {
+              "MP_ORDER_LOCKED": "Yes"
+            }
           },
           "ensureRecordId": true,
           "navigateTo": "form",
           "confirm": {
             "message": {
-              "en": "Lock order details?\nCustomer, date, service, responsible cook, and ordered portions cannot be changed after this step.\n"
+              "en": "Lock order details?\nCustomer, date, service, reponsible cook, and ordered portions cannot be changed if you lock. Do you wish to continue?"
             },
             "confirmLabel": {
               "en": "Yes, lock order details"
@@ -10800,7 +10869,9 @@
             },
             "primaryAction": "cancel"
           }
-        }
+        },
+        "qFr": "Lock Order information",
+        "qNl": "Lock Order information"
       },
       {
         "id": "MP_UNLOCK_FOR_EDIT",
@@ -10814,8 +10885,8 @@
           "showWhen": {
             "all": [
               {
-                "fieldId": "status",
-                "equals": "In production"
+                "fieldId": "MP_ORDER_LOCKED",
+                "equals": "Yes"
               },
               {
                 "fieldId": "__ckRequestParam_admin",
@@ -10834,19 +10905,22 @@
             "summaryBar"
           ],
           "set": {
-            "status": "In progress"
+            "values": {
+              "MP_ORDER_LOCKED": ""
+            }
           },
           "navigateTo": "form",
           "confirm": {
             "message": {
-              "en": "Unlocking record will allow any user to edit Order information. Do you wish to continue?"
+              "en": "Unlock order details?\nUnlocking will allow any user to change Order details. Do you wish to continue?"
             },
             "confirmLabel": {
-              "en": "Unlock record for editing"
+              "en": "Yes, unlock and allow changes"
             },
             "cancelLabel": {
-              "en": "Cancel, keep the record locked"
-            }
+              "en": "No, keep the Order details locked"
+            },
+            "primaryAction": "cancel"
           }
         }
       },
@@ -11969,7 +12043,10 @@
             },
             {
               "kind": "question",
-              "id": "MP_READY_FOR_PRODUCTION"
+              "id": "MP_READY_FOR_PRODUCTION",
+              "qEn": "Lock Order information",
+              "qFr": "Lock Order information",
+              "qNl": "Lock Order information"
             }
           ],
           "label": {
@@ -11983,8 +12060,8 @@
             "autoAdvance": "onValid",
             "backgroundUtilisationSyncOnAdvance": false,
             "autoAdvanceWhen": {
-              "fieldId": "status",
-              "equals": "In production"
+              "fieldId": "MP_ORDER_LOCKED",
+              "equals": "Yes"
             }
           },
           "contextHeader": {
@@ -14187,7 +14264,7 @@
               ],
               "rows": {
                 "includeWhen": {
-                  "fieldId": "ORD_QTY",
+                  "fieldId": "MP_TO_COOK",
                   "greaterThan": 0
                 }
               },
@@ -14286,8 +14363,8 @@
         "when": {
           "all": [
             {
-              "fieldId": "status",
-              "equals": "In production"
+              "fieldId": "MP_ORDER_LOCKED",
+              "equals": "Yes"
             },
             {
               "fieldId": "__ckStep",
@@ -14296,7 +14373,9 @@
           ]
         },
         "bypassFields": [],
-        "unlockStatus": "In progress"
+        "unlockSet": {
+          "MP_ORDER_LOCKED": ""
+        }
       }
     ],
     "analytics": {

@@ -166,7 +166,8 @@ describe('AnalyticsPipelineService', () => {
                     { ING: 'Salt', QTY: '100', UNIT: 'Tbsp' },
                     { ING: 'Sugar', QTY: '20', UNIT: 'Tbsp' },
                     { ING: 'Rice', QTY: '900', UNIT: 'gr' },
-                    { ING: 'Rice', QTY: '600', UNIT: 'gr' }
+                    { ING: 'Rice', QTY: '600', UNIT: 'gr' },
+                    { ING: 'Rice', QTY: '5', UNIT: 'gr' }
                   ]
                 },
                 {
@@ -301,7 +302,7 @@ describe('AnalyticsPipelineService', () => {
     expect(writtenValues).toEqual([
       ['Ingredients', 'Quantity', 'Unit', 'Category'],
       ['Beans', 3.5, 'kg', 'Legumes'],
-      ['Rice', 1.5, 'kg', 'Dry carbohydrates'],
+      ['Rice', 1.51, 'kg', 'Dry carbohydrates'],
       ['Salt', 1.8, 'kg', 'Herbs'],
       ['Sugar', 0.25, 'kg', 'Herbs']
     ]);

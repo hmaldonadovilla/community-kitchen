@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { buttonStyles, withDisabled } from '../ui';
-import { fileNameFromUrl, formatFileSize, isFileInstance, isHttpUrl } from '../utils';
+import { fileNameFromUrl, getUploadMinRequired, isFileInstance, isHttpUrl } from '../utils';
 import { FullPageOverlay } from './FullPageOverlay';
 import type { LangCode } from '../../../../types';
 import { tSystem } from '../../../../systemStrings';
@@ -25,6 +25,7 @@ export type FileOverlayProps = {
   submitting: boolean;
   readOnly?: boolean;
   items: Array<string | File>;
+  savedItems?: Array<string | File>;
   uploadConfig?: UploadConfigLike;
   dirty?: boolean;
   saving?: boolean;
@@ -75,6 +76,7 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
   submitting,
   readOnly,
   items,
+  savedItems,
   uploadConfig,
   dirty,
   saving,
@@ -89,8 +91,10 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
   onRemoveAt,
   onClose
 }) => {
-  const files = useMemo(() => items.filter((it): it is File => isFileInstance(it)), [items]);
-  const totalBytes = useMemo(() => files.reduce((sum, file) => sum + (file?.size || 0), 0), [files]);
+  const subtitleItems = savedItems || items;
+  const minRequired = getUploadMinRequired({ uploadConfig, required: false });
+  const maxFiles = uploadConfig?.maxFiles && uploadConfig.maxFiles > 0 ? uploadConfig.maxFiles : undefined;
+  const denominator = maxFiles ?? (minRequired > 0 ? minRequired : undefined);
   const maxed = uploadConfig?.maxFiles ? items.length >= uploadConfig.maxFiles : false;
   const locked = submitting || saving === true || saveRetrying === true || readOnly === true;
   const canSave = Boolean(onSave) && !!dirty && !locked;
@@ -177,13 +181,13 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
   if (!open) return null;
 
   let selectionLabel = tSystem('files.noneSelected', language, 'No photo added.');
-  if (items.length) {
-    const base =
-      items.length === 1
+  if (denominator) {
+    selectionLabel = `${Math.min(subtitleItems.length, denominator)}/${denominator}`;
+  } else if (subtitleItems.length) {
+    selectionLabel =
+      subtitleItems.length === 1
         ? tSystem('files.selectedOne', language, '1 photo added')
-        : tSystem('files.selectedMany', language, '{count} photos added', { count: items.length });
-    const bytesLabel = totalBytes ? ` • ${formatFileSize(totalBytes)}` : '';
-    selectionLabel = `${base}${bytesLabel}`;
+        : tSystem('files.selectedMany', language, '{count} photos added', { count: subtitleItems.length });
   }
 
   return (
@@ -290,7 +294,7 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
                 } else {
                   href = undefined;
                   name = item.name;
-                  meta = formatFileSize(item.size || 0);
+                  meta = saving ? tSystem('common.loading', language, 'Loading…') : tSystem('files.pending', language, 'Pending');
                 }
                 const thumbSize = 194;
                 const thumbCandidates = (() => {

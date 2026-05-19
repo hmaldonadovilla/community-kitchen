@@ -871,6 +871,7 @@ describe('meal production leftover selection config', () => {
     expect(question?.lineItemConfig?.addButtonLabel?.en).toBe('Single-ingredient leftover');
     expect(question?.lineItemConfig?.ui).toEqual(
       expect.objectContaining({
+        emptyText: { en: 'No ingredient selected' },
         tableColumns: ['LEFTOVER_INGREDIENT', 'LEFTOVER_QTY', 'LEFTOVER_UNIT', 'LEFTOVER_FROZEN'],
         tableColumnWidths: expect.objectContaining({
           LEFTOVER_INGREDIENT: '40%',

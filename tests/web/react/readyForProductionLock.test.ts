@@ -1,6 +1,7 @@
 import {
   removeUnlockParamFromHref,
   parseUnlockRecordIdFromSearch,
+  resolveReadyForProductionUnlockSet,
   resolveReadyForProductionUnlockStatus,
   resolveUnlockRecordId,
   shouldBypassReadyForProductionLock
@@ -99,5 +100,20 @@ describe('readyForProductionLock', () => {
 
     expect(resolveReadyForProductionUnlockStatus([{ id: 'ready-for-production-order-lock' }])).toBeUndefined();
     expect(resolveReadyForProductionUnlockStatus(undefined)).toBeUndefined();
+  });
+
+  it('prefers unlockSet from the dedicated lock rule', () => {
+    expect(
+      resolveReadyForProductionUnlockSet([
+        { id: 'other-lock', unlockSet: { status: 'Draft' } },
+        { id: 'ready-for-production-order-lock', unlockSet: { MP_ORDER_LOCKED: '' } }
+      ])
+    ).toEqual({ MP_ORDER_LOCKED: '' });
+
+    expect(
+      resolveReadyForProductionUnlockSet([
+        { id: 'ready-for-production-order-lock', unlockStatus: 'In progress' }
+      ])
+    ).toEqual({ status: 'In progress' });
   });
 });

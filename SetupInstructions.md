@@ -654,7 +654,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       - `analytics.pipelines` can add fire-and-forget export actions to the centralized analytics page. Reusable pipeline types include:
         - `ingredientUsageReport`: accepts a past start date, filters closed source records between that date and today, aggregates nested ingredient rows by ingredient + unit, can convert `Tbsp` to `gr` with `report.tablespoonGramsLookupColumn`, then converts `gr` to `kg` when the quantity is greater than 1000.
         - `recordTableReport`: accepts a past start date and exports configured record-level columns from matching source records.
-        - `generatedBankReport`: accepts a past start date and exports multi-tab `.xlsx` workbooks for records generated into a shared bank/repository while preserving source record and source row linkage fields.
+        - `generatedBankReport`: accepts a past start date and exports multi-tab `.xlsx` workbooks for records generated into a shared bank/repository while preserving source record and source row linkage fields. For generated single-item rows, configure `singleSourceGroupId` plus `singleSourceNameFieldId`, `singleSourceQuantityFieldId`, `singleSourceUnitFieldId`, and `singleSourceStorageFieldId` when the report must prefer immutable source-record generation values before falling back to the bank record.
         - All pipeline types queue the work server-side, email the attachment to the configured recipients, and resolve `{{START_DATE}}` and `{{END_DATE}}` in email/file templates as `EEE,dd-mmm-yyyy`; use `{{START_DATE_ISO}}` / `{{END_DATE_ISO}}` for ISO dates.
 
       Example:
@@ -1132,7 +1132,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       - `mutations.type: "setRecord"` updates top-level fields on each impacted target record.
       - `mutations.type: "setLineItemValues"` updates matching rows inside a line-item group or subgroup path. Use `clearSubGroups` to empty direct child subgroup arrays on those matched rows.
 
-    - Want a guided-step **Ready for Production** lock from the `Order` step? Add an inline BUTTON with `button.action: "updateRecord"` that sets status to `"Ready for Production"`, and add a form-level `fieldDisableRules` rule scoped to `__ckStep`.
+    - Want a guided-step order lock from the `Order` step? Add an inline BUTTON with `button.action: "updateRecord"` that sets a dedicated lock flag (for example `ORDER_LOCKED = "Yes"`), and add a form-level `fieldDisableRules` rule scoped to `__ckStep`. Prefer a flag over status when the record should stay in the same operational status.
 
       Example:
 
@@ -1158,12 +1158,12 @@ The web app caches form definitions in the browser (localStorage) using a cache-
             "id": "ready-for-production-order-lock",
             "when": {
               "all": [
-                { "fieldId": "status", "equals": "Ready for Production" },
+                { "fieldId": "ORDER_LOCKED", "equals": "Yes" },
                 { "fieldId": "__ckStep", "equals": "orderInfo" }
               ]
             },
             "bypassFields": [],
-            "unlockStatus": "In progress"
+            "unlockSet": { "ORDER_LOCKED": "" }
           }
         ]
       }
@@ -1175,19 +1175,20 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       {
         "id": "MP_READY_FOR_PRODUCTION",
         "type": "BUTTON",
-        "qEn": "Ready for Production",
+        "qEn": "Lock Order information",
         "button": {
           "action": "updateRecord",
           "placements": ["form"],
           "tone": "primary",
-          "set": { "status": "Ready for Production" },
+          "set": { "values": { "ORDER_LOCKED": "Yes" } },
           "navigateTo": "form",
           "confirm": {
             "message": {
-              "en": "You are about to lock the customer, service, production date and ordered quantities. Once locked:\\n- these fields can no longer be changed\\n- production data will be protected from accidental deletion\\n- This action cannot be undone.\\nDo you want to continue?"
+              "en": "Lock order details?\\nCustomer, date, service, responsible cook, and ordered portions cannot be changed if you lock. Do you wish to continue?"
             },
-            "confirmLabel": { "en": "Yes, lock for production" },
-            "cancelLabel": { "en": "Cancel" }
+            "confirmLabel": { "en": "Yes, lock order details" },
+            "cancelLabel": { "en": "No, do not lock order details" },
+            "primaryAction": "cancel"
           }
         },
         "visibility": {
@@ -1195,7 +1196,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
             "all": [
               { "fieldId": "__ckStep", "equals": "orderInfo" },
               { "fieldId": "__ckStepValid_orderInfo", "equals": "true" },
-              { "fieldId": "status", "equals": "In progress" }
+              { "not": { "fieldId": "ORDER_LOCKED", "equals": "Yes" } }
             ]
           }
         }
@@ -1203,16 +1204,16 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       ```
 
       Admin unlock button (recommended):
-      - Add a Summary `updateRecord` button that sets `status` back to `"In progress"` and `navigateTo: "form"`.
+      - Add a Summary `updateRecord` button that clears the lock flag and sets `navigateTo: "form"`.
       - Gate the button with `visibility.showWhen` using:
-        - `{ "fieldId": "status", "equals": "Ready for Production" }`
+        - `{ "fieldId": "ORDER_LOCKED", "equals": "Yes" }`
         - `{ "fieldId": "__ckRequestParam_admin", "equals": ["true", "1", "yes"] }`
       - Then only users opening the app with `?admin=true` can see the unlock button.
 
-      Optional emergency unlock (legacy):
+      Optional emergency unlock:
       - Add `?unlock=<record_id>` to the web-app URL to bypass the `ready-for-production-order-lock` rule for that record.
       - This override is intentionally scoped to that specific lock-rule id and matching record id.
-      - If that rule defines `unlockStatus` (for example `"In progress"`), the app automatically updates the record status once the unlocked record is opened in form view.
+      - If that rule defines `unlockSet` (for example `{ "ORDER_LOCKED": "" }`), the app automatically applies that field patch once the unlocked record is opened in form view.
 
     - Want to **disable the title-open sidebar** for a form? Set `appHeader.sidebarEnabled: false` in the dashboard “Follow-up Config (JSON)” column. Users can still force-enable the sidebar for troubleshooting with `?dev-mode=true`:
 
@@ -1271,7 +1272,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
               "label": { "en": "Order" },
               "include": [{ "kind": "question", "id": "SERVICE" }],
               "navigation": {
-                "autoAdvanceWhen": { "fieldId": "status", "equals": "In production" }
+                "autoAdvanceWhen": { "fieldId": "ORDER_LOCKED", "equals": "Yes" }
               }
             },
             {
@@ -1306,6 +1307,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
         - keep rows **always expanded** (no toggle/pill indicator)
         - hide the row body when the step only includes collapsed fields (row disclaimer shows as a footer)
       - For a compact progressive row header that stays visible in both collapsed and expanded states, set `lineItemConfig.ui.rowHeaderSummaryTemplate`, for example `{MEAL_TYPE} | {ORD_QTY}`.
+      - For table-rendered line item groups/subgroups, set `lineItemConfig.ui.emptyText` (or subgroup `ui.emptyText`) to customize the empty-state copy, for example `{ "en": "No ingredient selected" }`.
       - For compact sentence-style line item rows, enable `lineItemConfig.ui.compactRows: true` and define:
         - `ui.compactHeadlineRows` for the first display line
         - `ui.compactDetailRows` for secondary inline summary text such as ingredient lists
@@ -1351,7 +1353,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       - Navigation/back labels and controls:
         - Use `steps.stepSubmitLabel` for the non-final step action label (defaults to “Next”), and per-step `navigation.submitLabel` overrides when needed. Final steps always use `submitButtonLabel`.
         - The Back button can be customized globally (`steps.backButtonLabel`, `steps.showBackButton`) or per-step (`navigation.backLabel`, `navigation.showBackButton`) and is disabled when `allowBack: false`.
-        - Use `navigation.autoAdvanceWhen` when the step should become locally complete first but should only navigate after an extra runtime condition matches, for example `{ "fieldId": "status", "equals": "In production" }`.
+        - Use `navigation.autoAdvanceWhen` when the step should become locally complete first but should only navigate after an extra runtime condition matches, for example `{ "fieldId": "ORDER_LOCKED", "equals": "Yes" }`.
         - Use `contextHeader.parts` to render a bold title line above the step body. Parts can be field ids or objects like `{ "id": "CUSTOMER", "displayField": "FULL_NAME" }` when the guided title should show a richer datasource field but the rest of the app should keep the stored compact label.
         - Use `navigation.milestoneAction` when a non-final step must trigger configured follow-up actions before the user continues. The current reusable option is `type: "followupBatch"`, which can:
           - run blocking follow-up actions first (`preActions`), then launch non-blocking ones (`backgroundActions`)

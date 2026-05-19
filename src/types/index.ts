@@ -1949,6 +1949,13 @@ export interface FieldDisableRule {
    */
   bypassFields?: string[];
   /**
+   * Optional field values to set when the `?unlock=<record_id>` bypass is used on
+   * the dedicated `ready-for-production-order-lock` rule.
+   *
+   * Prefer this for lock flags that are independent from record status.
+   */
+  unlockSet?: Record<string, string | null>;
+  /**
    * Optional status to set when the `?unlock=<record_id>` bypass is used on
    * the dedicated `ready-for-production-order-lock` rule.
    *
@@ -2376,6 +2383,10 @@ export interface LineItemGroupUiConfig {
    * Default: true.
    */
   persistRows?: boolean;
+  /**
+   * Optional empty-state text for table renderers when no line-item rows are present.
+   */
+  emptyText?: LocalizedString | string;
   /**
    * Optional compact headline layouts for `compactRows` renderers.
    * The first matching rule wins.
@@ -5724,6 +5735,17 @@ export interface AnalyticsGeneratedBankReportConfig {
   singleLeftoverNameFieldId: string;
   singleLeftoverQuantityFieldId: string;
   singleLeftoverUnitFieldId: string;
+  /**
+   * Optional source Meal Production line-item group and field mappings for
+   * single-ingredient leftovers. When provided, report rows prefer these source
+   * values over the bank record so later utilisation changes do not alter the
+   * generation report.
+   */
+  singleSourceGroupId?: string;
+  singleSourceNameFieldId?: string;
+  singleSourceQuantityFieldId?: string;
+  singleSourceUnitFieldId?: string;
+  singleSourceStorageFieldId?: string;
   storageFieldId: string;
   frozenStorageValue?: string;
   yesLabel?: string;

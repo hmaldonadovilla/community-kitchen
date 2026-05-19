@@ -4,6 +4,7 @@ import {
   loadOptionsFromDataSource,
   mergeOptionStateValue,
   optionKey,
+  peekOptionsFromDataSource,
   normalizeLanguage
 } from '../core';
 import {
@@ -78,6 +79,7 @@ import { useButtonTextWrapObserver } from './components/app/useButtonTextWrapObs
 import { useReadyForProductionUnlockConfig } from './components/app/useReadyForProductionUnlockConfig';
 import { useAppStatusTransitions } from './components/app/useAppStatusTransitions';
 import { useAppCustomButtons } from './components/app/useAppCustomButtons';
+import { pruneOptionStateForDataSource } from './app/dataSourceOptionState';
 import { useOpenUrlFieldAction } from './components/app/useOpenUrlFieldAction';
 import { useAppReportPreviewActions } from './components/app/useAppReportPreviewActions';
 import { useAppSubmitDialogConfig } from './components/app/useAppSubmitDialogConfig';
@@ -239,8 +241,7 @@ import {
 import {
   buildInitialLineItems,
   parseSubgroupKey,
-  resolveSubgroupKey,
-  ROW_NON_MATCH_OPTIONS_KEY
+  resolveSubgroupKey
 } from './app/lineItems';
 import { preserveSelectionEffectSourceMappedValues } from './app/selectionEffectSourceMetadata';
 import { normalizeRecordValues } from './app/records';
@@ -645,7 +646,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     matchesClosedStatus,
     resolveStatusAutoView
   } = useAppStatusTransitions({ definition, language });
-  const { readyForProductionUnlockResolution, readyForProductionUnlockStatus } =
+  const { readyForProductionUnlockResolution, readyForProductionUnlockSet } =
     useReadyForProductionUnlockConfig(definition);
   const autoSaveEnabled = Boolean(definition.autoSave?.enabled);
   const {
@@ -3943,18 +3944,42 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
   useEffect(() => {
     const bump = () => setDataSourceVisibilityVersion(version => version + 1);
+    const handleUpdated = (event: Event) => {
+      bump();
+      const dataSourceId = (((event as CustomEvent)?.detail || {}) as any)?.id?.toString?.().trim?.() || '';
+      if (!dataSourceId) return;
+      let removedOptionKeys: string[] = [];
+      setOptionState(prev => {
+        const pruned = pruneOptionStateForDataSource({ definition, state: prev, dataSourceId });
+        removedOptionKeys = pruned.removedKeys;
+        return pruned.state;
+      });
+      setTooltipState(prev => pruneOptionStateForDataSource({ definition, state: prev, dataSourceId }).state);
+      if (removedOptionKeys.length) {
+        logEvent('options.cacheSync.pruned', {
+          dataSourceId,
+          removedKeys: removedOptionKeys
+        });
+      }
+    };
+    const handleCleared = () => {
+      bump();
+      setOptionState({});
+      setTooltipState({});
+      logEvent('options.cacheSync.cleared');
+    };
     try {
       if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
-      window.addEventListener(DATA_SOURCE_CACHE_UPDATED_EVENT, bump as EventListener);
-      window.addEventListener(DATA_SOURCE_CACHE_CLEARED_EVENT, bump as EventListener);
+      window.addEventListener(DATA_SOURCE_CACHE_UPDATED_EVENT, handleUpdated as EventListener);
+      window.addEventListener(DATA_SOURCE_CACHE_CLEARED_EVENT, handleCleared as EventListener);
       return () => {
-        window.removeEventListener(DATA_SOURCE_CACHE_UPDATED_EVENT, bump as EventListener);
-        window.removeEventListener(DATA_SOURCE_CACHE_CLEARED_EVENT, bump as EventListener);
+        window.removeEventListener(DATA_SOURCE_CACHE_UPDATED_EVENT, handleUpdated as EventListener);
+        window.removeEventListener(DATA_SOURCE_CACHE_CLEARED_EVENT, handleCleared as EventListener);
       };
     } catch {
       return;
     }
-  }, []);
+  }, [definition, logEvent]);
 
   useEffect(() => {
     return () => {
@@ -5139,8 +5164,9 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
 
   useEffect(() => {
     const unlockRecordId = (readyForProductionUnlockResolution.unlockRecordId || '').toString().trim();
-    const targetStatus = (readyForProductionUnlockStatus || '').toString().trim();
-    if (!unlockRecordId || !targetStatus) return;
+    const unlockSet = readyForProductionUnlockSet || {};
+    const unlockEntries = Object.entries(unlockSet).filter(([fieldId]) => fieldId.toString().trim());
+    if (!unlockRecordId || !unlockEntries.length) return;
     if (view !== 'form') return;
     if (submitting || updateRecordBusyOpen || recordSyncBusyOpen || Boolean(recordLoadingId) || precreateDedupChecking) return;
 
@@ -5152,18 +5178,38 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       }) || '';
     if (!recordId || recordId !== unlockRecordId) return;
 
-    const currentStatusRaw = ((lastSubmissionMeta?.status || selectedRecordSnapshot?.status || '') as any).toString().trim();
-    if (currentStatusRaw && currentStatusRaw.toLowerCase() === targetStatus.toLowerCase()) return;
+    const normalizeCurrent = (value: any): string => (value === undefined || value === null ? '' : value.toString().trim()).toLowerCase();
+    const currentValues = {
+      ...(selectedRecordSnapshot?.values || {}),
+      ...(valuesRef.current || {}),
+      status: lastSubmissionMeta?.status || selectedRecordSnapshot?.status || ''
+    } as Record<string, any>;
+    const alreadyApplied = unlockEntries.every(([fieldId, targetValue]) => {
+      const nextValue = targetValue === null ? '' : targetValue;
+      return normalizeCurrent(currentValues[fieldId]) === normalizeCurrent(nextValue);
+    });
+    if (alreadyApplied) return;
 
-    const attemptKey = `${recordId}::${targetStatus.toLowerCase()}`;
+    const unlockSignature = unlockEntries
+      .map(([fieldId, value]) => `${fieldId}:${value === null ? '' : value.toString().trim().toLowerCase()}`)
+      .join('|');
+    const attemptKey = `${recordId}::${unlockSignature}`;
     if (readyForProductionUnlockTransitionAttemptedRef.current.has(attemptKey)) return;
     readyForProductionUnlockTransitionAttemptedRef.current.add(attemptKey);
+    const updateRecordSet = unlockEntries.reduce<Record<string, any>>((acc, [fieldId, value]) => {
+      if (fieldId === 'status') {
+        acc.status = value;
+        return acc;
+      }
+      if (!acc.values || typeof acc.values !== 'object') acc.values = {};
+      acc.values[fieldId] = value;
+      return acc;
+    }, {});
 
-    logEvent('readyForProduction.unlock.statusTransition.start', {
+    logEvent('readyForProduction.unlock.fieldSet.start', {
       recordId,
       source: readyForProductionUnlockResolution.source,
-      fromStatus: currentStatusRaw || null,
-      toStatus: targetStatus
+      fields: unlockEntries.map(([fieldId]) => fieldId)
     });
 
     void runUpdateRecordAction(
@@ -5203,16 +5249,17 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         buttonId: 'ready-for-production-unlock',
         buttonRef: 'ready-for-production-unlock',
         navigateTo: 'form',
-        set: { status: targetStatus }
+        set: updateRecordSet
       }
     ).then(() => {
-      const nextStatusRaw = ((lastSubmissionMetaRef.current?.status || selectedRecordSnapshotRef.current?.status || '') as any)
-        .toString()
-        .trim();
-      logEvent('readyForProduction.unlock.statusTransition.done', {
+      const nextValues = selectedRecordSnapshotRef.current?.values || valuesRef.current || {};
+      logEvent('readyForProduction.unlock.fieldSet.done', {
         recordId,
-        targetStatus,
-        nextStatus: nextStatusRaw || null
+        fields: unlockEntries.map(([fieldId]) => fieldId),
+        values: unlockEntries.reduce<Record<string, any>>((acc, [fieldId]) => {
+          acc[fieldId] = nextValues[fieldId] ?? null;
+          return acc;
+        }, {})
       });
     });
   }, [
@@ -5224,7 +5271,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     recordSyncBusyOpen,
     readyForProductionUnlockResolution.source,
     readyForProductionUnlockResolution.unlockRecordId,
-    readyForProductionUnlockStatus,
+    readyForProductionUnlockSet,
     recordLoadingId,
     selectedRecordId,
     selectedRecordSnapshot,
@@ -5968,6 +6015,19 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       const existingTooltips = getOptionStateValue(tooltipStateRef.current, field.id, groupId);
       if (existing && (!needsTooltips || existingTooltips)) return Promise.resolve();
       if (preloadPromisesRef.current[key]) return preloadPromisesRef.current[key];
+      const cached = peekOptionsFromDataSource(field.dataSource, language);
+      if (cached) {
+        setOptionState(prev => mergeOptionStateValue(prev, field.id, groupId, cached));
+        if (cached.tooltips) {
+          setTooltipState(prev => mergeOptionStateValue(prev, field.id, groupId, cached.tooltips || {}));
+        }
+        logEvent('options.loaded.cache', {
+          questionId: field.id,
+          groupId: groupId || null,
+          count: cached.en?.length || 0
+        });
+        return Promise.resolve();
+      }
       const promise = loadOptionsFromDataSource(field.dataSource, language)
         .then(res => {
           if (res) {
@@ -5984,7 +6044,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       preloadPromisesRef.current[key] = promise;
       return promise;
     },
-    [language]
+    [language, logEvent]
   );
 
   const openCopyCurrentRecordDialogIfConfigured = useCallback(() => {

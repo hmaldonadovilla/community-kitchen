@@ -461,15 +461,15 @@ test.describe('Meal Production manual script scenarios', () => {
       await selectCook(frame, mealProductionFixtures.cooks.aline);
       await fillFirstOrderedPortions(frame, '50');
 
-      const readyButton = frame.getByRole('button', { name: /Ready for Production/i });
+      const readyButton = frame.getByRole('button', { name: /Lock Order information/i });
       await expect(readyButton).toBeVisible({ timeout: 15_000 });
       await readyButton.click();
-      await expect(frame.getByRole('button', { name: 'Yes, lock for production' })).toBeVisible({ timeout: 10_000 });
-      await confirmDialog(frame, 'Yes, lock for production');
+      await expect(frame.getByRole('button', { name: 'Yes, lock order details' })).toBeVisible({ timeout: 10_000 });
+      await confirmDialog(frame, 'Yes, lock order details');
       await waitForLoadingToSettle(frame);
       await waitForSaved(frame);
 
-      await expect(frame.getByText('In production')).toBeVisible({ timeout: 15_000 });
+      await expect(frame.getByText('In progress')).toBeVisible({ timeout: 15_000 });
       await expect(readyButton).toBeHidden({ timeout: 10_000 });
       await frame.getByRole('button', { name: /^Order$/ }).click();
       await waitForLoadingToSettle(frame);
@@ -480,8 +480,8 @@ test.describe('Meal Production manual script scenarios', () => {
       const unlockButton = frame.getByRole('button', { name: /Unlock for Editing/i });
       await expect(unlockButton).toBeVisible({ timeout: 15_000 });
       await unlockButton.click();
-      await expect(frame.getByRole('button', { name: 'Unlock record for editing' })).toBeVisible({ timeout: 10_000 });
-      await confirmDialog(frame, 'Unlock record for editing');
+      await expect(frame.getByRole('button', { name: 'Yes, unlock and allow changes' })).toBeVisible({ timeout: 10_000 });
+      await confirmDialog(frame, 'Yes, unlock and allow changes');
       await waitForLoadingToSettle(frame);
       await waitForSaved(frame);
 

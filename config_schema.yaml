@@ -486,7 +486,8 @@ components:
                 - set `set.status` to a value different from `"Closed"`
                 - set `navigateTo: "form"` so the user can resume editing.
 
-                Also supports lock transitions such as setting status to `"Ready for Production"` from a guided step button.
+                Also supports guided order locks by setting scalar fields through `set.values`
+                (for example `{ "values": { "ORDER_LOCKED": "Yes" } }`).
             set:
               type: object
               properties:
@@ -1809,6 +1810,11 @@ components:
             type: string
           description: |
             Optional ordered list of field ids to render as columns when `mode: "table"`.
+        emptyText:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Optional empty-state text for table renderers when the line-item group/subgroup has no rows.
+            Example: `{ "en": "No ingredient selected" }`.
         tableColumnWidths:
           type: object
           additionalProperties:
@@ -3742,7 +3748,7 @@ components:
             Rules can reference guided virtual fields such as `__ckStep` to lock only specific steps.
             You can also reference request params via `__ckRequestParam_<name>` in `when` clauses.
             For the dedicated `ready-for-production-order-lock` rule, the UI supports an emergency override when the URL includes `?unlock=<record_id>` that matches the current record.
-            Set `unlockStatus` on that rule if unlocking should automatically move the record back to an editable status (for example `"In progress"`).
+            Set `unlockSet` on that rule when unlocking should automatically clear a lock flag or update other scalar fields; `unlockStatus` is retained only for legacy status-based locks.
         dedupDeleteOnKeyChange:
           type: boolean
           description: |
@@ -6588,6 +6594,24 @@ components:
           type: string
         singleLeftoverUnitFieldId:
           type: string
+        singleSourceGroupId:
+          type: string
+          description: |
+            Optional source form line-item group id for single-item generated records.
+            When set, the report uses the source row values before falling back to the bank record,
+            so later bank utilisation changes do not change generated quantity/unit reporting.
+        singleSourceNameFieldId:
+          type: string
+          description: Optional source row field for the single-item name. Defaults to `singleLeftoverNameFieldId`.
+        singleSourceQuantityFieldId:
+          type: string
+          description: Optional source row field for the generated single-item quantity. Defaults to `singleLeftoverQuantityFieldId`.
+        singleSourceUnitFieldId:
+          type: string
+          description: Optional source row field for the generated single-item unit. Defaults to `singleLeftoverUnitFieldId`.
+        singleSourceStorageFieldId:
+          type: string
+          description: Optional source row field for storage/frozen status. Defaults to `storageFieldId`.
         storageFieldId:
           type: string
         frozenStorageValue:
@@ -7424,6 +7448,19 @@ components:
             type: string
           description: |
             Optional list of field ids that remain editable while this rule is active.
+        unlockSet:
+          type: object
+          additionalProperties:
+            oneOf:
+              - type: string
+              - type: 'null'
+          description: |
+            Optional scalar field patch to apply when the emergency unlock override is used (`?unlock=<record_id>`).
+
+            Notes:
+            - This applies only to `id: "ready-for-production-order-lock"`.
+            - Prefer this for status-independent locks, for example `{ "MP_ORDER_LOCKED": "" }`.
+            - The client applies non-status fields through `updateRecord.set.values`; use the key `status` only for legacy status transitions.
         unlockStatus:
           type: string
           description: |
@@ -7431,7 +7468,7 @@ components:
 
             Notes:
             - This applies only to `id: "ready-for-production-order-lock"`.
-            - Useful to move locked records back to an editable status (for example `"In progress"`).
+            - Legacy compatibility for status-based locks. Prefer `unlockSet` for new configurations.
       additionalProperties: false
 
     VisibilityConfig:
@@ -8013,7 +8050,7 @@ components:
 
             When a rule `when` condition matches, all fields become read-only except ids in `bypassFields`.
             You can also reference request params via `__ckRequestParam_<name>` in `when` clauses.
-            Set `unlockStatus` on `id: "ready-for-production-order-lock"` to automatically set a status when `?unlock=<record_id>` is used.
+            Set `unlockSet` on `id: "ready-for-production-order-lock"` to automatically clear a lock flag or update scalar fields when `?unlock=<record_id>` is used.
         dedupDeleteOnKeyChange:
           type: boolean
           description: |

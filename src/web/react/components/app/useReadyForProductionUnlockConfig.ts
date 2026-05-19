@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 
 import type { WebFormDefinition } from '../../../types';
-import { resolveReadyForProductionUnlockStatus, resolveUnlockRecordId } from '../../app/readyForProductionLock';
+import { resolveReadyForProductionUnlockSet, resolveUnlockRecordId } from '../../app/readyForProductionLock';
 
 /**
  * Owner: App ready-for-production unlock configuration.
@@ -40,13 +40,13 @@ export const useReadyForProductionUnlockConfig = (definition: WebFormDefinition)
       href: locationHref
     });
   }, []);
-  const readyForProductionUnlockStatus = useMemo(
-    () => resolveReadyForProductionUnlockStatus(definition.fieldDisableRules),
+  const readyForProductionUnlockSet = useMemo(
+    () => resolveReadyForProductionUnlockSet(definition.fieldDisableRules),
     [definition.fieldDisableRules]
   );
 
   return {
     readyForProductionUnlockResolution,
-    readyForProductionUnlockStatus
+    readyForProductionUnlockSet
   };
 };

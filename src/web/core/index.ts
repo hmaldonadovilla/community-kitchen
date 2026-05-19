@@ -15,5 +15,6 @@ export {
   toOptionSet,
   toDependencyValue,
   buildOptionSet,
+  peekOptionsFromDataSource,
   loadOptionsFromDataSource
 } from './options';

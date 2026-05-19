@@ -7,22 +7,26 @@ import {
   optionKey,
   optionKeysWithAliases,
   optionParentAliases,
+  peekOptionsFromDataSource,
   toOptionSet,
   toDependencyValue
 } from '../../../src/web/core/options';
-import { fetchDataSource, peekCachedDataSourcesById } from '../../../src/web/data/dataSources';
+import { fetchDataSource, peekCachedDataSource, peekCachedDataSourcesById } from '../../../src/web/data/dataSources';
 
 jest.mock('../../../src/web/data/dataSources', () => ({
   fetchDataSource: jest.fn(),
+  peekCachedDataSource: jest.fn(),
   peekCachedDataSourcesById: jest.fn()
 }));
 
 const fetchDataSourceMock = fetchDataSource as jest.Mock;
+const peekCachedDataSourceMock = peekCachedDataSource as jest.Mock;
 const peekCachedDataSourcesByIdMock = peekCachedDataSourcesById as jest.Mock;
 
 describe('core options helpers', () => {
   beforeEach(() => {
     fetchDataSourceMock.mockReset();
+    peekCachedDataSourceMock.mockReset();
     peekCachedDataSourcesByIdMock.mockReset();
   });
 
@@ -216,6 +220,25 @@ describe('core options helpers', () => {
     it('swallows fetch errors and returns null', async () => {
       fetchDataSourceMock.mockRejectedValue(new Error('boom'));
       await expect(loadOptionsFromDataSource({ id: 'ERR' } as any, 'EN')).resolves.toBeNull();
+    });
+  });
+
+  describe('peekOptionsFromDataSource', () => {
+    it('returns options from the exact cached datasource without fetching', () => {
+      peekCachedDataSourceMock.mockReturnValue({
+        items: [
+          { NICKNAME: 'HUB', DIST_NAME: 'Hub' },
+          { NICKNAME: 'LP', DIST_NAME: 'Le Phare' }
+        ]
+      });
+
+      const result = peekOptionsFromDataSource(
+        { id: 'Distributor Data', mapping: { value: 'NICKNAME', label: 'DIST_NAME' } } as any,
+        'EN'
+      );
+
+      expect(result?.en).toEqual(['HUB', 'LP']);
+      expect(fetchDataSourceMock).not.toHaveBeenCalled();
     });
   });
 });

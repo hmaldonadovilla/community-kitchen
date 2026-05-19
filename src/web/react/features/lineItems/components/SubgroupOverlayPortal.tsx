@@ -8,6 +8,7 @@ import {
   loadOptionsFromDataSource,
   mergeOptionStateValue,
   optionKey,
+  peekOptionsFromDataSource,
   shouldHideField,
   toDependencyValue,
   toOptionSet
@@ -604,7 +605,9 @@ export const SubgroupOverlayPortal: React.FC<SubgroupOverlayPortalProps> = ({
                               const key = optionKey(anchorField.id, subKey);
                               let opts = optionState[key];
                               if (!opts && anchorField.dataSource) {
-                                const loaded = await loadOptionsFromDataSource(anchorField.dataSource, language);
+                                const loaded =
+                                  peekOptionsFromDataSource(anchorField.dataSource, language) ||
+                                  (await loadOptionsFromDataSource(anchorField.dataSource, language));
                                 if (loaded) {
                                   opts = loaded;
                                   setOptionState(prev => mergeOptionStateValue(prev, anchorField.id, subKey, loaded));
@@ -1699,7 +1702,9 @@ export const SubgroupOverlayPortal: React.FC<SubgroupOverlayPortalProps> = ({
                         const key = optionKey(anchorField.id, detailSubKey);
                         let opts = optionState[key];
                         if (!opts && anchorField.dataSource) {
-                          const loaded = await loadOptionsFromDataSource(anchorField.dataSource, language);
+                          const loaded =
+                            peekOptionsFromDataSource(anchorField.dataSource, language) ||
+                            (await loadOptionsFromDataSource(anchorField.dataSource, language));
                           if (loaded) {
                             opts = loaded;
                             setOptionState(prev => mergeOptionStateValue(prev, anchorField.id, detailSubKey, loaded));

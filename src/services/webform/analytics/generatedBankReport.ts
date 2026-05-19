@@ -94,6 +94,16 @@ const preferredValueByField = (
   return hasReportValue(preferred) ? preferred : valueByField(fallbackValues, fieldId);
 };
 
+const preferredValueByFields = (
+  preferredValues: Record<string, any> | undefined,
+  fallbackValues: Record<string, any> | undefined,
+  preferredFieldId: string,
+  fallbackFieldId: string
+): any => {
+  const preferred = valueByField(preferredValues, preferredFieldId);
+  return hasReportValue(preferred) ? preferred : valueByField(fallbackValues, fallbackFieldId);
+};
+
 const displayValue = (values: Record<string, any> | undefined, fieldId: string, displayFieldId?: string): any => {
   const raw = valueByField(values, fieldId);
   const displayField = toText(displayFieldId);
@@ -198,6 +208,25 @@ const findLineItemRowById = (raw: any, targetRowId: string, visited = new Set<an
   return null;
 };
 
+const findSingleSourceRow = (
+  sourceValues: Record<string, any>,
+  bankValues: Record<string, any>,
+  report: AnalyticsGeneratedBankReportConfig
+): Record<string, any> | null => {
+  const targetRowId = toText(valueByField(bankValues, report.bankSourceRowIdFieldId));
+  const byId = findLineItemRowById(sourceValues, targetRowId);
+  if (byId) return byId;
+
+  const groupId = toText((report as any).singleSourceGroupId);
+  if (!groupId) return null;
+  const rows = parseLineItemRows(sourceValues[groupId]);
+  if (!rows.length) return null;
+  const sourceNameFieldId = toText((report as any).singleSourceNameFieldId) || report.singleLeftoverNameFieldId;
+  const bankName = normalizeToken(valueByField(bankValues, report.singleLeftoverNameFieldId));
+  if (!bankName) return null;
+  return rows.find(row => normalizeToken(valueByField(row, sourceNameFieldId)) === bankName) || null;
+};
+
 const hasLeftoverSibling = (context: PrepContext, report: AnalyticsGeneratedBankReportConfig): boolean => {
   const cookValue = normalizeToken(report.cookPrepTypeValue || 'Cook');
   return context.siblingPrepRows.some(row => {
@@ -270,14 +299,22 @@ export const aggregateGeneratedBankReport = (args: {
     }
 
     if (isKind(bankValues, report, singleKinds)) {
-      const sourceRow = findLineItemRowById(sourceValues, toText(valueByField(bankValues, report.bankSourceRowIdFieldId)));
+      const sourceRow = findSingleSourceRow(sourceValues, bankValues, report);
+      const sourceNameFieldId = toText((report as any).singleSourceNameFieldId) || report.singleLeftoverNameFieldId;
+      const sourceQuantityFieldId = toText((report as any).singleSourceQuantityFieldId) || report.singleLeftoverQuantityFieldId;
+      const sourceUnitFieldId = toText((report as any).singleSourceUnitFieldId) || report.singleLeftoverUnitFieldId;
+      const sourceStorageFieldId = toText((report as any).singleSourceStorageFieldId) || report.storageFieldId;
       includedSourceRecordIds.add(sourceRecordId);
       siRows.push([
         ...baseCells,
-        preferredValueByField(sourceRow || undefined, bankValues, report.singleLeftoverNameFieldId),
-        preferredValueByField(sourceRow || undefined, bankValues, report.singleLeftoverQuantityFieldId),
-        preferredValueByField(sourceRow || undefined, bankValues, report.singleLeftoverUnitFieldId),
-        frozenLabelFromPreferredValues(sourceRow || undefined, bankValues, report)
+        preferredValueByFields(sourceRow || undefined, bankValues, sourceNameFieldId, report.singleLeftoverNameFieldId),
+        preferredValueByFields(sourceRow || undefined, bankValues, sourceQuantityFieldId, report.singleLeftoverQuantityFieldId),
+        preferredValueByFields(sourceRow || undefined, bankValues, sourceUnitFieldId, report.singleLeftoverUnitFieldId),
+        frozenLabelFromPreferredValues(
+          sourceRow ? { ...sourceRow, [report.storageFieldId]: valueByField(sourceRow, sourceStorageFieldId) } : undefined,
+          bankValues,
+          report
+        )
       ]);
     }
   });

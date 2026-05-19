@@ -4,7 +4,15 @@ import { tSystem } from '../../../systemStrings';
 import { LineItemState } from '../../types';
 import { buildDraftPayload } from '../../app/submission';
 import { peekSummaryHtmlTemplateCache, renderSummaryHtmlTemplateApi } from '../../api';
-import { isBundledHtmlTemplateId, renderBundledHtmlTemplateClient } from '../../app/bundledHtmlClientRenderer';
+import {
+  clearBundledHtmlClientCaches,
+  isBundledHtmlTemplateId,
+  renderBundledHtmlTemplateClient
+} from '../../app/bundledHtmlClientRenderer';
+import {
+  DATA_SOURCE_CACHE_CLEARED_EVENT,
+  DATA_SOURCE_CACHE_UPDATED_EVENT
+} from '../../../data/dataSources';
 import { shouldShowSummaryLoadingCard } from '../../app/recordOpenState';
 import { resolveTemplateIdForRecord } from '../../app/templateId';
 import { HtmlPreview } from './HtmlPreview';
@@ -71,6 +79,7 @@ export const SummaryView: React.FC<{
     () => ({ phase: 'idle' })
   );
   const seqRef = useRef(0);
+  const [dataSourceCacheVersion, setDataSourceCacheVersion] = useState(0);
 
   const draft = useMemo(() => {
     if (!useSummaryHtml || recordLoadingId) return null;
@@ -124,7 +133,36 @@ export const SummaryView: React.FC<{
     [definition.summaryHtmlTemplateId, draft, language]
   );
   const isBundled = useMemo(() => isBundledHtmlTemplateId(resolvedTemplateId || ''), [resolvedTemplateId]);
-  const cachedSummary = useMemo(() => (draft ? peekSummaryHtmlTemplateCache(draft) : null), [draft]);
+  const cachedSummary = useMemo(
+    () => {
+      // Recheck the server-rendered cache when datasource invalidation asks summary rendering to refresh.
+      void dataSourceCacheVersion;
+      return draft && !isBundled ? peekSummaryHtmlTemplateCache(draft) : null;
+    },
+    [dataSourceCacheVersion, draft, isBundled]
+  );
+
+  useEffect(() => {
+    if (!useSummaryHtml || !isBundled) return;
+    const handleCacheChange = (event: Event) => {
+      clearBundledHtmlClientCaches();
+      setDataSourceCacheVersion(version => version + 1);
+      onDiagnostic?.('summary.htmlTemplate.bundle.cacheInvalidated', {
+        dataSourceId: (((event as CustomEvent)?.detail || {}) as any)?.id || null
+      });
+    };
+    try {
+      if (typeof window === 'undefined' || typeof window.addEventListener !== 'function') return;
+      window.addEventListener(DATA_SOURCE_CACHE_UPDATED_EVENT, handleCacheChange as EventListener);
+      window.addEventListener(DATA_SOURCE_CACHE_CLEARED_EVENT, handleCacheChange as EventListener);
+      return () => {
+        window.removeEventListener(DATA_SOURCE_CACHE_UPDATED_EVENT, handleCacheChange as EventListener);
+        window.removeEventListener(DATA_SOURCE_CACHE_CLEARED_EVENT, handleCacheChange as EventListener);
+      };
+    } catch {
+      return;
+    }
+  }, [isBundled, onDiagnostic, useSummaryHtml]);
 
   useEffect(() => {
     if (!useSummaryHtml) return;
@@ -189,6 +227,8 @@ export const SummaryView: React.FC<{
       });
   }, [
     cachedSummary,
+    dataSourceCacheVersion,
+    definition,
     draft,
     existingRecordId,
     isBundled,

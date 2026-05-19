@@ -4,10 +4,12 @@ import {
   buildLocalizedOptions,
   computeAllowedOptions,
   getOptionStateValue,
+  peekOptionsFromDataSource,
   shouldHideField,
   toDependencyValue,
   toOptionSet
 } from '../../../../core';
+import { resolveLocalizedString } from '../../../../i18n';
 import { tSystem } from '../../../../systemStrings';
 import type {
   FieldValue,
@@ -71,7 +73,7 @@ type LineItemSubgroupTableRendererProps = {
 };
 
 const resolveOptionSetForField = (optionState: OptionState, field: any, parentId?: string): OptionSet =>
-  getOptionStateValue(optionState, field.id, parentId) || toOptionSet(field);
+  getOptionStateValue(optionState, field.id, parentId) || peekOptionsFromDataSource(field.dataSource, 'EN') || toOptionSet(field);
 
 /**
  * Owner: line-items feature renderer.
@@ -512,7 +514,10 @@ export const LineItemSubgroupTableRenderer: React.FC<LineItemSubgroupTableRender
               ])
         ]}
         rows={subRows}
-        emptyText={tSystem('lineItems.noOptionsAvailable', language, 'No options available.')}
+        emptyText={
+          resolveLocalizedString(sub?.ui?.emptyText, language) ||
+          tSystem('lineItems.noOptionsAvailable', language, 'No options available.')
+        }
         rowClassName={(_row, idx) => (idx % 2 === 0 ? 'ck-line-item-table__row--even' : 'ck-line-item-table__row--odd')}
       />
     </div>

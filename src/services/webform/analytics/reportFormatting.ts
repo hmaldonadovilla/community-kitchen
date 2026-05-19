@@ -45,7 +45,12 @@ export const buildAnalyticsReportTemplatePlaceholders = (args: {
   '{{SOURCE_FORM}}': args.sourceForm || ''
 });
 
-const roundReportQuantity = (value: number): number => Math.round(value * 1_000_000) / 1_000_000;
+export const roundReportQuantity = (value: number): number => {
+  if (!Number.isFinite(value)) return value;
+  const sign = value < 0 ? -1 : 1;
+  const absolute = Math.abs(value);
+  return sign * (Math.floor(absolute * 100 + 0.5 + Number.EPSILON) / 100);
+};
 
 const isTablespoonUnit = (unit: string): boolean => {
   const normalized = (unit || '').toString().trim().toLowerCase();

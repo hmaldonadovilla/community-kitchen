@@ -169,17 +169,24 @@
 
   .ck-generated-list {
     margin: 0;
-    padding-left: 20px;
+    padding-left: 1.5em;
+    list-style-position: outside;
   }
 
   .ck-generated-item {
     word-break: break-word;
     overflow-wrap: anywhere;
     margin: 0;
+    padding-left: 4px;
   }
 
   .ck-generated-item + .ck-generated-item {
     margin-top: 6px;
+  }
+
+  .ck-generated-item-details {
+    margin-top: 2px;
+    color: var(--muted, #555);
   }
 
   .ck-action-button {
@@ -455,7 +462,58 @@
       var recipe = toText(values.LEFTOVER_RECIPE || '');
       var ingredient = toText(values.LEFTOVER_INGREDIENT || '');
       var quantity = formatGeneratedLeftoverQuantity(values);
-      return [leftoverId, kind, recipe || ingredient, quantity].filter(Boolean).join(' | ');
+      return [leftoverId || kind, recipe || ingredient, quantity].filter(Boolean).join(' | ');
+    };
+    var collectIngredientNames = function (value, out) {
+      if (value === undefined || value === null) return;
+      if (Array.isArray(value)) {
+        value.forEach(function (entry) {
+          collectIngredientNames(entry, out);
+        });
+        return;
+      }
+      if (typeof value === 'object') {
+        var rowValues = value.values && typeof value.values === 'object' ? value.values : value;
+        var name = toText(
+          rowValues.ING ||
+            rowValues.INGREDIENT ||
+            rowValues.LEFTOVER_INGREDIENT ||
+            rowValues.name ||
+            rowValues.label ||
+            ''
+        );
+        if (name) out.push(name);
+        return;
+      }
+      var text = toText(value);
+      if (!text) return;
+      if ((text.charAt(0) === '[' || text.charAt(0) === '{') && typeof JSON !== 'undefined') {
+        try {
+          collectIngredientNames(JSON.parse(text), out);
+          return;
+        } catch (_) {
+          // Fall through to plain text parsing.
+        }
+      }
+      text.split(/[,;]\s*/).forEach(function (part) {
+        var name = toText(part);
+        if (name) out.push(name);
+      });
+    };
+    var formatGeneratedLeftoverIngredients = function (entry) {
+      var values = entry && typeof entry.values === 'object' ? entry.values : {};
+      var kind = toCanonicalLeftoverKind(toText(values.LEFTOVER_KIND || ''));
+      if (kind !== MULTI_INGREDIENT_LEFTOVER_KIND) return '';
+      var names = [];
+      collectIngredientNames(values.LEFTOVER_INGREDIENTS_LI || values.LEFTOVER_INGREDIENTS || values.INGREDIENTS || entry.ingredients, names);
+      var seen = {};
+      var unique = names.filter(function (name) {
+        var key = normalize(name);
+        if (!key || seen[key]) return false;
+        seen[key] = true;
+        return true;
+      });
+      return unique.join(', ');
     };
     var isPositiveQuantity = function (value) {
       var text = toText(value);
@@ -474,7 +532,16 @@
       if (key) seenIds[key] = true;
       var item = document.createElement('li');
       item.className = 'ck-generated-item';
-      item.textContent = label;
+      var labelNode = document.createElement('div');
+      labelNode.textContent = label;
+      item.appendChild(labelNode);
+      var ingredientText = formatGeneratedLeftoverIngredients(entry);
+      if (ingredientText) {
+        var details = document.createElement('div');
+        details.className = 'ck-generated-item-details';
+        details.textContent = 'Ingredients: ' + ingredientText;
+        item.appendChild(details);
+      }
       generatedList.appendChild(item);
     };
     var statusKeyRaw = toText((root.querySelector('[data-record-status-key]') || {}).textContent || '');
@@ -880,7 +947,8 @@
             LEFTOVER_KIND: MULTI_INGREDIENT_LEFTOVER_KIND,
             LEFTOVER_RECIPE: entry.miLeftoverRecipe || entry.recipe,
             LEFTOVER_PORTIONS: entry.miLeftoverPortions,
-            LEFTOVER_STORAGE: entry.miLeftoverStorage
+            LEFTOVER_STORAGE: entry.miLeftoverStorage,
+            LEFTOVER_INGREDIENTS_LI: entry.ingredients
           }
         });
       });

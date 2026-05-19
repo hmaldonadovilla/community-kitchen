@@ -189,20 +189,44 @@ export const shouldBypassReadyForProductionLock = (args: {
   return unlockRecordId === recordId;
 };
 
+export type ReadyForProductionUnlockSet = Record<string, string | null>;
+
+const normalizeUnlockSet = (value: unknown): ReadyForProductionUnlockSet | undefined => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const out: ReadyForProductionUnlockSet = {};
+  Object.entries(value as Record<string, unknown>).forEach(([fieldId, rawValue]) => {
+    const id = normalizeId(fieldId);
+    if (!id) return;
+    out[id] = rawValue === null ? null : normalizeId(rawValue);
+  });
+  return Object.keys(out).length ? out : undefined;
+};
+
 /**
- * Reads the optional status value to apply when the dedicated unlock override is active.
- * This setting is only read from the `ready-for-production-order-lock` disable rule.
+ * Reads the field values to apply when the dedicated unlock override is active.
+ * `unlockSet` is preferred; `unlockStatus` remains supported for existing configs.
  */
-export const resolveReadyForProductionUnlockStatus = (rules: Array<unknown> | undefined): string | undefined => {
+export const resolveReadyForProductionUnlockSet = (rules: Array<unknown> | undefined): ReadyForProductionUnlockSet | undefined => {
   const list = Array.isArray(rules) ? rules : [];
   for (const entry of list) {
     if (!entry || typeof entry !== 'object') continue;
     const id = normalizeId((entry as any).id);
     if (id !== READY_FOR_PRODUCTION_LOCK_RULE_ID) continue;
+    const unlockSet = normalizeUnlockSet((entry as any).unlockSet);
+    if (unlockSet) return unlockSet;
     const unlockStatus = normalizeId((entry as any).unlockStatus);
-    return unlockStatus || undefined;
+    return unlockStatus ? { status: unlockStatus } : undefined;
   }
   return undefined;
+};
+
+/**
+ * Compatibility helper for older callers that only support status transitions.
+ */
+export const resolveReadyForProductionUnlockStatus = (rules: Array<unknown> | undefined): string | undefined => {
+  const unlockSet = resolveReadyForProductionUnlockSet(rules);
+  const status = unlockSet?.status;
+  return status === null || status === undefined ? undefined : status.toString();
 };
 
 export { READY_FOR_PRODUCTION_LOCK_RULE_ID };

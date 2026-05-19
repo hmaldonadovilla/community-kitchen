@@ -190,6 +190,7 @@ const buildLookupFields = (ds: DataSourceConfig | undefined): string[] => {
   if (mapping && typeof mapping === 'object') {
     Object.entries(mapping).forEach(([source, target]) => {
       if (target === 'value' || target === 'id') fields.push(source);
+      if (source === 'value' || source === 'id') fields.push((target as any)?.toString?.() || '');
     });
   }
   if (Array.isArray((ds as any)?.projection) && (ds as any).projection.length) {

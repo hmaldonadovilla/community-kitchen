@@ -6,6 +6,7 @@ import {
   getOptionStateValue,
   matchesWhen,
   matchesWhenClause,
+  peekOptionsFromDataSource,
   shouldHideField,
   toDependencyValue,
   toOptionSet,
@@ -70,7 +71,7 @@ import { renderLineItemOverlayFlattenedFields } from './LineItemOverlayFlattened
 type LineItemGroupRowsRendererProps = Record<string, any>;
 
 const resolveOptionSetForField = (optionState: any, field: any, parentId?: string): OptionSet =>
-  getOptionStateValue(optionState, field.id, parentId) || toOptionSet(field);
+  getOptionStateValue(optionState, field.id, parentId) || peekOptionsFromDataSource(field.dataSource, 'EN') || toOptionSet(field);
 
 /**
  * Owner: line-items feature renderer.

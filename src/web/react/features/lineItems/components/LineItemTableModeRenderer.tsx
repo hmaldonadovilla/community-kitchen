@@ -3,10 +3,12 @@ import {
   buildLocalizedOptions,
   computeAllowedOptions,
   getOptionStateValue,
+  peekOptionsFromDataSource,
   shouldHideField,
   toDependencyValue,
   toOptionSet
 } from '../../../../core';
+import { resolveLocalizedString } from '../../../../i18n';
 import { tSystem } from '../../../../systemStrings';
 import type {
   FieldValue,
@@ -45,7 +47,7 @@ import { LineItemTableTotalsFooter } from './LineItemTableTotalsFooter';
 import { LineItemTotals } from './LineItemTotals';
 
 const resolveOptionSetForField = (optionState: OptionState, field: any, parentId?: string): OptionSet =>
-  getOptionStateValue(optionState, field.id, parentId) || toOptionSet(field);
+  getOptionStateValue(optionState, field.id, parentId) || peekOptionsFromDataSource(field.dataSource, 'EN') || toOptionSet(field);
 
 export type LineItemTableModeRendererProps = {
   q: WebQuestionDefinition;
@@ -804,7 +806,10 @@ export const LineItemTableModeRenderer: React.FC<LineItemTableModeRendererProps>
         <LineItemTable
           columns={tableColumns}
           rows={parentRows}
-          emptyText={tSystem('lineItems.noOptionsAvailable', language, 'No options available.')}
+          emptyText={
+            resolveLocalizedString((q.lineItemConfig as any)?.ui?.emptyText, language) ||
+            tSystem('lineItems.noOptionsAvailable', language, 'No options available.')
+          }
           rowClassName={(_row, idx) => (idx % 2 === 0 ? 'ck-line-item-table__row--even' : 'ck-line-item-table__row--odd')}
           renderRowMessage={row => {
             const rowErrors = collectRowErrors(row);
