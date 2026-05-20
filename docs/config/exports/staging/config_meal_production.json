@@ -217,11 +217,23 @@
             },
             "LEFTOVER_PORTIONS": "{{parent.MP_LEFTOVER_PORTIONS_CAPTURE}}",
             "LEFTOVER_EXP_DATE": {
-              "op": "firstNonEmpty",
-              "values": [
-                "{{parent.MP_LEFTOVER_EXP_DATE_CAPTURE}}",
-                "{{source.MP_EXP_DATE}}"
-              ]
+              "op": "case",
+              "cases": [
+                {
+                  "when": {
+                    "path": "parent.MP_LEFTOVER_STORAGE_CAPTURE",
+                    "equals": "Frozen"
+                  },
+                  "value": {
+                    "op": "firstNonEmpty",
+                    "values": [
+                      "{{parent.MP_LEFTOVER_EXP_DATE_FROZEN}}",
+                      "{{parent.MP_LEFTOVER_EXP_DATE_CAPTURE}}"
+                    ]
+                  }
+                }
+              ],
+              "default": "{{source.MP_EXP_DATE}}"
             },
             "LEFTOVER_SOURCE_FORM_KEY": "Config: Meal Production",
             "LEFTOVER_SOURCE_RECORD_ID": "{{source.id}}",
@@ -304,11 +316,23 @@
             "LEFTOVER_QTY": "{{row.LEFTOVER_QTY}}",
             "LEFTOVER_UNIT": "{{row.LEFTOVER_UNIT}}",
             "LEFTOVER_EXP_DATE": {
-              "op": "firstNonEmpty",
-              "values": [
-                "{{row.LEFTOVER_EXP_DATE}}",
-                "{{source.MP_EXP_DATE}}"
-              ]
+              "op": "case",
+              "cases": [
+                {
+                  "when": {
+                    "path": "row.LEFTOVER_STORAGE",
+                    "equals": "Frozen"
+                  },
+                  "value": {
+                    "op": "firstNonEmpty",
+                    "values": [
+                      "{{row.LEFTOVER_EXP_DATE_FROZEN}}",
+                      "{{row.LEFTOVER_EXP_DATE}}"
+                    ]
+                  }
+                }
+              ],
+              "default": "{{source.MP_EXP_DATE}}"
             },
             "LEFTOVER_SOURCE_FORM_KEY": "Config: Meal Production",
             "LEFTOVER_SOURCE_RECORD_ID": "{{source.id}}",
@@ -701,7 +725,20 @@
     },
     "dedupDeleteOnKeyChange": true,
     "summaryHtmlTemplateId": {
-      "EN": "bundle:meal_production.summary.html"
+      "cases": [
+        {
+          "when": {
+            "fieldId": "MP_PREP_DATE",
+            "beforeDate": "2026-05-20"
+          },
+          "templateId": {
+            "EN": "bundle:meal_production.summary.legacy-temp.html"
+          }
+        }
+      ],
+      "default": {
+        "EN": "bundle:meal_production.summary.html"
+      }
     },
     "copyCurrentRecordEnabled": false,
     "copyCurrentRecordDropFields": [
@@ -11402,11 +11439,23 @@
             },
             "LEFTOVER_PORTIONS": "{{parent.MP_LEFTOVER_PORTIONS_CAPTURE}}",
             "LEFTOVER_EXP_DATE": {
-              "op": "firstNonEmpty",
-              "values": [
-                "{{parent.MP_LEFTOVER_EXP_DATE_CAPTURE}}",
-                "{{source.MP_EXP_DATE}}"
-              ]
+              "op": "case",
+              "cases": [
+                {
+                  "when": {
+                    "path": "parent.MP_LEFTOVER_STORAGE_CAPTURE",
+                    "equals": "Frozen"
+                  },
+                  "value": {
+                    "op": "firstNonEmpty",
+                    "values": [
+                      "{{parent.MP_LEFTOVER_EXP_DATE_FROZEN}}",
+                      "{{parent.MP_LEFTOVER_EXP_DATE_CAPTURE}}"
+                    ]
+                  }
+                }
+              ],
+              "default": "{{source.MP_EXP_DATE}}"
             },
             "LEFTOVER_SOURCE_FORM_KEY": "Config: Meal Production",
             "LEFTOVER_SOURCE_RECORD_ID": "{{source.id}}",
@@ -11489,11 +11538,23 @@
             "LEFTOVER_QTY": "{{row.LEFTOVER_QTY}}",
             "LEFTOVER_UNIT": "{{row.LEFTOVER_UNIT}}",
             "LEFTOVER_EXP_DATE": {
-              "op": "firstNonEmpty",
-              "values": [
-                "{{row.LEFTOVER_EXP_DATE}}",
-                "{{source.MP_EXP_DATE}}"
-              ]
+              "op": "case",
+              "cases": [
+                {
+                  "when": {
+                    "path": "row.LEFTOVER_STORAGE",
+                    "equals": "Frozen"
+                  },
+                  "value": {
+                    "op": "firstNonEmpty",
+                    "values": [
+                      "{{row.LEFTOVER_EXP_DATE_FROZEN}}",
+                      "{{row.LEFTOVER_EXP_DATE}}"
+                    ]
+                  }
+                }
+              ],
+              "default": "{{source.MP_EXP_DATE}}"
             },
             "LEFTOVER_SOURCE_FORM_KEY": "Config: Meal Production",
             "LEFTOVER_SOURCE_RECORD_ID": "{{source.id}}",
@@ -11739,7 +11800,20 @@
     },
     "dedupDeleteOnKeyChange": true,
     "summaryHtmlTemplateId": {
-      "EN": "bundle:meal_production.summary.html"
+      "cases": [
+        {
+          "when": {
+            "fieldId": "MP_PREP_DATE",
+            "beforeDate": "2026-05-20"
+          },
+          "templateId": {
+            "EN": "bundle:meal_production.summary.legacy-temp.html"
+          }
+        }
+      ],
+      "default": {
+        "EN": "bundle:meal_production.summary.html"
+      }
     },
     "copyCurrentRecordEnabled": false,
     "copyCurrentRecordDropFields": [

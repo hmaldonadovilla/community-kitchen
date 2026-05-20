@@ -2116,8 +2116,17 @@ describe('WebFormService', () => {
             },
             LEFTOVER_PORTIONS: '{{parent.MP_LEFTOVER_PORTIONS_CAPTURE}}',
             LEFTOVER_EXP_DATE: {
-              op: 'firstNonEmpty',
-              values: ['{{parent.MP_LEFTOVER_EXP_DATE_CAPTURE}}', '{{source.MP_EXP_DATE}}']
+              op: 'case',
+              cases: [
+                {
+                  when: { path: 'parent.MP_LEFTOVER_STORAGE_CAPTURE', equals: 'Frozen' },
+                  value: {
+                    op: 'firstNonEmpty',
+                    values: ['{{parent.MP_LEFTOVER_EXP_DATE_FROZEN}}', '{{parent.MP_LEFTOVER_EXP_DATE_CAPTURE}}']
+                  }
+                }
+              ],
+              default: '{{source.MP_EXP_DATE}}'
             },
             LEFTOVER_SOURCE_FORM_KEY: mealProductionFormKey,
             LEFTOVER_SOURCE_RECORD_ID: '{{source.id}}',
@@ -2171,8 +2180,17 @@ describe('WebFormService', () => {
             LEFTOVER_QTY: '{{row.LEFTOVER_QTY}}',
             LEFTOVER_UNIT: '{{row.LEFTOVER_UNIT}}',
             LEFTOVER_EXP_DATE: {
-              op: 'firstNonEmpty',
-              values: ['{{row.LEFTOVER_EXP_DATE}}', '{{source.MP_EXP_DATE}}']
+              op: 'case',
+              cases: [
+                {
+                  when: { path: 'row.LEFTOVER_STORAGE', equals: 'Frozen' },
+                  value: {
+                    op: 'firstNonEmpty',
+                    values: ['{{row.LEFTOVER_EXP_DATE_FROZEN}}', '{{row.LEFTOVER_EXP_DATE}}']
+                  }
+                }
+              ],
+              default: '{{source.MP_EXP_DATE}}'
             },
             LEFTOVER_SOURCE_FORM_KEY: mealProductionFormKey,
             LEFTOVER_SOURCE_RECORD_ID: '{{source.id}}',
@@ -2205,6 +2223,7 @@ describe('WebFormService', () => {
       ['MP_LEFTOVER_RECIPE_CAPTURE', 'TEXT', 'Dish name', 'Dish name', 'Dish name', false, '', '', ''],
       ['MP_LEFTOVER_STORAGE_CAPTURE', 'CHOICE', 'Storage', 'Storage', 'Storage', false, 'Chilled,Frozen', 'Réfrigéré,Congelé', 'Gekoeld,Ingevroren'],
       ['MP_LEFTOVER_EXP_DATE_CAPTURE', 'DATE', 'Leftover expiration date', 'Leftover expiration date', 'Leftover expiration date', false, '', '', ''],
+      ['MP_LEFTOVER_EXP_DATE_FROZEN', 'DATE', 'Frozen leftover expiration date', 'Frozen leftover expiration date', 'Frozen leftover expiration date', false, '', '', ''],
       ['MP_LEFTOVER_INGREDIENTS_CAPTURE_READY', 'TEXT', 'Ingredients capture ready', 'Ingredients capture ready', 'Ingredients capture ready', false, '', '', '']
     ]);
 
@@ -2216,6 +2235,7 @@ describe('WebFormService', () => {
       ['LEFTOVER_ALLERGEN', 'TEXT', 'Allergen', 'Allergen', 'Allergen', false, '', '', ''],
       ['LEFTOVER_STORAGE', 'CHOICE', 'Storage', 'Storage', 'Storage', false, 'Chilled,Frozen', 'Réfrigéré,Congelé', 'Gekoeld,Ingevroren'],
       ['LEFTOVER_EXP_DATE', 'DATE', 'Expiration date', 'Expiration date', 'Expiration date', false, '', '', ''],
+      ['LEFTOVER_EXP_DATE_FROZEN', 'DATE', 'Frozen expiration date', 'Frozen expiration date', 'Frozen expiration date', false, '', '', ''],
       ['LEFTOVER_QTY', 'NUMBER', 'Quantity', 'Quantity', 'Quantity', false, '', '', ''],
       ['LEFTOVER_UNIT', 'TEXT', 'Unit', 'Unit', 'Unit', false, '', '', '']
     ]);
@@ -2266,6 +2286,7 @@ describe('WebFormService', () => {
         MP_LEFTOVER_PORTIONS_CAPTURE: 2,
         MP_LEFTOVER_RECIPE_CAPTURE: 'Renamed curry & fish',
         MP_LEFTOVER_STORAGE_CAPTURE: 'Frozen',
+        MP_LEFTOVER_EXP_DATE_FROZEN: '2026-10-02',
         MP_LEFTOVER_EXP_DATE_CAPTURE: '2026-10-02',
         MP_LEFTOVER_INGREDIENTS_CAPTURE_READY: '1',
         MP_TYPE_LI: [
@@ -2317,15 +2338,18 @@ describe('WebFormService', () => {
         LEFTOVER_CAT: 'Animal protein Halal',
         LEFTOVER_ALLERGEN: 'None',
         LEFTOVER_STORAGE: 'Frozen',
+        LEFTOVER_EXP_DATE_FROZEN: '2026-10-02',
         LEFTOVER_EXP_DATE: '2026-10-02',
         LEFTOVER_QTY: 250,
         LEFTOVER_UNIT: 'gr'
       },
       {
         __ckRowId: 'PART-2',
-        LEFTOVER_INGREDIENT: '',
-        LEFTOVER_QTY: 0,
-        LEFTOVER_UNIT: 'gr'
+        LEFTOVER_INGREDIENT: 'Cooked carrots',
+        LEFTOVER_STORAGE: 'Chilled',
+        LEFTOVER_EXP_DATE: '2026-10-02',
+        LEFTOVER_QTY: 1,
+        LEFTOVER_UNIT: 'kg'
       }
     ];
 
@@ -2343,12 +2367,12 @@ describe('WebFormService', () => {
 
     expect(closed.success).toBe(true);
     expect(batchSpy).toHaveBeenCalledTimes(1);
-    expect(batchSpy.mock.calls[0]?.[0]).toHaveLength(2);
+    expect(batchSpy.mock.calls[0]?.[0]).toHaveLength(3);
     expect(closed.meta?.submitEffects).toEqual(
       expect.objectContaining({
         configured: 2,
         executed: 2,
-        created: 2,
+        created: 3,
         operation: 'create'
       })
     );
@@ -2375,7 +2399,7 @@ describe('WebFormService', () => {
 
     const bankSheet = ss.getSheets().find((sheet: any) => sheet.getName() === 'Produced Leftover Bank Data');
     expect(bankSheet).toBeDefined();
-    expect(bankSheet!.getLastRow()).toBe(3);
+    expect(bankSheet!.getLastRow()).toBe(4);
 
     const bankValues = bankSheet!.getRange(1, 1, bankSheet!.getLastRow(), bankSheet!.getLastColumn()).getValues();
     const header = bankValues[0].map((value: any) => (value || '').toString().trim());
@@ -2384,7 +2408,8 @@ describe('WebFormService', () => {
     );
 
     const entireDish = rowObjects.find((entry: any) => (entry.LEFTOVER_KIND || '').toString() === 'Entire dish');
-    const partialDish = rowObjects.find((entry: any) => (entry.LEFTOVER_KIND || '').toString() === 'Part dish');
+    const partialDish = rowObjects.find((entry: any) => (entry.LEFTOVER_INGREDIENT || '').toString() === 'Chicken wings');
+    const chilledPartialDish = rowObjects.find((entry: any) => (entry.LEFTOVER_INGREDIENT || '').toString() === 'Cooked carrots');
 
     expect(entireDish).toBeDefined();
     const entireDishRow = entireDish as any;
@@ -2419,6 +2444,13 @@ describe('WebFormService', () => {
     expect(partialDishRow.LEFTOVER_SOURCE_RECORD_ID).toBe('MP-CLOSE-1');
     expect(partialDishRow.LEFTOVER_SOURCE_ROW_ID).toBe('PART-1');
     expect((partialDishRow.LEFTOVER_ID || '').toString()).toBe('LP-1');
+
+    expect(chilledPartialDish).toBeDefined();
+    const chilledPartialDishRow = chilledPartialDish as any;
+    expect(chilledPartialDishRow.LEFTOVER_STORAGE).toBe('Chilled');
+    expect(new Date(chilledPartialDishRow.LEFTOVER_EXP_DATE).getFullYear()).toBe(2026);
+    expect(new Date(chilledPartialDishRow.LEFTOVER_EXP_DATE).getMonth()).toBe(3);
+    expect(new Date(chilledPartialDishRow.LEFTOVER_EXP_DATE).getDate()).toBe(2);
   });
 
   test('saveSubmissionWithId scales selected produced leftover ingredients', () => {

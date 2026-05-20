@@ -451,6 +451,37 @@ class SubmitEffectsRepository {
       : this.resolveComputedValue(resolveTemplateValue(value.else, vars), vars);
   }
 
+  matchesComputedWhen(whenRaw, vars) {
+    if (!whenRaw || typeof whenRaw !== 'object') return true;
+    const when = resolveTemplateValue(whenRaw, vars);
+    const path = toText(when.path || when.fieldId);
+    const fieldId = path || '__value__';
+    const ctx = {
+      getValue: requestedFieldId => {
+        const requested = toText(requestedFieldId);
+        if (!requested || requested === fieldId || requested === '__value__') {
+          return path ? readPathValue(vars, path) : '';
+        }
+        return readPathValue(vars, requested);
+      },
+      getLineItems: () => [],
+      getLineItemKeys: () => []
+    };
+    return matchesWhenClause({ ...when, fieldId }, ctx, { now: new Date() });
+  }
+
+  async resolveCase(value, vars) {
+    const cases = Array.isArray(value.cases) ? value.cases : [];
+    for (const entry of cases) {
+      if (!entry || typeof entry !== 'object') continue;
+      if (!this.matchesComputedWhen(entry.when, vars)) continue;
+      const candidate = Object.prototype.hasOwnProperty.call(entry, 'value') ? entry.value : entry.then;
+      return this.resolveComputedValue(resolveTemplateValue(candidate, vars), vars);
+    }
+    const fallback = Object.prototype.hasOwnProperty.call(value, 'default') ? value.default : value.else;
+    return this.resolveComputedValue(resolveTemplateValue(fallback, vars), vars);
+  }
+
   async getLookupMap(args) {
     const cacheKey = JSON.stringify(args);
     if (this.lookupCache.has(cacheKey)) return this.lookupCache.get(cacheKey);
@@ -530,6 +561,7 @@ class SubmitEffectsRepository {
     if (op === 'scaleCollection') return this.scaleCollection(value, vars);
     if (op === 'flattenCollection') return this.flattenCollection(value, vars);
     if (op === 'ifPresent') return this.resolveIfPresent(value, vars);
+    if (op === 'case' || op === 'switch') return this.resolveCase(value, vars);
     const out = {};
     for (const key of Object.keys(value)) {
       out[key] = await this.resolveComputedValue(value[key], vars);

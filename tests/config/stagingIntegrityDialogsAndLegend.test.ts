@@ -955,8 +955,20 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(entireDishEffect?.values?.LEFTOVER_STORAGE).toBe('{{parent.MP_LEFTOVER_STORAGE_CAPTURE}}');
       expect(entireDishEffect?.values?.LEFTOVER_EXP_DATE).toEqual(
         expect.objectContaining({
-          op: 'firstNonEmpty',
-          values: ['{{parent.MP_LEFTOVER_EXP_DATE_CAPTURE}}', '{{source.MP_EXP_DATE}}']
+          op: 'case',
+          cases: [
+            expect.objectContaining({
+              when: {
+                path: 'parent.MP_LEFTOVER_STORAGE_CAPTURE',
+                equals: 'Frozen'
+              },
+              value: expect.objectContaining({
+                op: 'firstNonEmpty',
+                values: ['{{parent.MP_LEFTOVER_EXP_DATE_FROZEN}}', '{{parent.MP_LEFTOVER_EXP_DATE_CAPTURE}}']
+              })
+            })
+          ],
+          default: '{{source.MP_EXP_DATE}}'
         })
       );
       expect(entireDishEffect?.values?.LEFTOVER_INGREDIENTS_LI).toEqual(
@@ -994,8 +1006,20 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(partialDishEffect?.values?.LEFTOVER_STORAGE).toBe('{{row.LEFTOVER_STORAGE}}');
       expect(partialDishEffect?.values?.LEFTOVER_EXP_DATE).toEqual(
         expect.objectContaining({
-          op: 'firstNonEmpty',
-          values: ['{{row.LEFTOVER_EXP_DATE}}', '{{source.MP_EXP_DATE}}']
+          op: 'case',
+          cases: [
+            expect.objectContaining({
+              when: {
+                path: 'row.LEFTOVER_STORAGE',
+                equals: 'Frozen'
+              },
+              value: expect.objectContaining({
+                op: 'firstNonEmpty',
+                values: ['{{row.LEFTOVER_EXP_DATE_FROZEN}}', '{{row.LEFTOVER_EXP_DATE}}']
+              })
+            })
+          ],
+          default: '{{source.MP_EXP_DATE}}'
         })
       );
     };

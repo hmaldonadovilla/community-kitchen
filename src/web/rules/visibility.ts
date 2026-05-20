@@ -22,7 +22,9 @@ const logDateWhenOnce = (): void => {
   dateWhenLogged = true;
   if (typeof console === 'undefined' || typeof console.info !== 'function') return;
   try {
-    console.info('[ReactForm][When]', 'dateComparisons.enabled', { operators: ['isToday', 'isInPast', 'isInFuture'] });
+    console.info('[ReactForm][When]', 'dateComparisons.enabled', {
+      operators: ['isToday', 'isInPast', 'isInFuture', 'beforeDate', 'onOrBeforeDate', 'afterDate', 'onOrAfterDate']
+    });
   } catch (_) {
     // ignore
   }
@@ -183,8 +185,14 @@ export function matchesWhen(
   const wantsIsNotToday = (when as any).isNotToday === true;
   const wantsIsInPast = (when as any).isInPast === true;
   const wantsIsInFuture = (when as any).isInFuture === true;
+  const fixedDateComparisons = [
+    { raw: (when as any).beforeDate, mode: 'lt' as const },
+    { raw: (when as any).onOrBeforeDate, mode: 'lte' as const },
+    { raw: (when as any).afterDate, mode: 'gt' as const },
+    { raw: (when as any).onOrAfterDate, mode: 'gte' as const }
+  ].filter(entry => toLocalYmd(entry.raw));
 
-  if (wantsIsToday || wantsIsNotToday || wantsIsInPast || wantsIsInFuture) {
+  if (wantsIsToday || wantsIsNotToday || wantsIsInPast || wantsIsInFuture || fixedDateComparisons.length) {
     logDateWhenOnce();
     const now = options?.now instanceof Date && !Number.isNaN(options.now.getTime()) ? options.now : new Date();
     const todayYmd = formatLocalYmd(now);
@@ -196,6 +204,19 @@ export function matchesWhen(
     if (wantsIsNotToday && same) return false;
     if (wantsIsInPast && !inPast) return false;
     if (wantsIsInFuture && !inFuture) return false;
+    if (fixedDateComparisons.length) {
+      const fixedDateMatches = fixedDateComparisons.every(spec => {
+        const comparisonYmd = toLocalYmd(spec.raw);
+        if (!comparisonYmd) return false;
+        return dateYmds.some(ymd => {
+          if (spec.mode === 'lt') return ymd < comparisonYmd;
+          if (spec.mode === 'lte') return ymd <= comparisonYmd;
+          if (spec.mode === 'gt') return ymd > comparisonYmd;
+          return ymd >= comparisonYmd;
+        });
+      });
+      if (!fixedDateMatches) return false;
+    }
   }
 
   if (when.equals !== undefined) {

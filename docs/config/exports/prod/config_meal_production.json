@@ -374,9 +374,24 @@
     },
     "dedupDeleteOnKeyChange": true,
     "summaryHtmlTemplateId": {
-      "EN": "bundle:meal_production.summary.html",
-      "FR": "bundle:meal_production.summary.html",
-      "NL": "bundle:meal_production.summary.html"
+      "cases": [
+        {
+          "when": {
+            "fieldId": "MP_PREP_DATE",
+            "beforeDate": "2026-05-20"
+          },
+          "templateId": {
+            "EN": "bundle:meal_production.summary.legacy-temp.html",
+            "FR": "bundle:meal_production.summary.legacy-temp.html",
+            "NL": "bundle:meal_production.summary.legacy-temp.html"
+          }
+        }
+      ],
+      "default": {
+        "EN": "bundle:meal_production.summary.html",
+        "FR": "bundle:meal_production.summary.html",
+        "NL": "bundle:meal_production.summary.html"
+      }
     },
     "copyCurrentRecordEnabled": false,
     "copyCurrentRecordDropFields": [
@@ -7614,9 +7629,24 @@
     },
     "dedupDeleteOnKeyChange": true,
     "summaryHtmlTemplateId": {
-      "EN": "bundle:meal_production.summary.html",
-      "FR": "bundle:meal_production.summary.html",
-      "NL": "bundle:meal_production.summary.html"
+      "cases": [
+        {
+          "when": {
+            "fieldId": "MP_PREP_DATE",
+            "beforeDate": "2026-05-20"
+          },
+          "templateId": {
+            "EN": "bundle:meal_production.summary.legacy-temp.html",
+            "FR": "bundle:meal_production.summary.legacy-temp.html",
+            "NL": "bundle:meal_production.summary.legacy-temp.html"
+          }
+        }
+      ],
+      "default": {
+        "EN": "bundle:meal_production.summary.html",
+        "FR": "bundle:meal_production.summary.html",
+        "NL": "bundle:meal_production.summary.html"
+      }
     },
     "copyCurrentRecordEnabled": false,
     "copyCurrentRecordDropFields": [

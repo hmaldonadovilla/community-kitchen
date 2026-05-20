@@ -2845,6 +2845,37 @@ export class WebFormService {
     return this.resolveConfigComputedValue(resolveTemplateValue(value.else, vars), vars);
   }
 
+  private matchesComputedWhen(whenRaw: any, vars: Record<string, any>): boolean {
+    if (!whenRaw || typeof whenRaw !== 'object') return true;
+    const when = resolveTemplateValue(whenRaw, vars) as Record<string, any>;
+    const path = `${when.path || when.fieldId || ''}`.trim();
+    const fieldId = path || '__value__';
+    const ctx = {
+      getValue: (requestedFieldId: string) => {
+        const requested = `${requestedFieldId || ''}`.trim();
+        if (!requested || requested === fieldId || requested === '__value__') {
+          return path ? this.readTemplatePathValue(path, vars) : '';
+        }
+        return this.readTemplatePathValue(requested, vars);
+      },
+      getLineItems: () => [],
+      getLineItemKeys: () => []
+    };
+    return matchesWhenClause({ ...when, fieldId } as any, ctx as any, { now: new Date() });
+  }
+
+  private resolveCaseComputedValue(value: Record<string, any>, vars: Record<string, any>): any {
+    const cases = Array.isArray(value.cases) ? value.cases : [];
+    for (const entry of cases) {
+      if (!entry || typeof entry !== 'object') continue;
+      if (!this.matchesComputedWhen(entry.when, vars)) continue;
+      const candidate = Object.prototype.hasOwnProperty.call(entry, 'value') ? entry.value : entry.then;
+      return this.resolveConfigComputedValue(resolveTemplateValue(candidate, vars), vars);
+    }
+    const fallback = Object.prototype.hasOwnProperty.call(value, 'default') ? value.default : value.else;
+    return this.resolveConfigComputedValue(resolveTemplateValue(fallback, vars), vars);
+  }
+
   private splitDelimitedValues(value: any, delimiterRaw?: any): string[] {
     const raw = `${value ?? ''}`.trim();
     if (!raw) return [];
@@ -2980,6 +3011,9 @@ export class WebFormService {
     }
     if (op === 'ifPresent') {
       return this.resolveIfPresentComputedValue(value as Record<string, any>, vars);
+    }
+    if (op === 'case' || op === 'switch') {
+      return this.resolveCaseComputedValue(value as Record<string, any>, vars);
     }
     const out: Record<string, any> = {};
     Object.keys(value as Record<string, any>).forEach(key => {

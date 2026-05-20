@@ -23,6 +23,8 @@ const mealProductionGroup: QuestionConfig = {
       { id: 'ORD_QTY', type: 'NUMBER', labelEn: 'Ordered', required: false } as any,
       { id: 'FINAL_QTY', type: 'NUMBER', labelEn: 'Final', required: false } as any,
       { id: 'MP_TO_COOK', type: 'NUMBER', labelEn: 'To cook', required: false } as any,
+      { id: 'MP_COOK_TEMP', type: 'CHECKBOX', labelEn: 'All pots ≥63°C', required: false } as any,
+      { id: 'TEMP_EVD', type: 'FILE_UPLOAD', labelEn: 'Food safety photo', required: false } as any,
       { id: 'MP_LEFTOVER_RECIPE_CAPTURE', type: 'TEXT', labelEn: 'MI leftover name', required: false } as any,
       { id: 'MP_LEFTOVER_PORTIONS_CAPTURE', type: 'NUMBER', labelEn: 'MI leftover portions', required: false } as any,
       { id: 'MP_LEFTOVER_STORAGE_CAPTURE', type: 'TEXT', labelEn: 'Storage', required: false } as any
@@ -144,6 +146,8 @@ const recordValues = {
       ORD_QTY: 15,
       MP_TO_COOK: 15,
       FINAL_QTY: 15,
+      MP_COOK_TEMP: true,
+      TEMP_EVD: 'https://example.com/line-temp-photo-1',
       MP_LEFTOVER_RECIPE_CAPTURE: 'Renamed green beans',
       MP_LEFTOVER_PORTIONS_CAPTURE: 4,
       MP_LEFTOVER_STORAGE_CAPTURE: 'Frozen',
@@ -261,6 +265,29 @@ describe('meal production bundled HTML rendering', () => {
     expect(res.html).toContain('(*) manually entered');
     expect(res.html).toContain('background: var(--accent, #0b57d0)');
     expect(res.html).toContain('color: var(--accentText, #fff)');
+  });
+
+  it('renders the legacy summary template with per-meal temperature evidence support', () => {
+    const record: WebFormSubmission = {
+      formKey: 'Config: Meal Production',
+      language: 'EN',
+      id: 'MP-AA000818',
+      values: recordValues as any
+    } as any;
+
+    const res = renderHtmlFromHtmlTemplate({
+      dataSources,
+      form,
+      questions,
+      record,
+      templateIdMap: { EN: 'bundle:meal_production.summary.legacy-temp.html' }
+    });
+
+    expect(res.success).toBe(true);
+    expect(res.html).toContain('appendMealEvidence(mealBlock, coreTempLabel, coreTemp, tempPhotoUrls)');
+    expect(res.html).toContain('ck-total-row ck-evidence-row ck-hidden');
+    expect(res.html).toContain('data-core-temp>✔</span>');
+    expect(res.html).toContain('data-temp-photos="https://example.com/line-temp-photo-1"');
   });
 
   it('renders nested ingredients in bundle:ingredients_needed.html from buildDraftPayload output', () => {

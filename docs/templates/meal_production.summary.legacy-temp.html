@@ -1,0 +1,1349 @@
+<!--
+  Community Kitchen - Meal Production (Summary HTML Template)
+
+  Notes:
+  - Keep placeholders intact (e.g., {{FIELD_ID}}).
+  - Designed for in-app summary; minimal styles and a small script to organize meal details.
+-->
+
+<style>
+  .ck-summary-template {
+    font-family: var(--ck-font-family, system-ui);
+    font-size: var(--ck-font-control, 1rem);
+    line-height: 1.45;
+    margin: -8px;
+  }
+
+  .ck-summary-template * {
+    box-sizing: border-box;
+    max-width: 100%;
+    font-weight: 400;
+  }
+
+  .ck-header {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .ck-header-title {
+    font-weight: 600;
+    font-size: var(--ck-font-control);
+  }
+
+  .ck-meta-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 16px;
+  }
+
+  .ck-meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .ck-meta-item-inline {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px;
+  }
+
+  .ck-meta-item--full {
+    grid-column: 1 / -1;
+  }
+
+  .ck-label {
+    font-weight: 500;
+    font-size: var(--ck-font-label);
+  }
+
+  .ck-value {
+    font-weight: 400;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  .ck-section {
+    margin-top: 16px;
+  }
+
+  .ck-section-title {
+    margin: 0 0 8px 0;
+    font-weight: 600;
+    font-size: var(--ck-font-label);
+  }
+
+  .ck-meal-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .ck-meal-block {
+    padding-top: 12px;
+    border-top: 1px solid currentColor;
+  }
+
+  .ck-meal-block:first-of-type {
+    border-top: 0;
+    padding-top: 0;
+  }
+
+  .ck-meal-title {
+    font-weight: 600;
+    margin: 0 0 2px 0;
+  }
+
+  .ck-prep-group {
+    margin-top: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .ck-prep-line {
+    font-weight: 500;
+  }
+
+  .ck-prep-details {
+    font-size: calc(var(--ck-font-label) * 0.85);
+    opacity: 0.85;
+  }
+
+  .ck-inline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+  }
+
+  .ck-inline-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .ck-inline-item + .ck-inline-item::before {
+    content: "|";
+    margin-right: 6px;
+    opacity: 0.6;
+  }
+
+  .ck-totals {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 16px;
+  }
+
+  .ck-total-row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .ck-evidence-row {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+  }
+
+  .ck-evidence-row .ck-label {
+    flex: 0 0 auto;
+  }
+
+  .ck-evidence-row .ck-value {
+    flex: 0 1 auto;
+  }
+
+  .ck-action-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 16px;
+  }
+
+  .ck-generated-list {
+    margin: 0;
+    padding-left: 1.5em;
+    list-style-position: outside;
+  }
+
+  .ck-generated-item {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    margin: 0;
+    padding-left: 4px;
+  }
+
+  .ck-generated-item + .ck-generated-item {
+    margin-top: 6px;
+  }
+
+  .ck-generated-item-details {
+    margin-top: 2px;
+    color: var(--muted, #555);
+  }
+
+  .ck-action-button {
+    border: 1px solid var(--accent, #0b57d0);
+    background: var(--accent, #0b57d0);
+    padding: 6px 12px;
+    border-radius: var(--radius-control, 8px);
+    font: inherit;
+    font-weight: 500;
+    color: var(--accentText, #fff);
+    cursor: pointer;
+  }
+
+  .ck-action-button:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+  }
+
+  .ck-expiration-override-picker {
+    position: relative;
+    display: inline-grid;
+    vertical-align: middle;
+    margin-left: 2px;
+  }
+
+  .ck-expiration-override-picker[aria-disabled="true"] {
+    opacity: 0.65;
+    cursor: not-allowed;
+  }
+
+  .ck-expiration-override-label {
+    pointer-events: none;
+  }
+
+  .ck-date-input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    min-height: 100%;
+    padding: 0;
+    margin: 0;
+    border: 0;
+    background: transparent;
+    color: transparent;
+    font: inherit;
+    cursor: pointer;
+    opacity: 0;
+  }
+
+  .ck-date-input:disabled {
+    cursor: not-allowed;
+  }
+
+  .ck-expiration-override-error {
+    flex-basis: 100%;
+    color: #b00020;
+    font-size: var(--ck-font-label);
+  }
+
+  .ck-manual-marker {
+    font-weight: 400;
+  }
+
+  .ck-summary-legend {
+    font-size: var(--ck-font-label);
+  }
+
+  .ck-hidden {
+    display: none;
+  }
+
+  .ck-notes {
+    width: 100%;
+    white-space: pre-wrap;
+  }
+
+  .ck-notes:empty {
+    display: none;
+  }
+
+  @media (max-width: 600px) {
+    .ck-meta-grid,
+    .ck-totals {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
+
+<div class="ck-summary-template" data-ck-template="meal-production-summary">
+  <div class="ck-header">
+    <div class="ck-header-title">{{MP_DISTRIBUTOR.DIST_NAME}} | {{MP_SERVICE}}</div>
+    <div class="ck-meta-grid">
+      <div class="ck-meta-item ck-meta-item-inline ck-meta-item--full">
+        <span class="ck-label">{{LABEL(MP_PREP_DATE)}}:</span>
+        <span class="ck-value" data-production-date-value>{{MP_PREP_DATE}}</span>
+      </div>
+      <div class="ck-meta-item ck-meta-item-inline ck-meta-item--full">
+        <span class="ck-label">{{LABEL(MP_EXP_DATE)}}:</span>
+        <span class="ck-value" data-expiration-date-value>{{MP_EXP_DATE}}</span>
+        <span class="ck-manual-marker ck-hidden" data-expiration-manual-marker>(*)</span>
+        <label
+          class="ck-expiration-override-picker ck-hidden"
+          data-expiration-override-button
+          data-expiration-override-controls
+        >
+          <span class="ck-action-button ck-expiration-override-label" aria-hidden="true">Override</span>
+          <input type="date" class="ck-date-input" data-expiration-override-date aria-label="Override expiration date" />
+        </label>
+        <button
+          type="button"
+          class="ck-hidden"
+          data-ck-action="MP_OVERRIDE_EXP_DATE"
+          data-ck-action-value-field="MP_EXP_DATE_OVERRIDE"
+          data-ck-action-value-source="[data-expiration-override-date]"
+        >Override</button>
+        <span class="ck-expiration-override-error ck-hidden" data-expiration-override-error></span>
+      </div>
+      <div class="ck-meta-item ck-meta-item-inline ck-meta-item--full">
+        <span class="ck-label">{{LABEL(MP_ID)}}:</span>
+        <span class="ck-value">{{MP_ID}}</span>
+      </div>
+      <div class="ck-meta-item ck-meta-item-inline ck-meta-item--full">
+        <span class="ck-label">{{LABEL(MP_COOK_NAME)}}:</span>
+        <span class="ck-value">{{MP_COOK_NAME}}</span>
+      </div>
+      <div class="ck-meta-item ck-meta-item-inline ck-meta-item--full">
+        <span class="ck-label">{{LABEL(MP_VOLUNTEER)}}:</span>
+        <span class="ck-value">{{DEFAULT(MP_VOLUNTEER, "N/A")}}</span>
+      </div>
+      <div class="ck-meta-item ck-meta-item--full ck-notes ck-value">{{MP_NOTES}}</div>
+      <div class="ck-hidden" data-record-status>{{STATUS}}</div>
+      <div class="ck-hidden" data-record-status-key>{{STATUS_KEY}}</div>
+      <div class="ck-hidden" data-expiration-override-value>{{MP_EXP_DATE_OVERRIDE}}</div>
+      <div class="ck-hidden" data-expiration-default-offset-days>3</div>
+    </div>
+  </div>
+
+  <div class="ck-section">
+    <div class="ck-section-title">Production details</div>
+    <div class="ck-meal-list" data-ck-meal-list></div>
+
+    <table class="ck-hidden" data-ck-meal-data>
+      <tbody>
+        <tr>
+          <td>
+            <span class="ck-hidden">{{ROW_TABLE(MP_MEALS_REQUEST.MP_TYPE_LI.PREP_TYPE)}}</span>
+            <span class="ck-hidden" data-meal-index>{{MP_MEALS_REQUEST.__ROWINDEX}}</span>
+            <span class="ck-hidden" data-meal-type>{{MP_MEALS_REQUEST.MEAL_TYPE}}</span>
+            <span class="ck-hidden" data-ord-qty>{{MP_MEALS_REQUEST.ORD_QTY}}</span>
+            <span class="ck-hidden" data-to-cook>{{MP_MEALS_REQUEST.MP_TO_COOK}}</span>
+            <span class="ck-hidden" data-final-qty>{{MP_MEALS_REQUEST.FINAL_QTY}}</span>
+            <span class="ck-hidden" data-mi-leftover-recipe>{{MP_MEALS_REQUEST.MP_LEFTOVER_RECIPE_CAPTURE}}</span>
+            <span class="ck-hidden" data-mi-leftover-portions>{{MP_MEALS_REQUEST.MP_LEFTOVER_PORTIONS_CAPTURE}}</span>
+            <span class="ck-hidden" data-mi-leftover-storage>{{MP_MEALS_REQUEST.MP_LEFTOVER_STORAGE_CAPTURE}}</span>
+            <span class="ck-hidden" data-prep-type>{{MP_MEALS_REQUEST.MP_TYPE_LI.PREP_TYPE}}</span>
+            <span class="ck-hidden" data-prep-qty>{{MP_MEALS_REQUEST.MP_TYPE_LI.PREP_QTY}}</span>
+            <span class="ck-hidden" data-recipe>{{MP_MEALS_REQUEST.MP_TYPE_LI.RECIPE}}</span>
+            <span class="ck-hidden" data-leftover-usage-mode>{{MP_MEALS_REQUEST.MP_TYPE_LI.LEFTOVER_USAGE_MODE}}</span>
+            <span class="ck-hidden" data-leftover-summary-action>{{MP_MEALS_REQUEST.MP_TYPE_LI.LEFTOVER_SUMMARY_ACTION}}</span>
+            <span class="ck-hidden" data-core-temp>{{MP_MEALS_REQUEST.MP_COOK_TEMP}}</span>
+            <span class="ck-hidden" data-core-temp-label>{{LABEL(MP_MEALS_REQUEST.MP_COOK_TEMP)}}</span>
+            <span class="ck-hidden" data-temp-photos="{{MP_MEALS_REQUEST.TEMP_EVD}}"></span>
+          </td>
+        </tr>
+        <tr class="ck-ingredient-row ck-hidden">
+          <td data-ingredient-name>{{MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.ING}}</td>
+          <td data-ingredient-allergen>{{MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.ALLERGEN}}</td>
+          {{EXCLUDE_WHEN_WHEN({"fieldId":"MP_MEALS_REQUEST.MP_TYPE_LI.MP_INGREDIENTS_LI.ING","isEmpty":true})}}
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <table class="ck-hidden" data-ck-si-leftover-data>
+    <tbody>
+      <tr>
+        <td>
+          <span class="ck-hidden">{{ROW_TABLE(MP_LEFTOVER_CAPTURE_LI.LEFTOVER_INGREDIENT)}}</span>
+          <span class="ck-hidden" data-si-leftover-kind>{{MP_LEFTOVER_CAPTURE_LI.LEFTOVER_KIND}}</span>
+          <span class="ck-hidden" data-si-leftover-recipe>{{MP_LEFTOVER_CAPTURE_LI.LEFTOVER_RECIPE}}</span>
+          <span class="ck-hidden" data-si-leftover-portions>{{MP_LEFTOVER_CAPTURE_LI.LEFTOVER_PORTIONS}}</span>
+          <span class="ck-hidden" data-si-leftover-ingredient>{{MP_LEFTOVER_CAPTURE_LI.LEFTOVER_INGREDIENT}}</span>
+          <span class="ck-hidden" data-si-leftover-qty>{{MP_LEFTOVER_CAPTURE_LI.LEFTOVER_QTY}}</span>
+          <span class="ck-hidden" data-si-leftover-unit>{{MP_LEFTOVER_CAPTURE_LI.LEFTOVER_UNIT}}</span>
+          <span class="ck-hidden" data-si-leftover-storage>{{MP_LEFTOVER_CAPTURE_LI.LEFTOVER_STORAGE}}</span>
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="ck-section">
+    <div class="ck-totals">
+      <div class="ck-total-row">
+        <div class="ck-label">Total {{LABEL(MP_MEALS_REQUEST.ORD_QTY)}}</div>
+        <div class="ck-value">{{SUM(MP_MEALS_REQUEST.ORD_QTY)}}</div>
+      </div>
+      <div class="ck-total-row" data-total-delivered-row>
+        <div class="ck-label">Total {{LABEL(MP_MEALS_REQUEST.FINAL_QTY)}}</div>
+        <div class="ck-value">{{SUM(MP_MEALS_REQUEST.FINAL_QTY)}}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="ck-section ck-hidden" data-generated-leftovers-section>
+    <div class="ck-section-title">Generated leftovers</div>
+    <ul class="ck-generated-list" data-generated-leftovers-list></ul>
+  </div>
+
+  <div class="ck-section">
+    <div class="ck-action-row">
+      <button type="button" class="ck-action-button" data-ck-action="ING_PREVIEW">Ingredients needed</button>
+    </div>
+    <div class="ck-hidden" data-top-core-temp-raw>{{MP_COOK_TEMP}}</div>
+    <span class="ck-hidden" data-top-temp-photos="{{TEMP_EVD}}"></span>
+    <div class="ck-total-row ck-evidence-row ck-hidden">
+      <div class="ck-label">{{LABEL(MP_COOK_TEMP)}}:</div>
+      <div class="ck-value" data-food-safety-confirmation-value>{{MP_COOK_TEMP}}</div>
+    </div>
+    <div class="ck-total-row ck-evidence-row ck-hidden">
+      <div class="ck-label">{{LABEL(TEMP_EVD)}}</div>
+      <div class="ck-value" data-food-safety-photo-value>{{FILES_ICON(TEMP_EVD)}}</div>
+    </div>
+  </div>
+  <div class="ck-hidden" data-generated-leftovers-json>{{__CK_GENERATED_SUBMIT_EFFECT_RECORDS_JSON}}</div>
+  <div class="ck-section ck-summary-legend ck-hidden" data-manual-expiration-legend>(*) manually entered</div>
+</div>
+
+<script>
+  (function () {
+    var root = document.querySelector('[data-ck-template="meal-production-summary"]');
+    if (!root || root.getAttribute('data-ck-init') === '1') return;
+    root.setAttribute('data-ck-init', '1');
+
+    // Hide notes when empty so it doesn't waste vertical space.
+    try {
+      var notes = root.querySelector('.ck-notes');
+      if (notes) {
+        var text = (notes.textContent || '').toString().trim();
+        if (!text || text === '—' || text === '{{MP_NOTES}}') notes.classList.add('ck-hidden');
+      }
+    } catch (_) {
+      // ignore
+    }
+
+    var normalize = function (value) {
+      return (value || '').toString().trim().toLowerCase();
+    };
+    var toText = function (value) {
+      return (value || '').toString().trim();
+    };
+    var MULTI_INGREDIENT_LEFTOVER_KIND = 'Multi-ingredient';
+    var SINGLE_INGREDIENT_LEFTOVER_KIND = 'Single-ingredient';
+    var formatPortionsLabel = function (value) {
+      if (!value) return '';
+      var numericValue = Number(value.toString().replace(/,/g, '.'));
+      var unit = !isNaN(numericValue) && numericValue === 1 ? 'portion' : 'portions';
+      return value + ' ' + unit;
+    };
+    var formatGeneratedLeftoverQuantity = function (values) {
+      var portions = toText(values.LEFTOVER_PORTIONS || '');
+      if (portions) return formatPortionsLabel(portions);
+      var qty = toText(values.LEFTOVER_QTY || '');
+      if (!qty) return '';
+      var unit = toText(values.LEFTOVER_UNIT || '');
+      return unit ? qty + ' ' + unit : qty;
+    };
+    var resolveGeneratedLeftoverDisplayId = function (entry, fallbackCounters) {
+      var values = entry && typeof entry.values === 'object' ? entry.values : {};
+      var leftoverId = toText(values.LEFTOVER_ID || (entry && entry.recordId) || '');
+      if (leftoverId) return leftoverId;
+      var rawKind = toText(values.LEFTOVER_KIND || '');
+      var kind = toCanonicalLeftoverKind(rawKind);
+      if (kind === MULTI_INGREDIENT_LEFTOVER_KIND && fallbackCounters) {
+        fallbackCounters.mi += 1;
+        return 'MI-' + fallbackCounters.mi;
+      }
+      if (kind === SINGLE_INGREDIENT_LEFTOVER_KIND && fallbackCounters) {
+        fallbackCounters.si += 1;
+        return 'SI-' + fallbackCounters.si;
+      }
+      return kind;
+    };
+    var buildGeneratedLeftoverLabel = function (entry, displayId) {
+      var values = entry && typeof entry.values === 'object' ? entry.values : {};
+      var recipe = toText(values.LEFTOVER_RECIPE || '');
+      var ingredient = toText(values.LEFTOVER_INGREDIENT || '');
+      var quantity = formatGeneratedLeftoverQuantity(values);
+      return [displayId, recipe || ingredient, quantity].filter(Boolean).join(' | ');
+    };
+    var collectIngredientNames = function (value, out) {
+      if (value === undefined || value === null) return;
+      if (Array.isArray(value)) {
+        value.forEach(function (entry) {
+          collectIngredientNames(entry, out);
+        });
+        return;
+      }
+      if (typeof value === 'object') {
+        var rowValues = value.values && typeof value.values === 'object' ? value.values : value;
+        var name = toText(
+          rowValues.ING ||
+            rowValues.INGREDIENT ||
+            rowValues.LEFTOVER_INGREDIENT ||
+            rowValues.name ||
+            rowValues.label ||
+            ''
+        );
+        if (name) out.push(name);
+        return;
+      }
+      var text = toText(value);
+      if (!text) return;
+      if ((text.charAt(0) === '[' || text.charAt(0) === '{') && typeof JSON !== 'undefined') {
+        try {
+          collectIngredientNames(JSON.parse(text), out);
+          return;
+        } catch (_) {
+          // Fall through to plain text parsing.
+        }
+      }
+      text.split(/[,;]\s*/).forEach(function (part) {
+        var name = toText(part);
+        if (name) out.push(name);
+      });
+    };
+    var formatGeneratedLeftoverIngredients = function (entry) {
+      var values = entry && typeof entry.values === 'object' ? entry.values : {};
+      var kind = toCanonicalLeftoverKind(toText(values.LEFTOVER_KIND || ''));
+      if (kind !== MULTI_INGREDIENT_LEFTOVER_KIND) return '';
+      var names = [];
+      collectIngredientNames(values.LEFTOVER_INGREDIENTS_LI || values.LEFTOVER_INGREDIENTS || values.INGREDIENTS || entry.ingredients, names);
+      var seen = {};
+      var unique = names.filter(function (name) {
+        var key = normalize(name);
+        if (!key || seen[key]) return false;
+        seen[key] = true;
+        return true;
+      });
+      return unique.join(', ');
+    };
+    var isPositiveQuantity = function (value) {
+      var text = toText(value);
+      if (!text || isTemplateToken(text)) return false;
+      var numericValue = Number(text.replace(/,/g, '.'));
+      return Number.isFinite(numericValue) ? numericValue > 0 : true;
+    };
+    var appendGeneratedLeftoverEntry = function (entry, seenIds, fallbackCounters) {
+      if (!generatedList) return;
+      var leftoverId = resolveGeneratedLeftoverDisplayId(entry, fallbackCounters);
+      var label = buildGeneratedLeftoverLabel(entry, leftoverId);
+      if (!label) return;
+      var key = leftoverId || label;
+      if (key && seenIds[key]) return;
+      if (key) seenIds[key] = true;
+      var item = document.createElement('li');
+      item.className = 'ck-generated-item';
+      var labelNode = document.createElement('div');
+      labelNode.textContent = label;
+      item.appendChild(labelNode);
+      var ingredientText = formatGeneratedLeftoverIngredients(entry);
+      if (ingredientText) {
+        var details = document.createElement('div');
+        details.className = 'ck-generated-item-details';
+        details.textContent = 'Ingredients: ' + ingredientText;
+        item.appendChild(details);
+      }
+      generatedList.appendChild(item);
+    };
+    var statusKeyRaw = toText((root.querySelector('[data-record-status-key]') || {}).textContent || '');
+    var statusRaw = toText((root.querySelector('[data-record-status]') || {}).textContent || '');
+    var isClosedStatus = normalize(statusKeyRaw) === 'onclose' || normalize(statusRaw) === 'closed';
+    var isFinalReportSentStatus =
+      normalize(statusKeyRaw) === 'onemail' ||
+      isClosedStatus ||
+      ['final report emailed', 'final report sent'].indexOf(normalize(statusRaw)) >= 0;
+    var deliveredRow = root.querySelector('[data-total-delivered-row]');
+    if (deliveredRow && !isClosedStatus) {
+      deliveredRow.classList.add('ck-hidden');
+    }
+
+    var isTemplateToken = function (value) {
+      var text = toText(value);
+      return /^{{[\s\S]*}}$/.test(text);
+    };
+    var hasMeaningfulValue = function (value) {
+      var text = toText(value);
+      if (!text || text === '—') return false;
+      if (isTemplateToken(text)) return false;
+      return true;
+    };
+    var parseRequestParamFromObject = function (source, key) {
+      if (!source || typeof source !== 'object') return '';
+      var normalizedKey = normalize(key);
+      var keys = Object.keys(source);
+      for (var i = 0; i < keys.length; i += 1) {
+        if (normalize(keys[i]) !== normalizedKey) continue;
+        return toText(source[keys[i]]);
+      }
+      return '';
+    };
+    var parseRequestParamFromQuery = function (raw, key) {
+      var text = toText(raw);
+      if (!text) return '';
+      try {
+        var body = text.charAt(0) === '?' || text.charAt(0) === '#' ? text.slice(1) : text;
+        var queryIndex = body.indexOf('?');
+        if (queryIndex >= 0) body = body.slice(queryIndex + 1);
+        var params = new URLSearchParams(body);
+        var normalizedKey = normalize(key);
+        var result = '';
+        params.forEach(function (value, rawKey) {
+          if (result || normalize(rawKey) !== normalizedKey) return;
+          result = toText(value);
+        });
+        return result;
+      } catch (_) {
+        return '';
+      }
+    };
+    var resolveRequestParam = function (key) {
+      var globalAny = window || {};
+      return (
+        parseRequestParamFromObject(globalAny.__WEB_FORM_REQUEST_PARAMS__, key) ||
+        parseRequestParamFromObject((globalAny.__WEB_FORM_BOOTSTRAP__ || {}).requestParams, key) ||
+        parseRequestParamFromQuery((globalAny.location || {}).search || '', key) ||
+        parseRequestParamFromQuery((globalAny.location || {}).hash || '', key)
+      );
+    };
+    var parseDisplayDateToIso = function (value) {
+      var text = toText(value);
+      if (!hasMeaningfulValue(text)) return '';
+      var ymd = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (ymd) return ymd[1] + '-' + ymd[2] + '-' + ymd[3];
+      var display = text.match(/^(?:[A-Za-z]{3},\s*)?(\d{1,2})-([A-Za-z]{3})-(\d{4})$/);
+      if (!display) return '';
+      var months = {
+        jan: '01',
+        feb: '02',
+        mar: '03',
+        apr: '04',
+        may: '05',
+        jun: '06',
+        jul: '07',
+        aug: '08',
+        sep: '09',
+        oct: '10',
+        nov: '11',
+        dec: '12'
+      };
+      var mon = months[normalize(display[2])];
+      if (!mon) return '';
+      var day = display[1].padStart(2, '0');
+      return display[3] + '-' + mon + '-' + day;
+    };
+    var parseIsoParts = function (iso) {
+      var match = toText(iso).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (!match) return null;
+      var year = Number(match[1]);
+      var monthIndex = Number(match[2]) - 1;
+      var day = Number(match[3]);
+      if (!Number.isFinite(year) || !Number.isFinite(monthIndex) || !Number.isFinite(day)) return null;
+      return { year: year, monthIndex: monthIndex, day: day };
+    };
+    var isoToUtcDate = function (iso) {
+      var parts = parseIsoParts(iso);
+      if (!parts) return null;
+      return new Date(Date.UTC(parts.year, parts.monthIndex, parts.day));
+    };
+    var addDaysIso = function (iso, days) {
+      var date = isoToUtcDate(iso);
+      if (!date || !Number.isFinite(days)) return '';
+      date.setUTCDate(date.getUTCDate() + days);
+      var year = String(date.getUTCFullYear());
+      var month = String(date.getUTCMonth() + 1).padStart(2, '0');
+      var day = String(date.getUTCDate()).padStart(2, '0');
+      return year + '-' + month + '-' + day;
+    };
+    var weekdayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    var monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    var formatIsoDateLabel = function (iso) {
+      var date = isoToUtcDate(iso);
+      if (!date) return toText(iso);
+      return weekdayLabels[date.getUTCDay()] + ', ' + String(date.getUTCDate()).padStart(2, '0') + '-' + monthLabels[date.getUTCMonth()] + '-' + date.getUTCFullYear();
+    };
+    var expirationValueNode = root.querySelector('[data-expiration-date-value]');
+    var productionDateNode = root.querySelector('[data-production-date-value]');
+    var expirationOverrideNode = root.querySelector('[data-expiration-override-value]');
+    var expirationDefaultOffsetNode = root.querySelector('[data-expiration-default-offset-days]');
+    var manualMarker = root.querySelector('[data-expiration-manual-marker]');
+    var manualLegend = root.querySelector('[data-manual-expiration-legend]');
+    var expirationControls = root.querySelector('[data-expiration-override-controls]');
+    var expirationVisibleButton = root.querySelector('[data-expiration-override-button]');
+    var expirationDateInput = root.querySelector('[data-expiration-override-date]');
+    var expirationErrorNode = root.querySelector('[data-expiration-override-error]');
+    var expirationOverrideButton = root.querySelector('[data-ck-action="MP_OVERRIDE_EXP_DATE"]');
+    var productionDateIso = parseDisplayDateToIso(productionDateNode ? productionDateNode.textContent : '');
+    var defaultOffsetDays = Number(toText(expirationDefaultOffsetNode ? expirationDefaultOffsetNode.textContent : ''));
+    var defaultExpirationIso =
+      productionDateIso && Number.isFinite(defaultOffsetDays)
+        ? addDaysIso(productionDateIso, defaultOffsetDays)
+        : parseDisplayDateToIso(expirationValueNode ? expirationValueNode.textContent : '');
+    var isDefaultExpirationIso = function (candidateIso) {
+      return Boolean(defaultExpirationIso && candidateIso && candidateIso === defaultExpirationIso);
+    };
+    var overrideText = toText(expirationOverrideNode ? expirationOverrideNode.textContent : '');
+    var overrideIso = parseDisplayDateToIso(overrideText);
+    var hasManualExpiration = hasMeaningfulValue(overrideText) && !isDefaultExpirationIso(overrideIso);
+    if (hasManualExpiration && expirationValueNode) {
+      expirationValueNode.textContent = overrideText;
+    }
+    if (manualMarker) manualMarker.classList.toggle('ck-hidden', !hasManualExpiration);
+    if (manualLegend) manualLegend.classList.toggle('ck-hidden', !hasManualExpiration);
+    var adminValue = normalize(resolveRequestParam('admin'));
+    var isAdminRequest = ['true', '1', 'yes', 'on'].indexOf(adminValue) >= 0;
+    var canOverrideExpiration = isAdminRequest && !isFinalReportSentStatus;
+    if (expirationControls) {
+      expirationControls.classList.toggle('ck-hidden', !isAdminRequest);
+      expirationControls.setAttribute('aria-disabled', canOverrideExpiration ? 'false' : 'true');
+    }
+    if (expirationDateInput) {
+      expirationDateInput.disabled = !canOverrideExpiration;
+    }
+    if (expirationOverrideButton) {
+      expirationOverrideButton.disabled = !canOverrideExpiration;
+      expirationOverrideButton.setAttribute('aria-disabled', canOverrideExpiration ? 'false' : 'true');
+    }
+    var showExpirationError = function (message) {
+      if (!expirationErrorNode) return;
+      expirationErrorNode.textContent = message;
+      expirationErrorNode.classList.toggle('ck-hidden', !message);
+    };
+    var clearExpirationError = function () {
+      showExpirationError('');
+    };
+    var preparedExpirationIso = '';
+    var expirationInputPreparedAt = 0;
+    var getLocalTodayIso = function () {
+      var date = new Date();
+      var year = String(date.getFullYear());
+      var month = String(date.getMonth() + 1).padStart(2, '0');
+      var day = String(date.getDate()).padStart(2, '0');
+      return year + '-' + month + '-' + day;
+    };
+    var getDisplayedExpirationIso = function () {
+      return parseDisplayDateToIso(expirationValueNode ? expirationValueNode.textContent : '') || defaultExpirationIso || '';
+    };
+    var syncExpirationDateInputValue = function () {
+      if (!expirationDateInput) return;
+      preparedExpirationIso = getDisplayedExpirationIso();
+      expirationDateInput.value = preparedExpirationIso;
+    };
+    var prepareExpirationDateInput = function () {
+      if (!canOverrideExpiration || !expirationDateInput) return;
+      clearExpirationError();
+      syncExpirationDateInputValue();
+      expirationInputPreparedAt = Date.now();
+    };
+    var validateExpirationCandidate = function (candidateIso) {
+      if (!candidateIso) return '';
+      if (productionDateIso && candidateIso < productionDateIso) {
+        return 'The new date cannot be before the production date (' + formatIsoDateLabel(productionDateIso) + ')';
+      }
+      return '';
+    };
+    var commitExpirationCandidate = function () {
+      if (!canOverrideExpiration) return;
+      var candidateIso = toText(expirationDateInput ? expirationDateInput.value : '');
+      if (!candidateIso) {
+        clearExpirationError();
+        syncExpirationDateInputValue();
+        return;
+      }
+      if (candidateIso === preparedExpirationIso) {
+        clearExpirationError();
+        syncExpirationDateInputValue();
+        return;
+      }
+      if (
+        expirationInputPreparedAt &&
+        Date.now() - expirationInputPreparedAt < 700 &&
+        candidateIso === getLocalTodayIso()
+      ) {
+        clearExpirationError();
+        syncExpirationDateInputValue();
+        return;
+      }
+      var validationMessage = validateExpirationCandidate(candidateIso);
+      if (validationMessage) {
+        showExpirationError(validationMessage);
+        return;
+      }
+      clearExpirationError();
+      if (expirationValueNode) expirationValueNode.textContent = formatIsoDateLabel(candidateIso);
+      var candidateIsDefault = isDefaultExpirationIso(candidateIso);
+      if (manualMarker) manualMarker.classList.toggle('ck-hidden', candidateIsDefault);
+      if (manualLegend) manualLegend.classList.toggle('ck-hidden', candidateIsDefault);
+      if (expirationDateInput) expirationDateInput.value = candidateIsDefault ? '' : candidateIso;
+      if (expirationOverrideButton) expirationOverrideButton.click();
+      syncExpirationDateInputValue();
+    };
+    var commitExpirationCandidateAfterFocusLeaves = function () {
+      setTimeout(function () {
+        if (!expirationControls || expirationControls.classList.contains('ck-hidden')) return;
+        var activeElement = document.activeElement;
+        if (expirationControls.contains(activeElement) || activeElement === expirationVisibleButton) return;
+        if (!expirationDateInput || !expirationDateInput.value || expirationDateInput.value === preparedExpirationIso) return;
+        commitExpirationCandidate();
+      }, 0);
+    };
+    if (expirationDateInput) {
+      if (window.PointerEvent) {
+        expirationDateInput.addEventListener('pointerdown', prepareExpirationDateInput);
+      } else {
+        expirationDateInput.addEventListener('touchstart', prepareExpirationDateInput);
+        expirationDateInput.addEventListener('mousedown', prepareExpirationDateInput);
+      }
+      expirationDateInput.addEventListener('focus', prepareExpirationDateInput);
+      expirationDateInput.addEventListener('blur', commitExpirationCandidateAfterFocusLeaves);
+      expirationDateInput.addEventListener('keydown', function (event) {
+        if (event.key === 'Enter') {
+          event.preventDefault();
+          commitExpirationCandidate();
+        } else if (event.key === 'Escape') {
+          clearExpirationError();
+          syncExpirationDateInputValue();
+          expirationDateInput.blur();
+        }
+      });
+      syncExpirationDateInputValue();
+    }
+
+    var listContainer = root.querySelector('[data-ck-meal-list]');
+    var generatedJsonNode = root.querySelector('[data-generated-leftovers-json]');
+    var generatedSection = root.querySelector('[data-generated-leftovers-section]');
+    var generatedList = root.querySelector('[data-generated-leftovers-list]');
+    var dataTables = Array.prototype.slice.call(root.querySelectorAll('[data-ck-meal-data]'));
+    var siLeftoverTables = Array.prototype.slice.call(root.querySelectorAll('[data-ck-si-leftover-data]'));
+    if (!listContainer || !dataTables.length) return;
+
+    var isConfirmedValue = function (value) {
+      var text = normalize(value);
+      return text === 'true' || text === 'yes' || text === '1' || text === '✔' || text === '✅';
+    };
+    var parseNumber = function (value) {
+      var n = Number((value || '').toString().trim());
+      return Number.isFinite(n) ? n : NaN;
+    };
+    var encodeFileField = function (urls) {
+      if (!urls || !urls.length) return '';
+      try {
+        return 'urls:' + encodeURIComponent(JSON.stringify(urls));
+      } catch (err) {
+        try {
+          return 'urls:' + encodeURIComponent(urls.join('|'));
+        } catch (err2) {
+          return '';
+        }
+      }
+    };
+    var uniq = function (list) {
+      var seen = new Set();
+      var out = [];
+      list.forEach(function (item) {
+        var key = normalize(item);
+        if (!key || seen.has(key)) return;
+        seen.add(key);
+        out.push(item.toString().trim());
+      });
+      return out;
+    };
+    var compareDisplayText = function (left, right) {
+      var leftText = toText(left);
+      var rightText = toText(right);
+      if (!leftText && !rightText) return 0;
+      if (!leftText) return 1;
+      if (!rightText) return -1;
+      var normalizedCompare = leftText.toLowerCase().localeCompare(rightText.toLowerCase());
+      if (normalizedCompare !== 0) return normalizedCompare;
+      return leftText.localeCompare(rightText);
+    };
+    var looksLikeUrl = function (value) {
+      return /^https?:\/\//i.test((value || '').toString().trim());
+    };
+    var extractUrls = function (raw) {
+      var text = toText(raw);
+      if (!text) return [];
+      var parts = text
+        .split(/[,\n]+/g)
+        .map(function (item) {
+          return item.trim();
+        })
+        .filter(Boolean);
+      var urls = [];
+      var addUrl = function (url) {
+        if (!looksLikeUrl(url)) return;
+        urls.push(url);
+      };
+      if (parts.length > 1) {
+        parts.forEach(addUrl);
+        return uniq(urls);
+      }
+      var matches = text.match(/https?:\/\/[^\s,]+/gi) || [];
+      matches.forEach(addUrl);
+      return uniq(urls);
+    };
+
+    var collectIngredients = function (table) {
+      var rows = Array.prototype.slice.call(table.querySelectorAll('.ck-ingredient-row'));
+      var ingredients = [];
+      var allergens = [];
+      rows.forEach(function (row) {
+        var nameEl = row.querySelector('[data-ingredient-name]');
+        var allergenEl = row.querySelector('[data-ingredient-allergen]');
+        var name = toText(nameEl ? nameEl.textContent : '');
+        var allergen = toText(allergenEl ? allergenEl.textContent : '');
+        if (name) ingredients.push(name);
+        if (allergen && normalize(allergen) !== 'none') allergens.push(allergen);
+      });
+      return {
+        ingredients: ingredients,
+        allergens: allergens
+      };
+    };
+
+    var topCoreTempRawNode = root.querySelector('[data-top-core-temp-raw]');
+    var topTempPhotosEl = root.querySelector('[data-top-temp-photos]');
+    var topCoreTempRaw = toText(topCoreTempRawNode ? topCoreTempRawNode.textContent : '');
+    var topTempPhotoUrls = extractUrls(topTempPhotosEl ? topTempPhotosEl.getAttribute('data-top-temp-photos') : '');
+
+    var entries = dataTables.map(function (table) {
+      var getText = function (selector) {
+        var el = table.querySelector(selector);
+        return toText(el ? el.textContent : '');
+      };
+      var tempPhotosEl = table.querySelector('[data-temp-photos]');
+      var tempPhotosRaw = tempPhotosEl ? tempPhotosEl.getAttribute('data-temp-photos') : '';
+      var tempPhotoUrls = extractUrls(tempPhotosRaw);
+      var collected = collectIngredients(table);
+      return {
+        table: table,
+        mealIndex: getText('[data-meal-index]'),
+        mealType: getText('[data-meal-type]'),
+        ordQty: getText('[data-ord-qty]'),
+        toCook: getText('[data-to-cook]'),
+        finalQty: getText('[data-final-qty]'),
+        miLeftoverRecipe: getText('[data-mi-leftover-recipe]'),
+        miLeftoverPortions: getText('[data-mi-leftover-portions]'),
+        miLeftoverStorage: getText('[data-mi-leftover-storage]'),
+        prepType: getText('[data-prep-type]'),
+        prepQty: getText('[data-prep-qty]'),
+        recipe: getText('[data-recipe]'),
+        leftoverUsageMode: getText('[data-leftover-usage-mode]'),
+        leftoverSummaryAction: getText('[data-leftover-summary-action]'),
+        coreTemp: getText('[data-core-temp]'),
+        coreTempLabel: getText('[data-core-temp-label]'),
+        tempPhotoUrls: tempPhotoUrls,
+        ingredients: collected.ingredients,
+        allergens: collected.allergens
+      };
+    });
+
+    var collectSourceGeneratedLeftovers = function () {
+      var sourceEntries = [];
+      entries.forEach(function (entry) {
+        if (normalize(entry.prepType) !== 'cook') return;
+        if (!isPositiveQuantity(entry.miLeftoverPortions)) return;
+        sourceEntries.push({
+          values: {
+            LEFTOVER_KIND: MULTI_INGREDIENT_LEFTOVER_KIND,
+            LEFTOVER_RECIPE: entry.miLeftoverRecipe || entry.recipe,
+            LEFTOVER_PORTIONS: entry.miLeftoverPortions,
+            LEFTOVER_STORAGE: entry.miLeftoverStorage,
+            LEFTOVER_INGREDIENTS_LI: entry.ingredients
+          }
+        });
+      });
+
+      siLeftoverTables.forEach(function (table) {
+        var getText = function (selector) {
+          var el = table.querySelector(selector);
+          return toText(el ? el.textContent : '');
+        };
+        var quantity = getText('[data-si-leftover-qty]');
+        var portions = getText('[data-si-leftover-portions]');
+        if (!isPositiveQuantity(quantity) && !isPositiveQuantity(portions)) return;
+        sourceEntries.push({
+          values: {
+            LEFTOVER_KIND: toText(getText('[data-si-leftover-kind]')) || SINGLE_INGREDIENT_LEFTOVER_KIND,
+            LEFTOVER_RECIPE: getText('[data-si-leftover-recipe]'),
+            LEFTOVER_PORTIONS: portions,
+            LEFTOVER_INGREDIENT: getText('[data-si-leftover-ingredient]'),
+            LEFTOVER_QTY: quantity,
+            LEFTOVER_UNIT: getText('[data-si-leftover-unit]'),
+            LEFTOVER_STORAGE: getText('[data-si-leftover-storage]')
+          }
+        });
+      });
+      return sourceEntries;
+    };
+
+    if (!topTempPhotoUrls.length) {
+      var fallbackTopTempPhotoUrls = [];
+      entries.forEach(function (entry) {
+        fallbackTopTempPhotoUrls = fallbackTopTempPhotoUrls.concat(entry.tempPhotoUrls || []);
+      });
+      topTempPhotoUrls = uniq(fallbackTopTempPhotoUrls);
+    }
+    if (!hasMeaningfulValue(topCoreTempRaw)) {
+      for (var topCoreTempIndex = 0; topCoreTempIndex < entries.length; topCoreTempIndex += 1) {
+        if (hasMeaningfulValue(entries[topCoreTempIndex].coreTemp)) {
+          topCoreTempRaw = entries[topCoreTempIndex].coreTemp;
+          break;
+        }
+      }
+    }
+
+    var groups = new Map();
+    entries.forEach(function (entry) {
+      var key = entry.mealIndex || entry.mealType || '__unknown__';
+      var group = groups.get(key);
+      if (!group) {
+        group = { entries: [] };
+        groups.set(key, group);
+      }
+      group.entries.push(entry);
+    });
+
+    var rowRequiresFoodSafety = function (requestedRaw) {
+      var requestedNumber = parseNumber(requestedRaw);
+      if (!Number.isNaN(requestedNumber)) return requestedNumber > 0;
+      var requestedText = toText(requestedRaw);
+      if (!requestedText || requestedText === '0') return false;
+      return !isTemplateToken(requestedText);
+    };
+
+    var foodSafetyComplete = true;
+    groups.forEach(function (group) {
+      if (!foodSafetyComplete) return;
+      if (!group || !group.entries || !group.entries.length) return;
+      var requestedRaw = '';
+      for (var i = 0; i < group.entries.length; i += 1) {
+        if (hasMeaningfulValue(group.entries[i].ordQty)) {
+          requestedRaw = group.entries[i].ordQty;
+          break;
+        }
+      }
+      if (!rowRequiresFoodSafety(requestedRaw)) return;
+
+      var hasCoreTemp = group.entries.some(function (entry) {
+        return isConfirmedValue(entry.coreTemp);
+      });
+      var hasTempEvidence = group.entries.some(function (entry) {
+        return Array.isArray(entry.tempPhotoUrls) && entry.tempPhotoUrls.length > 0;
+      });
+      if (!hasCoreTemp || !hasTempEvidence) {
+        foodSafetyComplete = false;
+      }
+    });
+
+    var formatPortions = function (rawValue, fallbackValue) {
+      var n = parseNumber(rawValue);
+      if (!Number.isNaN(n)) return n.toString() + ' portions';
+      var text = toText(rawValue);
+      if (text) return text + ' portions';
+      var fallbackText = toText(fallbackValue);
+      if (fallbackText) return fallbackText + ' portions';
+      return '0 portions';
+    };
+
+    var formatList = function (items, emptyText, options) {
+      var list = uniq(items);
+      if (options && options.sort) {
+        list.sort(compareDisplayText);
+      }
+      return list.length ? list.join(', ') : emptyText;
+    };
+    var formatConfirmation = function (rawValue) {
+      var text = normalize(rawValue);
+      if (!text || text === '—' || isTemplateToken(rawValue)) return 'Not confirmed';
+      if (isConfirmedValue(rawValue)) return '✔';
+      if (text === 'false' || text === 'no' || text === '0') return 'No';
+      return toText(rawValue);
+    };
+    var isMultiIngredientPrepType = function (rawValue) {
+      var text = normalize(rawValue);
+      return text === normalize(MULTI_INGREDIENT_LEFTOVER_KIND) || text === 'entire dish';
+    };
+    var isSingleIngredientPrepType = function (rawValue) {
+      var text = normalize(rawValue);
+      return text === normalize(SINGLE_INGREDIENT_LEFTOVER_KIND) || text === 'part dish';
+    };
+    var toCanonicalLeftoverKind = function (rawValue) {
+      if (isMultiIngredientPrepType(rawValue)) return MULTI_INGREDIENT_LEFTOVER_KIND;
+      if (isSingleIngredientPrepType(rawValue)) return SINGLE_INGREDIENT_LEFTOVER_KIND;
+      return toText(rawValue);
+    };
+    var resolveLeftoverDisplayMode = function (entry) {
+      var action = normalize(entry.leftoverSummaryAction);
+      if (action.indexOf('reheat') === 0) return 'reheat';
+      if (action.indexOf('combine') === 0) return 'combine';
+
+      var usageMode = normalize(entry.leftoverUsageMode);
+      if (usageMode === 'reheat' || usageMode === 'combine') return usageMode;
+
+      var qty = parseNumber(entry.prepQty);
+      if (isMultiIngredientPrepType(entry.prepType) && !Number.isNaN(qty)) {
+        return qty > 0 ? 'reheat' : 'combine';
+      }
+      return '';
+    };
+    var shouldRenderLeftoverPrepGroup = function (entry) {
+      return resolveLeftoverDisplayMode(entry) === 'reheat';
+    };
+
+    var appendPhotoIcon = function (inline, rawUrls) {
+      if (!rawUrls || !rawUrls.length) return;
+      var urls = uniq(rawUrls);
+      var count = urls.length;
+      var fieldKey = encodeFileField(urls);
+      if (!count || !fieldKey) return;
+      var photoItem = document.createElement('span');
+      photoItem.className = 'ck-inline-item';
+      var button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'ck-file-icon';
+      button.setAttribute('data-ck-file-field', fieldKey);
+      button.setAttribute('data-ck-file-count', count.toString());
+      button.appendChild(document.createTextNode('📷'));
+      var badge = document.createElement('span');
+      badge.className = 'ck-file-icon__badge';
+      badge.textContent = count.toString();
+      button.appendChild(badge);
+      photoItem.appendChild(button);
+      inline.appendChild(photoItem);
+    };
+
+    var appendMealEvidence = function (mealBlock, coreTempLabel, coreTempValue, photoUrls) {
+      var label = toText(coreTempLabel);
+      var value = toText(coreTempValue);
+      var hasValue = label || value;
+      var hasPhotos = photoUrls && photoUrls.length;
+      if (!hasValue && !hasPhotos) return;
+
+      var inline = document.createElement('div');
+      inline.className = 'ck-inline';
+
+      if (hasValue) {
+        var tempItem = document.createElement('span');
+        tempItem.className = 'ck-inline-item';
+        tempItem.textContent = (label ? label + ': ' : '') + formatConfirmation(value);
+        inline.appendChild(tempItem);
+      }
+
+      appendPhotoIcon(inline, photoUrls || []);
+
+      if (!inline.children.length) return;
+      var details = document.createElement('div');
+      details.className = 'ck-prep-details';
+      details.appendChild(inline);
+      mealBlock.appendChild(details);
+    };
+
+    var topConfirmationValue = root.querySelector('[data-food-safety-confirmation-value]');
+    if (topConfirmationValue) {
+      topConfirmationValue.textContent = formatConfirmation(topCoreTempRaw);
+    }
+    var topPhotoValue = root.querySelector('[data-food-safety-photo-value]');
+    if (topPhotoValue && topTempPhotoUrls.length && !topPhotoValue.querySelector('[data-ck-file-field]')) {
+      var topPhotoInline = document.createElement('div');
+      topPhotoInline.className = 'ck-inline';
+      appendPhotoIcon(topPhotoInline, topTempPhotoUrls);
+      if (topPhotoInline.children.length) {
+        topPhotoValue.textContent = '';
+        topPhotoValue.appendChild(topPhotoInline);
+      }
+    }
+
+    var appendDetailLine = function (container, data) {
+      var inline = document.createElement('div');
+      inline.className = 'ck-inline';
+
+      var addTextItem = function (text) {
+        if (!text) return;
+        var item = document.createElement('span');
+        item.className = 'ck-inline-item';
+        item.textContent = text;
+        inline.appendChild(item);
+      };
+
+      if (data.ingredientsText) {
+        addTextItem(data.ingredientsText);
+      }
+      if (data.allergensText) {
+        addTextItem('Allergens: ' + data.allergensText);
+      }
+
+      if (!inline.children.length) return;
+      var details = document.createElement('div');
+      details.className = 'ck-prep-details';
+      details.appendChild(inline);
+      container.appendChild(details);
+    };
+
+    var appendPrepGroup = function (mealBlock, lineText, detailData) {
+      var group = document.createElement('div');
+      group.className = 'ck-prep-group';
+      var line = document.createElement('div');
+      line.className = 'ck-prep-line';
+      line.textContent = lineText;
+      group.appendChild(line);
+      if (detailData) {
+        appendDetailLine(group, detailData);
+      }
+      mealBlock.appendChild(group);
+    };
+
+    listContainer.textContent = '';
+
+    groups.forEach(function (group) {
+      if (!group.entries.length) return;
+      var mealType = '';
+      var requested = '';
+      var toCook = '';
+      var coreTemp = '';
+      var coreTempLabel = '';
+      var tempPhotoUrls = [];
+
+      for (var i = 0; i < group.entries.length; i += 1) {
+        var entry = group.entries[i];
+        if (!mealType) mealType = entry.mealType;
+        if (!requested) requested = entry.ordQty;
+        if (!toCook) toCook = entry.toCook;
+        if (!coreTemp) coreTemp = entry.coreTemp;
+        if (!coreTempLabel) coreTempLabel = entry.coreTempLabel;
+        if (!tempPhotoUrls.length && entry.tempPhotoUrls && entry.tempPhotoUrls.length) {
+          tempPhotoUrls = entry.tempPhotoUrls.slice();
+        }
+      }
+
+      var cookEntries = group.entries.filter(function (entry) {
+        return normalize(entry.prepType) === 'cook';
+      });
+      var leftoverFullEntries = group.entries.filter(function (entry) {
+        return isMultiIngredientPrepType(entry.prepType);
+      });
+      var leftoverPartEntries = group.entries.filter(function (entry) {
+        return isSingleIngredientPrepType(entry.prepType);
+      });
+
+      var cookEntry = cookEntries.length ? cookEntries[0] : null;
+
+      var mealBlock = document.createElement('div');
+      mealBlock.className = 'ck-meal-block';
+
+      var title = document.createElement('div');
+      title.className = 'ck-meal-title';
+      var titleText = mealType || 'Meal';
+      var requestedText = toText(requested) ? formatPortions(requested, '') : '';
+      if (requestedText) {
+        titleText += ' | Ordered: ' + requestedText;
+      }
+      title.textContent = titleText;
+      mealBlock.appendChild(title);
+      appendMealEvidence(mealBlock, coreTempLabel, coreTemp, tempPhotoUrls);
+
+      var cookedIngredients = cookEntry ? cookEntry.ingredients.slice() : [];
+      var cookedAllergens = cookEntry ? cookEntry.allergens.slice() : [];
+
+      leftoverFullEntries.forEach(function (entry) {
+        if (shouldRenderLeftoverPrepGroup(entry)) {
+          var leftoverFullLine = MULTI_INGREDIENT_LEFTOVER_KIND + ' leftover: ' + formatPortions(entry.prepQty, '0');
+          if (entry.recipe) {
+            leftoverFullLine += ' | ' + entry.recipe;
+          }
+          appendPrepGroup(mealBlock, leftoverFullLine, {
+            ingredientsText: formatList(entry.ingredients, 'None', { sort: true }),
+            allergensText: formatList(entry.allergens, 'None')
+          });
+        } else {
+          cookedIngredients = cookedIngredients.concat(entry.ingredients);
+          cookedAllergens = cookedAllergens.concat(entry.allergens);
+        }
+      });
+
+      leftoverPartEntries.forEach(function (entry) {
+        if (shouldRenderLeftoverPrepGroup(entry)) {
+          var leftoverPartLine = SINGLE_INGREDIENT_LEFTOVER_KIND + ' leftover';
+          if (entry.recipe) {
+            leftoverPartLine += ': ' + entry.recipe;
+          }
+          appendPrepGroup(mealBlock, leftoverPartLine, null);
+        }
+        cookedIngredients = cookedIngredients.concat(entry.ingredients);
+        cookedAllergens = cookedAllergens.concat(entry.allergens);
+      });
+
+      var cookedMention = foodSafetyComplete ? 'Cooked' : 'To cook';
+      var cookedLine = cookedMention + ': ' + formatPortions(toCook, requested);
+      var cookedRecipe = cookEntry ? cookEntry.recipe : '';
+      if (!cookedRecipe) cookedRecipe = 'Recipe not set';
+      cookedLine += ' | ' + cookedRecipe;
+
+      appendPrepGroup(mealBlock, cookedLine, {
+        ingredientsText: formatList(cookedIngredients, 'None', { sort: true }),
+        allergensText: formatList(cookedAllergens, 'None')
+      });
+
+      listContainer.appendChild(mealBlock);
+    });
+
+    try {
+      if (generatedJsonNode && generatedSection && generatedList) {
+        var generatedPayloadRaw = toText(generatedJsonNode.textContent || '');
+        if (generatedPayloadRaw && !isTemplateToken(generatedPayloadRaw)) {
+          var generatedPayload = JSON.parse(generatedPayloadRaw);
+          var generatedByTarget = generatedPayload && generatedPayload.byTargetFormKey ? generatedPayload.byTargetFormKey : {};
+          var leftoverRows = Array.isArray(generatedByTarget['Config: Leftover Bank'])
+            ? generatedByTarget['Config: Leftover Bank']
+            : [];
+          var seenIds = {};
+          var generatedFallbackCounters = { mi: 0, si: 0 };
+          leftoverRows.forEach(function (entry) {
+            var values = entry && typeof entry.values === 'object' ? entry.values : {};
+            var leftoverId = toText(values.LEFTOVER_ID || entry.recordId || '');
+            if (leftoverId && seenIds[leftoverId]) return;
+            appendGeneratedLeftoverEntry(entry, seenIds, generatedFallbackCounters);
+          });
+          if (!generatedList.children.length) {
+            var sourceFallbackCounters = { mi: 0, si: 0 };
+            collectSourceGeneratedLeftovers().forEach(function (entry) {
+              appendGeneratedLeftoverEntry(entry, seenIds, sourceFallbackCounters);
+            });
+          }
+          if (generatedList.children.length) {
+            generatedSection.classList.remove('ck-hidden');
+          }
+        } else {
+          var fallbackSeenIds = {};
+          var fallbackCounters = { mi: 0, si: 0 };
+          collectSourceGeneratedLeftovers().forEach(function (entry) {
+            appendGeneratedLeftoverEntry(entry, fallbackSeenIds, fallbackCounters);
+          });
+          if (generatedList.children.length) {
+            generatedSection.classList.remove('ck-hidden');
+          }
+        }
+      }
+    } catch (_) {
+      // ignore generated leftovers rendering failures
+    }
+
+    dataTables.forEach(function (table) {
+      table.remove();
+    });
+    siLeftoverTables.forEach(function (table) {
+      table.remove();
+    });
+  })();
+</script>

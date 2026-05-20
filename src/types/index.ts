@@ -1878,6 +1878,30 @@ export interface VisibilityCondition {
    * - Empty/invalid dates do not match.
    */
   isInFuture?: boolean;
+  /**
+   * Date-only match against a fixed cutoff date.
+   *
+   * `YYYY-MM-DD` values are treated as local dates (not UTC).
+   */
+  beforeDate?: string;
+  /**
+   * Date-only match against a fixed cutoff date, inclusive.
+   *
+   * `YYYY-MM-DD` values are treated as local dates (not UTC).
+   */
+  onOrBeforeDate?: string;
+  /**
+   * Date-only match after a fixed cutoff date.
+   *
+   * `YYYY-MM-DD` values are treated as local dates (not UTC).
+   */
+  afterDate?: string;
+  /**
+   * Date-only match after a fixed cutoff date, inclusive.
+   *
+   * `YYYY-MM-DD` values are treated as local dates (not UTC).
+   */
+  onOrAfterDate?: string;
 }
 
 /**

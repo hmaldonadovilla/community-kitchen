@@ -63,6 +63,13 @@ describe('when clause date comparisons', () => {
     ).toBe(false);
   });
 
+  it('supports fixed date cutoffs for template selectors and rules', () => {
+    expect(matchesWhenClause({ fieldId: 'D', beforeDate: '2026-05-20' } as any, ctx({ D: '2026-05-19' }))).toBe(true);
+    expect(matchesWhenClause({ fieldId: 'D', beforeDate: '2026-05-20' } as any, ctx({ D: '2026-05-20' }))).toBe(false);
+    expect(matchesWhenClause({ fieldId: 'D', onOrAfterDate: '2026-05-20' } as any, ctx({ D: '2026-05-20' }))).toBe(true);
+    expect(matchesWhenClause({ fieldId: 'D', afterDate: '2026-05-20' } as any, ctx({ D: '2026-05-20' }))).toBe(false);
+  });
+
   it('supports cross-field numeric comparisons', () => {
     expect(
       matchesWhenClause(
@@ -82,12 +89,14 @@ describe('when clause date comparisons', () => {
     const normalized = (ConfigSheet as any).normalizeWhenClause({
       fieldId: 'MP_PREP_DATE',
       isInFuture: true,
-      greaterThanOrEqualFieldId: 'LEFTOVER_EXP_DATE'
+      greaterThanOrEqualFieldId: 'LEFTOVER_EXP_DATE',
+      beforeDate: '2026-05-20'
     });
     expect(normalized).toEqual({
       fieldId: 'MP_PREP_DATE',
       isInFuture: true,
-      greaterThanOrEqualFieldId: 'LEFTOVER_EXP_DATE'
+      greaterThanOrEqualFieldId: 'LEFTOVER_EXP_DATE',
+      beforeDate: '2026-05-20'
     });
   });
 });

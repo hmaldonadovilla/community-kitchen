@@ -49,6 +49,21 @@ describe('resolveTemplateIdForRecord', () => {
     );
     expect(id).toBe('T_PM');
   });
+
+  it('resolves cases selector by fixed date cutoff', () => {
+    const selector = {
+      cases: [
+        {
+          when: { fieldId: 'MP_PREP_DATE', beforeDate: '2026-05-20' },
+          templateId: 'T_LEGACY'
+        }
+      ],
+      default: 'T_CURRENT'
+    };
+
+    expect(resolveTemplateIdForRecord(selector, { MP_PREP_DATE: '2026-05-19' }, 'EN')).toBe('T_LEGACY');
+    expect(resolveTemplateIdForRecord(selector, { MP_PREP_DATE: '2026-05-20' }, 'EN')).toBe('T_CURRENT');
+  });
 });
 
 describe('renderBundledHtmlTemplateClient (bundle: local render)', () => {

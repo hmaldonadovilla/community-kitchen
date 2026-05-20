@@ -394,4 +394,38 @@ describe('Cloud Run SubmitEffectsRepository', () => {
       { ING: 'Couscous', QTY: 2, UNIT: 'kg', CAT: 'Dry carbohydrates', ALLERGEN: 'Gluten' }
     ]);
   });
+
+  test('case computed expression selects by source path and falls back to default', async () => {
+    const repository = new SubmitEffectsRepository({});
+    const expression = {
+      op: 'case',
+      cases: [
+        {
+          when: { path: 'row.LEFTOVER_STORAGE', equals: 'Frozen' },
+          value: '{{row.LEFTOVER_EXP_DATE_FROZEN}}'
+        }
+      ],
+      default: '{{source.MP_EXP_DATE}}'
+    };
+
+    await expect(
+      repository.resolveComputedValue(expression, {
+        source: { MP_EXP_DATE: '2026-04-02' },
+        row: {
+          LEFTOVER_STORAGE: 'Frozen',
+          LEFTOVER_EXP_DATE_FROZEN: '2026-08-02'
+        }
+      })
+    ).resolves.toBe('2026-08-02');
+
+    await expect(
+      repository.resolveComputedValue(expression, {
+        source: { MP_EXP_DATE: '2026-04-02' },
+        row: {
+          LEFTOVER_STORAGE: 'Chilled',
+          LEFTOVER_EXP_DATE_FROZEN: '2026-08-02'
+        }
+      })
+    ).resolves.toBe('2026-04-02');
+  });
 });

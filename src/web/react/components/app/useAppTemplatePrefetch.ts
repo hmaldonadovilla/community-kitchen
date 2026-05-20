@@ -1,19 +1,21 @@
 import { useEffect, useMemo, useRef } from 'react';
 
-import type { WebFormDefinition } from '../../../types';
-import { prefetchTemplatesApi } from '../../api';
+import type { LangCode, WebFormDefinition } from '../../../types';
+import { prefetchTemplatesApi, renderMarkdownTemplateApi } from '../../api';
 import type { View } from '../../types';
+import { collectMarkdownTemplatePrefetchTargets } from './templatePrefetchTargets';
 
-const HOME_TEMPLATE_PREFETCH_DELAY_MS = 3400;
+const HOME_TEMPLATE_PREFETCH_DELAY_MS = 0;
 
 export const useAppTemplatePrefetch = (args: {
   definition: WebFormDefinition;
   formKey: string;
+  language: LangCode;
   view: View;
   homeFirstDataReadyAtMs: number;
   logEvent: (event: string, payload?: Record<string, unknown>) => void;
 }) => {
-  const { definition, formKey, view, homeFirstDataReadyAtMs, logEvent } = args;
+  const { definition, formKey, language, view, homeFirstDataReadyAtMs, logEvent } = args;
   const templatePrefetchDoneFormKeyRef = useRef<string | null>(null);
   const templatePrefetchInFlightFormKeyRef = useRef<string | null>(null);
   const templatePrefetchRetryCountRef = useRef<Record<string, number>>({});
@@ -56,8 +58,39 @@ export const useAppTemplatePrefetch = (args: {
         phase: shouldWaitForHomeData ? 'postHomeData' : 'postBootstrap'
       });
       prefetchTemplatesApi(key)
-        .then(res => {
+        .then(async res => {
           if (cancelled) return;
+          const markdownTargets = collectMarkdownTemplatePrefetchTargets(definition, language);
+          if (markdownTargets.length) {
+            const markdownStartedAt = Date.now();
+            logEvent('templates.prefetch.markdownRender.start', {
+              formKey: key,
+              count: markdownTargets.length,
+              buttonIds: markdownTargets.map(target => target.buttonId)
+            });
+            const payload = {
+              formKey: key,
+              language,
+              values: {},
+              lineItems: {}
+            } as any;
+            const results = await Promise.allSettled(
+              markdownTargets.map(target =>
+                renderMarkdownTemplateApi(payload, target.buttonId, target.cacheOptions)
+              )
+            );
+            if (cancelled) return;
+            const fulfilled = results.filter(result => result.status === 'fulfilled');
+            const succeeded = fulfilled.filter(result => Boolean((result as PromiseFulfilledResult<any>).value?.success)).length;
+            const failed = results.length - succeeded;
+            logEvent('templates.prefetch.markdownRender.ok', {
+              formKey: key,
+              requested: markdownTargets.length,
+              succeeded,
+              failed,
+              durationMs: Date.now() - markdownStartedAt
+            });
+          }
           if (templatePrefetchInFlightFormKeyRef.current === key) {
             templatePrefetchInFlightFormKeyRef.current = null;
           }
@@ -96,7 +129,7 @@ export const useAppTemplatePrefetch = (args: {
     const scheduleRun = () => {
       try {
         if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-          idleHandle = (window as any).requestIdleCallback(run, { timeout: shouldWaitForHomeData ? 2500 : 1500 }) as number;
+          idleHandle = (window as any).requestIdleCallback(run, { timeout: shouldWaitForHomeData ? 700 : 1500 }) as number;
           return;
         }
       } catch {
@@ -116,7 +149,7 @@ export const useAppTemplatePrefetch = (args: {
         (window as any).cancelIdleCallback(idleHandle);
       }
     };
-  }, [formKey, hasTemplateRenderTargets, homeFirstDataReadyAtMs, view, logEvent]);
+  }, [definition, formKey, hasTemplateRenderTargets, homeFirstDataReadyAtMs, language, view, logEvent]);
 
   return { hasTemplateRenderTargets };
 };
