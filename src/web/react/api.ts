@@ -315,6 +315,16 @@ const buildPersistedHtmlRenderCacheKey = (key: string, cacheVersion = resolveHtm
 const buildPersistedMarkdownRenderCacheKey = (key: string, cacheVersion = resolveHtmlRenderCacheVersion()): string =>
   `${MARKDOWN_RENDER_PERSIST_PREFIX}.${encodeHtmlCacheKeyPart(cacheVersion)}.${fnv1a32(key)}`;
 
+const normalizeTemplateScopedButtonCacheId = (buttonId: string): string => {
+  const raw = (buttonId || '').toString();
+  const idxToken = '__ckQIdx=';
+  const idxPos = raw.lastIndexOf(idxToken);
+  if (idxPos < 0) return raw;
+  const idxRaw = raw.slice(idxPos + idxToken.length);
+  const idx = Number.parseInt(idxRaw, 10);
+  return Number.isFinite(idx) ? raw.slice(0, idxPos) : raw;
+};
+
 const normalizeTemplateRenderCacheScope = (value: any): TemplateRenderCacheScope => {
   const normalized = (value || '').toString().trim().toLowerCase();
   if (normalized === 'template' || normalized === 'static') return 'template';
@@ -333,7 +343,7 @@ const buildTemplateScopedButtonCacheKey = (
 ): string => {
   const templateId = (options?.templateId || '').toString().trim();
   const templateSig = templateId ? fnv1a32(templateId) : 'notemplate';
-  return `button|${kind}|template|${payload.formKey}|${payload.language}|${buttonId}|${templateSig}`;
+  return `button|${kind}|template|${payload.formKey}|${payload.language}|${normalizeTemplateScopedButtonCacheId(buttonId)}|${templateSig}`;
 };
 
 const prunePersistedHtmlRenderCache = (storage: Storage, cacheVersion = resolveHtmlRenderCacheVersion()): void => {

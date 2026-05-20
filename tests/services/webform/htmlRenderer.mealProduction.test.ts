@@ -267,12 +267,16 @@ describe('meal production bundled HTML rendering', () => {
     expect(res.html).toContain('color: var(--accentText, #fff)');
   });
 
-  it('renders the legacy summary template with per-meal temperature evidence support', () => {
+  it('renders the final report PDF with the overridden expiration date when present', () => {
     const record: WebFormSubmission = {
       formKey: 'Config: Meal Production',
       language: 'EN',
       id: 'MP-AA000818',
-      values: recordValues as any
+      values: {
+        ...recordValues,
+        MP_EXP_DATE: '2026-03-23',
+        MP_EXP_DATE_OVERRIDE: '2026-03-25'
+      } as any
     } as any;
 
     const res = renderHtmlFromHtmlTemplate({
@@ -280,12 +284,70 @@ describe('meal production bundled HTML rendering', () => {
       form,
       questions,
       record,
+      templateIdMap: { EN: 'bundle:meal_production.pdf.html' }
+    });
+
+    expect(res.success).toBe(true);
+    expect(res.html).toContain('Wed, 25-Mar-2026');
+    expect(res.html).not.toContain('Mon, 23-Mar-2026');
+  });
+
+  it('renders the final report PDF with the default expiration date when there is no override', () => {
+    const record: WebFormSubmission = {
+      formKey: 'Config: Meal Production',
+      language: 'EN',
+      id: 'MP-AA000818',
+      values: {
+        ...recordValues,
+        MP_EXP_DATE: '2026-03-23',
+        MP_EXP_DATE_OVERRIDE: ''
+      } as any
+    } as any;
+
+    const res = renderHtmlFromHtmlTemplate({
+      dataSources,
+      form,
+      questions,
+      record,
+      templateIdMap: { EN: 'bundle:meal_production.pdf.html' }
+    });
+
+    expect(res.success).toBe(true);
+    expect(res.html).toContain('Mon, 23-Mar-2026');
+    expect(res.html).not.toContain('MP_EXP_DATE');
+  });
+
+  it('renders the legacy summary template with per-meal temperature evidence support', () => {
+    const record: WebFormSubmission = {
+      formKey: 'Config: Meal Production',
+      language: 'EN',
+      id: 'MP-AA000818',
+      values: recordValues as any
+    } as any;
+    const legacyQuestions = questions.map(q => {
+      if (q.id !== 'MP_MEALS_REQUEST') return q;
+      return {
+        ...q,
+        lineItemConfig: {
+          ...(q.lineItemConfig || {}),
+          fields: (q.lineItemConfig?.fields || []).filter(field => !['MP_COOK_TEMP', 'TEMP_EVD'].includes(field.id))
+        }
+      } as any;
+    });
+
+    const res = renderHtmlFromHtmlTemplate({
+      dataSources,
+      form,
+      questions: legacyQuestions,
+      record,
       templateIdMap: { EN: 'bundle:meal_production.summary.legacy-temp.html' }
     });
 
     expect(res.success).toBe(true);
     expect(res.html).toContain('appendMealEvidence(mealBlock, coreTempLabel, coreTemp, tempPhotoUrls)');
     expect(res.html).toContain('ck-total-row ck-evidence-row ck-hidden');
+    expect(res.html).not.toContain('{{LABEL(MP_MEALS_REQUEST.MP_COOK_TEMP)}}');
+    expect(res.html).toContain('All pots ≥63°C: Confirm');
     expect(res.html).toContain('data-core-temp>✔</span>');
     expect(res.html).toContain('data-temp-photos="https://example.com/line-temp-photo-1"');
   });

@@ -348,7 +348,7 @@
             <span class="ck-hidden" data-leftover-usage-mode>{{MP_MEALS_REQUEST.MP_TYPE_LI.LEFTOVER_USAGE_MODE}}</span>
             <span class="ck-hidden" data-leftover-summary-action>{{MP_MEALS_REQUEST.MP_TYPE_LI.LEFTOVER_SUMMARY_ACTION}}</span>
             <span class="ck-hidden" data-core-temp>{{MP_MEALS_REQUEST.MP_COOK_TEMP}}</span>
-            <span class="ck-hidden" data-core-temp-label>{{LABEL(MP_MEALS_REQUEST.MP_COOK_TEMP)}}</span>
+            <span class="ck-hidden" data-core-temp-label>All pots ≥63°C: Confirm</span>
             <span class="ck-hidden" data-temp-photos="{{MP_MEALS_REQUEST.TEMP_EVD}}"></span>
           </td>
         </tr>
@@ -1137,7 +1137,8 @@
       if (hasValue) {
         var tempItem = document.createElement('span');
         tempItem.className = 'ck-inline-item';
-        tempItem.textContent = (label ? label + ': ' : '') + formatConfirmation(value);
+        var separator = label && (/[:：]\s*$/.test(label) || /:\s*Confirm$/i.test(label)) ? ' ' : ': ';
+        tempItem.textContent = (label ? label + separator : '') + formatConfirmation(value);
         inline.appendChild(tempItem);
       }
 

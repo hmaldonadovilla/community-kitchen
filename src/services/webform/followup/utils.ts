@@ -273,6 +273,11 @@ const stripOuterQuotes = (value: string): string => {
   return s;
 };
 
+const isQuotedArg = (value: string): boolean => {
+  const s = (value || '').toString().trim();
+  return (s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"));
+};
+
 const splitFunctionArgs = (raw: string): string[] => {
   const input = (raw || '').toString();
   const args: string[] = [];
@@ -339,6 +344,7 @@ const resolvePlaceholderValueFromMap = (placeholders: Record<string, string>, ke
  * DEFAULT() placeholder function:
  * - Syntax: {{DEFAULT(KEY, "fallback")}}
  * - If KEY resolves to an empty string, renders the fallback value instead.
+ * - Unquoted fallbacks are resolved as placeholder keys before being treated as literal text.
  *
  * Works in Doc templates (PDF/email), Markdown templates, and HTML templates.
  */
@@ -352,9 +358,14 @@ const applyDefaultPlaceholders = (template: string, placeholders: Record<string,
     const args = splitFunctionArgs(inner);
     if (args.length < 2) return fullMatch;
     const keyArg = stripOuterQuotes(args[0] || '');
-    const fallbackArg = stripOuterQuotes(args.slice(1).join(',') || '');
+    const fallbackRaw = args.slice(1).join(',') || '';
+    const fallbackArg = stripOuterQuotes(fallbackRaw);
     const current = resolvePlaceholderValueFromMap(placeholders, keyArg);
     if (current && current.toString().trim()) return current;
+    if (!isQuotedArg(fallbackRaw)) {
+      const fallbackResolved = resolvePlaceholderValueFromMap(placeholders, fallbackArg);
+      if (fallbackResolved && fallbackResolved.toString().trim()) return fallbackResolved;
+    }
     return fallbackArg || '';
   });
 };
@@ -411,5 +422,4 @@ export const applyPlaceholders = (template: string, placeholders: Record<string,
 
   return output;
 };
-
 

@@ -283,7 +283,17 @@ export const replaceLineItemPlaceholders = (
       const fieldKey = parts[parts.length - 1].toUpperCase();
       const subPath = parts.length > 1 ? parts.slice(0, -1).map((p: string) => p.toUpperCase()).join('.') : '';
       const token = subPath ? `${normalizedGroupId}.${subPath}.${fieldKey}` : `${normalizedGroupId}.${fieldKey}`;
-      return replacements[token] ?? '';
+      if (replacements[token] !== undefined) return replacements[token] ?? '';
+      if (!subPath) return formatTemplateValue(resolveGroupValue(fieldKey));
+      if (!opts?.subGroup) return '';
+      const subKeyRaw = resolveSubgroupKey(opts.subGroup);
+      const slugSubKey = slugifyPlaceholder(subKeyRaw || '');
+      const allowedSubTokens = new Set<string>();
+      if (opts.subGroupToken) allowedSubTokens.add((opts.subGroupToken || '').toString().toUpperCase());
+      if (subKeyRaw) allowedSubTokens.add(subKeyRaw.toString().toUpperCase());
+      if (slugSubKey) allowedSubTokens.add(slugSubKey.toString().toUpperCase());
+      if (!allowedSubTokens.has(subPath)) return '';
+      return formatTemplateValue(resolveSubGroupValue(fieldKey));
     }
   );
 

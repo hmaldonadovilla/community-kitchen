@@ -405,6 +405,12 @@ describe('staging integrity dialogs and list legend config', () => {
       expect(unlock?.button?.suppressStatusFeedback).toBe(true);
     };
 
+    const assertExpirationOverrideStatusFeedback = (questions: any[]) => {
+      const override = findQuestion(questions, 'MP_OVERRIDE_EXP_DATE');
+      expect(override?.button?.action).toBe('updateRecord');
+      expect(override?.button?.suppressStatusFeedback).toBe(true);
+    };
+
     const assertDistributorDataSourceCache = (root: any) => {
       const distributorSources = collectObjects(root, (entry: any) => entry?.id === 'Distributor Data');
       expect(distributorSources.length).toBeGreaterThan(0);
@@ -1044,6 +1050,8 @@ describe('staging integrity dialogs and list legend config', () => {
     assertUnlockDialog(cfg.definition?.questions || []);
     assertOrderLockProgressDialogs(cfg.questions);
     assertOrderLockProgressDialogs(cfg.definition?.questions || []);
+    assertExpirationOverrideStatusFeedback(cfg.questions);
+    assertExpirationOverrideStatusFeedback(cfg.definition?.questions || []);
     assertDistributorDataSourceCache(cfg);
     assertGuidedStepLayout(cfg.form, cfg.questions);
     assertGuidedStepLayout(cfg.definition, cfg.definition?.questions || []);

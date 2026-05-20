@@ -4376,6 +4376,7 @@
           }
         },
         "navigateTo": "summary",
+        "suppressStatusFeedback": true,
         "confirm": {
           "title": {
             "en": ""
@@ -6929,6 +6930,7 @@
             }
           },
           "navigateTo": "summary",
+          "suppressStatusFeedback": true,
           "confirm": {
             "title": {
               "en": ""

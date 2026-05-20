@@ -333,10 +333,11 @@ describe('client HTML render caching (api.ts)', () => {
     const secondPayload: any = { formKey: 'F', language: 'EN', id: '', values: { A: '2' } };
     const cacheOptions = { cacheScope: 'template', templateId: 'drive-md-template' } as const;
     const first = await api.renderMarkdownTemplateApi(firstPayload, 'BTN_MD_STATIC', cacheOptions);
-    const second = await api.renderMarkdownTemplateApi(secondPayload, 'BTN_MD_STATIC', cacheOptions);
-    const peeked = api.peekMarkdownTemplateCache(secondPayload, 'BTN_MD_STATIC', cacheOptions);
+    const second = await api.renderMarkdownTemplateApi(secondPayload, 'BTN_MD_STATIC__ckQIdx=4', cacheOptions);
+    const peeked = api.peekMarkdownTemplateCache(secondPayload, 'BTN_MD_STATIC__ckQIdx=4', cacheOptions);
 
     expect(calls.length).toBe(1);
+    expect(calls[0].buttonId).toBe('BTN_MD_STATIC');
     expect(first.markdown).toBe('Static markdown');
     expect(second.markdown).toBe('Static markdown');
     expect(peeked?.markdown).toBe('Static markdown');

@@ -7112,6 +7112,7 @@
           }
         },
         "navigateTo": "summary",
+        "suppressStatusFeedback": true,
         "progressDialog": {
           "title": {
             "en": ""
@@ -10722,6 +10723,7 @@
             }
           },
           "navigateTo": "summary",
+          "suppressStatusFeedback": true,
           "progressDialog": {
             "title": {
               "en": ""

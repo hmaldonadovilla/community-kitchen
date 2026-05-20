@@ -382,7 +382,6 @@ import {
   DATA_SOURCE_CACHE_CLEARED_EVENT,
   DATA_SOURCE_CACHE_UPDATED_EVENT,
   fetchDataSource,
-  peekCachedDataSource,
   prefetchDataSources
 } from '../data/dataSources';
 import { collectDataSourceConfigsForPrefetch, isHomePrefetchEligibleDataSource } from '../data/dataSourcePrefetch';
@@ -3341,68 +3340,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   );
   performDataSourceFreshnessCheckRef.current = performDataSourceFreshnessCheck;
 
-  const primeDataSourceFreshnessSignatureBaselinesFromCache = useCallback(
-    (reason: string) => {
-      const recordId = getCurrentOpenRecordId();
-      const stepId = activeGuidedStepIdRef.current;
-      const sessionId = recordSessionRef.current;
-      const activeWatches = resolveRunnableDataSourceFreshnessWatches(stepId);
-      if (!recordId || !stepId || !activeWatches.length) return;
-
-      const primed: Array<{ watchKey: string; dataSourceId: string; itemCount: number | null }> = [];
-      activeWatches.forEach(watch => {
-        watch.dataSourceIds.forEach(dataSourceId => {
-          const config = resolveWatchedDataSourceConfig(dataSourceId);
-          if (!config) return;
-          const cached = peekCachedDataSource(config, languageRef.current);
-          if (!cached) return;
-          const signature = buildDataSourceFreshnessSnapshotSignature(cached, {
-            fieldIds: resolveDataSourceFreshnessSignatureFieldIds(config)
-          });
-          if (!signature) return;
-          const baselineKey = buildDataSourceFreshnessBaselineKey({
-            watchKey: watch.key,
-            dataSourceId
-          });
-          if (!baselineKey) return;
-          const existingBaseline = dataSourceFreshnessSignatureBaselineByKeyRef.current[baselineKey];
-          if (
-            existingBaseline &&
-            existingBaseline.recordId === recordId.toString() &&
-            existingBaseline.stepId === stepId.toString() &&
-            existingBaseline.sessionId === sessionId
-          ) {
-            return;
-          }
-          dataSourceFreshnessSignatureBaselineByKeyRef.current[baselineKey] = {
-            signature,
-            recordId: recordId.toString(),
-            stepId: stepId.toString(),
-            sessionId
-          };
-          const items = Array.isArray((cached as any)?.items)
-            ? (cached as any).items
-            : Array.isArray(cached)
-              ? cached
-              : null;
-          primed.push({
-            watchKey: watch.key,
-            dataSourceId,
-            itemCount: items ? items.length : null
-          });
-        });
-      });
-      if (!primed.length) return;
-      logEvent('datasource.freshness.signatureBaseline.cache', {
-        reason,
-        recordId,
-        stepId,
-        baselines: primed
-      });
-    },
-    [getCurrentOpenRecordId, logEvent, resolveRunnableDataSourceFreshnessWatches, resolveWatchedDataSourceConfig]
-  );
-
   const handleGuidedStepUtilisationDraftStateChange = useCallback(
     (args: {
       stepId: string;
@@ -3684,17 +3621,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   }, [resolvedDataSourceFreshnessWatches]);
   useEffect(() => {
     dataSourceFreshnessSignatureBaselineByKeyRef.current = {};
-    primeDataSourceFreshnessSignatureBaselinesFromCache('stateChange');
     scheduleDataSourceFreshnessCheck('stateChange');
-  }, [
-    guidedUiState?.activeStepId,
-    primeDataSourceFreshnessSignatureBaselinesFromCache,
-    recordLoadingId,
-    resolvedDataSourceFreshnessWatches,
-    scheduleDataSourceFreshnessCheck,
-    selectedRecordId,
-    view
-  ]);
+  }, [guidedUiState?.activeStepId, recordLoadingId, resolvedDataSourceFreshnessWatches, scheduleDataSourceFreshnessCheck, selectedRecordId, view]);
 
   const bumpRecordSession = useCallback(
     (args: { reason: string; nextRecordId?: string | null }) => {
@@ -4031,7 +3959,6 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       bump();
       const dataSourceId = (((event as CustomEvent)?.detail || {}) as any)?.id?.toString?.().trim?.() || '';
       if (!dataSourceId) return;
-      primeDataSourceFreshnessSignatureBaselinesFromCache('cacheUpdated');
       let removedOptionKeys: string[] = [];
       setOptionState(prev => {
         const pruned = pruneOptionStateForDataSource({ definition, state: prev, dataSourceId });
@@ -4069,7 +3996,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     } catch {
       return;
     }
-  }, [definition, logEvent, primeDataSourceFreshnessSignatureBaselinesFromCache]);
+  }, [definition, logEvent]);
 
   useEffect(() => {
     return () => {
