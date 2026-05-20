@@ -3150,7 +3150,7 @@ export class WebFormService {
     }
 
     const renderLanguage = ((language || record.language || 'EN') as any).toString().trim() || 'EN';
-    const renderRecord = this.normalizeTemplateRenderRecord({ ...(record as any), language: renderLanguage }, questions, formKey);
+    const renderRecord = this.prepareTemplateRenderRecord({ ...(record as any), language: renderLanguage }, questions, formKey);
     const result = this.followups.renderHtmlFromHtmlTemplate({
       form,
       questions,

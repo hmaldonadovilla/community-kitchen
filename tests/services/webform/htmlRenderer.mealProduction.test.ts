@@ -976,4 +976,67 @@ describe('meal production bundled HTML rendering', () => {
       })
     );
   });
+
+  it('attaches linked generated leftovers when fetching and rendering summary HTML in one service call', () => {
+    const ss = new MockSpreadsheet();
+    seedIngredientsData(ss);
+    const bankConfig = ss.insertSheet('Config: Leftover Bank');
+    bankConfig.setMockData([
+      ['ID', 'Type', 'Q En', 'Q Fr', 'Q Nl', 'Req', 'Opt En', 'Opt Fr', 'Opt Nl', 'Status', 'Config', 'OptionFilter', 'Validation', 'List View?', 'Edit'],
+      ['LEFTOVER_ID', 'TEXT', 'Leftover ID', 'Leftover ID', 'Leftover ID', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_KIND', 'TEXT', 'Kind', 'Kind', 'Kind', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_RECIPE', 'TEXT', 'Recipe', 'Recipe', 'Recipe', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_INGREDIENT', 'TEXT', 'Ingredient', 'Ingredient', 'Ingredient', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_PORTIONS', 'NUMBER', 'Portions', 'Portions', 'Portions', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_QTY', 'NUMBER', 'Qty', 'Qty', 'Qty', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_UNIT', 'TEXT', 'Unit', 'Unit', 'Unit', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_SOURCE_FORM_KEY', 'TEXT', 'Source form key', 'Source form key', 'Source form key', false, '', '', '', 'Active', '', '', '', '', ''],
+      ['LEFTOVER_SOURCE_RECORD_ID', 'TEXT', 'Source record id', 'Source record id', 'Source record id', false, '', '', '', 'Active', '', '', '', '', '']
+    ]);
+    const bankData = ss.insertSheet('Leftover Bank Data');
+    bankData.setMockData([
+      ['ID [ID]', 'Leftover ID [LEFTOVER_ID]', 'Kind [LEFTOVER_KIND]', 'Recipe [LEFTOVER_RECIPE]', 'Ingredient [LEFTOVER_INGREDIENT]', 'Portions [LEFTOVER_PORTIONS]', 'Qty [LEFTOVER_QTY]', 'Unit [LEFTOVER_UNIT]', 'Source form [LEFTOVER_SOURCE_FORM_KEY]', 'Source record [LEFTOVER_SOURCE_RECORD_ID]'],
+      ['leftover::MP-AA000818::entire::Diabetic', 'MI-6', 'Multi-ingredient', 'Courgette creamy pasta', '', 15, '', '', 'Config: Meal Production', 'MP-AA000818']
+    ]);
+
+    const service = new WebFormService(ss as any);
+    const record: WebFormSubmission = {
+      formKey: 'Config: Meal Production',
+      language: 'EN',
+      id: 'MP-AA000818',
+      values: recordValues as any,
+      status: 'Closed'
+    } as any;
+    const fetchSubmissionByRowNumber = jest.fn((_form: any, _questions: any, rowNumber: number) => {
+      if (rowNumber === 12) return record;
+      if (rowNumber === 2) {
+        return {
+          formKey: 'Config: Leftover Bank',
+          language: 'EN',
+          id: 'leftover::MP-AA000818::entire::Diabetic',
+          values: {
+            LEFTOVER_ID: 'MI-6',
+            LEFTOVER_KIND: 'Multi-ingredient',
+            LEFTOVER_RECIPE: 'Courgette creamy pasta',
+            LEFTOVER_PORTIONS: 15,
+            LEFTOVER_SOURCE_FORM_KEY: 'Config: Meal Production',
+            LEFTOVER_SOURCE_RECORD_ID: 'MP-AA000818'
+          },
+          status: 'available'
+        } as any;
+      }
+      return null;
+    });
+    const fetchSubmissionById = jest.fn(() => null);
+    (service as any)._listing = { fetchSubmissionByRowNumber, fetchSubmissionById };
+
+    const result = service.fetchSummaryRecord('Config: Meal Production', 'EN', 'MP-AA000818', 12);
+
+    expect(result.success).toBe(true);
+    expect(result.html).toContain('MI-6');
+    expect(result.html).toContain('Courgette creamy pasta');
+    expect(fetchSubmissionByRowNumber).toHaveBeenCalledWith(expect.anything(), expect.anything(), 12);
+    expect(fetchSubmissionByRowNumber).toHaveBeenCalledWith(expect.anything(), expect.anything(), 2);
+    expect(fetchSubmissionById).not.toHaveBeenCalled();
+  });
 });
