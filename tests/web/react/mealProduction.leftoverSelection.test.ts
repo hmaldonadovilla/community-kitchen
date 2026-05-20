@@ -874,9 +874,10 @@ describe('meal production leftover selection config', () => {
         emptyText: { en: 'No ingredient selected' },
         tableColumns: ['LEFTOVER_INGREDIENT', 'LEFTOVER_QTY', 'LEFTOVER_UNIT', 'LEFTOVER_FROZEN'],
         tableColumnWidths: expect.objectContaining({
-          LEFTOVER_INGREDIENT: '40%',
-          LEFTOVER_QTY: '24%',
-          LEFTOVER_FROZEN: '18%'
+          LEFTOVER_INGREDIENT: '48%',
+          LEFTOVER_QTY: '20%',
+          LEFTOVER_UNIT: '16%',
+          LEFTOVER_FROZEN: '16%'
         })
       })
     );
