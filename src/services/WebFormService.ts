@@ -113,6 +113,7 @@ import {
   buildScheduledRecordAlertEmail,
   collectScheduledRecordAlertTriggerSchedules,
   findScheduledRecordAlertMatches,
+  isAppsScriptClockTriggerEvent,
   isScheduledRecordAlertDue
 } from './webform/scheduledAlerts';
 import { isSingleIngredientLeftoverKind } from '../domain/leftoverKinds';
@@ -1857,13 +1858,17 @@ export class WebFormService {
     alertIds?: string[];
     force?: boolean;
   }): { success: boolean; checkedAlerts: number; sentAlerts: number; matchedRecords: number; skippedAlerts: number; errors: string[] } {
-    const now = options?.now ? new Date(options.now) : new Date();
-    const todayIso = options?.todayIso || this.scriptTodayIso();
+    const clockTriggerEvent = isAppsScriptClockTriggerEvent(options);
+    const now = !clockTriggerEvent && options?.now ? new Date(options.now) : new Date();
+    const todayIso = !clockTriggerEvent && options?.todayIso ? options.todayIso : this.scriptTodayIso();
     const timeParts = this.scriptHourMinute(now);
-    const hour = Number.isFinite(Number(options?.hour)) ? Math.trunc(Number(options?.hour)) : timeParts.hour;
-    const minute = Number.isFinite(Number(options?.minute)) ? Math.trunc(Number(options?.minute)) : timeParts.minute;
-    const targetIds = new Set((options?.alertIds || []).map(id => (id || '').toString().trim()).filter(Boolean));
-    const force = Boolean(options?.force);
+    const hour =
+      !clockTriggerEvent && Number.isFinite(Number(options?.hour)) ? Math.trunc(Number(options?.hour)) : timeParts.hour;
+    const minute =
+      !clockTriggerEvent && Number.isFinite(Number(options?.minute)) ? Math.trunc(Number(options?.minute)) : timeParts.minute;
+    const alertIds = !clockTriggerEvent && options?.alertIds ? options.alertIds : [];
+    const targetIds = new Set(alertIds.map(id => (id || '').toString().trim()).filter(Boolean));
+    const force = !clockTriggerEvent && Boolean(options?.force);
     const forms = this.getFormsCached();
     const errors: string[] = [];
     let checkedAlerts = 0;
@@ -1971,7 +1976,8 @@ export class WebFormService {
       errorCount: errors.length,
       todayIso,
       hour,
-      minute
+      minute,
+      clockTriggerEvent
     });
     return {
       success: errors.length === 0,

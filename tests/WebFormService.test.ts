@@ -2952,6 +2952,22 @@ describe('WebFormService', () => {
       ['MP-3', 1, '', '', 'Closed', '', '2026-05-18', 'Lunch', 'Belliar', 'Ruby']
     ]);
 
+    const timeSpy = jest.spyOn(service as any, 'scriptHourMinute').mockReturnValue({ hour: 13, minute: 7 });
+    const todaySpy = jest.spyOn(service as any, 'scriptTodayIso').mockReturnValue('2026-05-18');
+    const triggerEventResult = service.runScheduledRecordAlerts({
+      authMode: 'FULL',
+      triggerUid: 'clock-trigger-1',
+      hour: 11,
+      minute: 7
+    } as any);
+    expect(triggerEventResult).toEqual(
+      expect.objectContaining({ success: true, checkedAlerts: 1, sentAlerts: 1, matchedRecords: 1 })
+    );
+    expect((global as any).GmailApp.sendEmail).toHaveBeenCalledTimes(1);
+    (global as any).GmailApp.sendEmail.mockClear();
+    timeSpy.mockRestore();
+    todaySpy.mockRestore();
+
     const result = service.runScheduledRecordAlerts({ todayIso: '2026-05-18', hour: 13, minute: 0 });
 
     expect(result).toEqual(expect.objectContaining({ success: true, checkedAlerts: 1, sentAlerts: 1, matchedRecords: 1 }));

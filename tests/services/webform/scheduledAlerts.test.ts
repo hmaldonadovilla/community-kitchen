@@ -2,6 +2,7 @@ import {
   buildScheduledRecordAlertEmail,
   collectScheduledRecordAlertTriggerSchedules,
   findScheduledRecordAlertMatches,
+  isAppsScriptClockTriggerEvent,
   isScheduledRecordAlertDue
 } from '../../../src/services/webform/scheduledAlerts';
 
@@ -103,5 +104,12 @@ describe('scheduled record alerts', () => {
       { hour: 13, minute: 0 },
       { hour: 17, minute: 0 }
     ]);
+  });
+
+  test('detects Apps Script clock trigger event payloads separately from manual options', () => {
+    expect(isAppsScriptClockTriggerEvent({ authMode: 'FULL', triggerUid: 'abc', hour: 11, minute: 7 })).toBe(true);
+    expect(isAppsScriptClockTriggerEvent({ year: 2026, month: 5, 'day-of-month': 20, hour: 11 })).toBe(true);
+    expect(isAppsScriptClockTriggerEvent({ hour: 13, minute: 0, todayIso: '2026-05-20' })).toBe(false);
+    expect(isAppsScriptClockTriggerEvent(undefined)).toBe(false);
   });
 });

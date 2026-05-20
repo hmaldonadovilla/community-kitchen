@@ -73,6 +73,21 @@ export interface ScheduledRecordAlertEvaluation {
   errors: string[];
 }
 
+export const isAppsScriptClockTriggerEvent = (value: unknown): boolean => {
+  if (!value || typeof value !== 'object') return false;
+  const event = value as Record<string, unknown>;
+  if ('triggerUid' in event || 'authMode' in event) return true;
+  const hasClockDatePart =
+    'year' in event ||
+    'month' in event ||
+    'day-of-month' in event ||
+    'day-of-week' in event ||
+    'timezone' in event ||
+    'timeZone' in event;
+  const hasClockTimePart = 'hour' in event || 'minute' in event || 'second' in event;
+  return hasClockDatePart && hasClockTimePart;
+};
+
 export const findScheduledRecordAlertMatches = (args: {
   alert: ScheduledRecordAlertConfig;
   form: FormConfig;
@@ -242,4 +257,3 @@ export const buildScheduledRecordAlertEmail = (args: {
     htmlBody: (body || '').replace(/\n/g, '<br/>')
   };
 };
-
