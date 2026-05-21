@@ -45,13 +45,6 @@ export const buildAnalyticsReportTemplatePlaceholders = (args: {
   '{{SOURCE_FORM}}': args.sourceForm || ''
 });
 
-export const roundReportQuantity = (value: number): number => {
-  if (!Number.isFinite(value)) return value;
-  const sign = value < 0 ? -1 : 1;
-  const absolute = Math.abs(value);
-  return sign * (Math.floor(absolute * 100 + 0.5 + Number.EPSILON) / 100);
-};
-
 const isTablespoonUnit = (unit: string): boolean => {
   const normalized = (unit || '').toString().trim().toLowerCase();
   return normalized === 'tbsp' || normalized === 'tablespoon' || normalized === 'tablespoons';
@@ -79,10 +72,12 @@ export const normalizeIngredientUsageQuantity = (args: {
     } else {
       missingTablespoonConversion = true;
     }
+  } else if (isGramUnit(unit)) {
+    unit = 'gr';
   }
 
   return {
-    quantity: roundReportQuantity(quantity),
+    quantity,
     unit,
     missingTablespoonConversion
   };
@@ -95,11 +90,14 @@ export const normalizeIngredientUsageAggregateQuantity = (args: {
   let quantity = args.quantity;
   let unit = (args.unit || '').toString().trim();
   if (isGramUnit(unit)) {
-    quantity /= 1000;
-    unit = 'kg';
+    unit = 'gr';
+    if (quantity >= 1000) {
+      quantity /= 1000;
+      unit = 'kg';
+    }
   }
   return {
-    quantity: roundReportQuantity(quantity),
+    quantity,
     unit
   };
 };

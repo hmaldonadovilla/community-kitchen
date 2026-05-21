@@ -2,7 +2,11 @@ import http from 'http';
 
 const { createServer } = require('../cloud-run/api/server');
 const { ANALYTICS_SHEET_HEADERS, getAnalyticsSheetName } = require('../cloud-run/api/repositories/analyticsRepository');
-const { QUEUE_HEADERS, QUEUE_SHEET_NAME } = require('../cloud-run/api/repositories/analyticsPipelineRepository');
+const {
+  AnalyticsPipelineRepository,
+  QUEUE_HEADERS,
+  QUEUE_SHEET_NAME
+} = require('../cloud-run/api/repositories/analyticsPipelineRepository');
 const {
   FirestoreDataSourceRepository,
   GoogleSheetsDataSourceRepository,
@@ -663,7 +667,7 @@ describe('Cloud Run API server', () => {
 
       expect(res.status).toBe(200);
       expect(body.result).toMatchObject({ success: true, processed: 1, errors: [] });
-      expect(createSpreadsheet).toHaveBeenCalledWith('Meals Thu,30-Apr-2026', { sheetName: 'Meals' });
+      expect(createSpreadsheet).toHaveBeenCalledWith('Meals Thu,30-Apr-2026', { sheetName: 'Meals', locale: 'nl_BE' });
       expect(updateValuesRange).toHaveBeenCalledWith('temp-report-sheet', "'Meals'!A1:B2", [
         ['Date', 'Customer'],
         ['2026-04-30', 'Belliard']
@@ -704,6 +708,185 @@ describe('Cloud Run API server', () => {
     } finally {
       await closeServer(server);
     }
+  });
+
+  test('runs Cloud Run ingredient usage reports without rounding aggregated values', async () => {
+    const createSpreadsheet = jest.fn().mockResolvedValue({
+      spreadsheetId: 'temp-ingredients-report',
+      sheets: [{ properties: { sheetId: 456 } }]
+    });
+    const updateValuesRange = jest.fn().mockResolvedValue({ updatedRows: 5 });
+    const batchUpdate = jest.fn().mockResolvedValue({ replies: [{}] });
+    const exportFile = jest.fn().mockResolvedValue(Buffer.from('xlsx-bytes', 'utf8'));
+    const createFile = jest.fn().mockResolvedValue({
+      id: 'xlsx-ingredients-1',
+      webViewLink: 'https://drive.google.com/open?id=xlsx-ingredients-1'
+    });
+    const trashFile = jest.fn().mockResolvedValue({ success: true });
+    const sendEmail = jest.fn().mockResolvedValue({ id: 'gmail-message-ingredients' });
+
+    const repository = new AnalyticsPipelineRepository({
+      env: {
+        CK_TIMEZONE: 'UTC'
+      },
+      submissionRepository: {
+        records: jest.fn().mockResolvedValue([
+          {
+            formKey: 'Config: Meal Production',
+            id: 'meal-1',
+            language: 'EN',
+            status: 'Closed',
+            values: {
+              MP_PREP_DATE: '2026-04-21',
+              MP_MEALS_REQUEST: [
+                {
+                  MP_TYPE_LI: [
+                    {
+                      PREP_TYPE: 'Cook',
+                      MP_INGREDIENTS_LI: [
+                        { ING: 'Beans', QTY: '2', UNIT: 'kg', CAT: 'Legumes' },
+                        { ING: 'Beans', QTY: '1.5', UNIT: 'kg', CAT: 'Legumes' },
+                        { ING: 'Salt', QTY: '100', UNIT: 'Tbsp', CAT: 'Herbs', TBSP_GRAMS: '18' },
+                        { ING: 'Sugar', QTY: '20', UNIT: 'Tbsp', CAT: 'Herbs', TBSP_GRAMS: '12.5' },
+                        { ING: 'Rice', QTY: '900', UNIT: 'gr', CAT: 'Dry carbohydrates' },
+                        { ING: 'Rice', QTY: '600', UNIT: 'gr', CAT: 'Dry carbohydrates' },
+                        { ING: 'Rice', QTY: '5', UNIT: 'gr', CAT: 'Dry carbohydrates' }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            formKey: 'Config: Meal Production',
+            id: 'meal-2',
+            language: 'EN',
+            status: 'Open',
+            values: {
+              MP_PREP_DATE: '2026-04-22',
+              MP_MEALS_REQUEST: [
+                {
+                  MP_TYPE_LI: [
+                    {
+                      PREP_TYPE: 'Cook',
+                      MP_INGREDIENTS_LI: [{ ING: 'Beans', QTY: '5', UNIT: 'kg', CAT: 'Legumes' }]
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ])
+      },
+      sheetsClient: { createSpreadsheet, updateValuesRange, batchUpdate },
+      driveClient: { exportFile },
+      fileRepository: { createFile, trashFile },
+      gmailClient: { sendEmail }
+    });
+    const form = {
+      title: 'Meal Production',
+      configSheet: 'Config: Meal Production',
+      followupConfig: { statusTransitions: { onClose: 'Closed' } }
+    };
+    const pipeline = {
+      id: 'ingredients_used',
+      type: 'ingredientUsageReport',
+      title: 'Ingredients used',
+      email: {
+        recipients: ['ops@example.test'],
+        subject: 'Ingredients since {{START_DATE}}',
+        message: 'Rows: {{ROW_COUNT}}'
+      },
+      attachment: {
+        folderId: 'exports-folder',
+        fileNameTemplate: 'Ingredients {{START_DATE}}.xlsx',
+        sheetName: 'Ingredients'
+      },
+      report: {
+        dateFieldId: 'MP_PREP_DATE',
+        mealGroupId: 'MP_MEALS_REQUEST',
+        prepGroupId: 'MP_TYPE_LI',
+        ingredientGroupId: 'MP_INGREDIENTS_LI',
+        prepTypeFieldId: 'PREP_TYPE',
+        prepTypeValues: ['Cook'],
+        ingredientFieldId: 'ING',
+        quantityFieldId: 'QTY',
+        unitFieldId: 'UNIT',
+        categoryFieldId: 'CAT',
+        tablespoonGramsFieldId: 'TBSP_GRAMS'
+      }
+    };
+
+    const result = await repository.runPipeline({
+      ownerForm: form,
+      sourceForm: form,
+      sourceQuestions: [
+        {
+          id: 'MP_MEALS_REQUEST',
+          type: 'LINE_ITEM_GROUP',
+          lineItemConfig: {
+            subGroups: [
+              {
+                id: 'MP_TYPE_LI',
+                subGroups: [
+                  {
+                    id: 'MP_INGREDIENTS_LI',
+                    fields: [{ id: 'ING' }]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      pipeline,
+      startDate: '2026-04-20'
+    });
+
+    expect(result.success).toBe(true);
+    expect(updateValuesRange).toHaveBeenCalledWith('temp-ingredients-report', "'Ingredients'!A1:D5", [
+      ['Ingredients', 'Quantity', 'Unit', 'Category'],
+      ['Beans', 3.5, 'kg', 'Legumes'],
+      ['Rice', 1.505, 'kg', 'Dry carbohydrates'],
+      ['Salt', 1.8, 'kg', 'Herbs'],
+      ['Sugar', 250, 'gr', 'Herbs']
+    ]);
+    expect(batchUpdate).toHaveBeenCalledWith(
+      'temp-ingredients-report',
+      expect.arrayContaining([
+        expect.objectContaining({
+          repeatCell: expect.objectContaining({
+            range: {
+              sheetId: 456,
+              startRowIndex: 1,
+              endRowIndex: 4,
+              startColumnIndex: 1,
+              endColumnIndex: 2
+            },
+            cell: { userEnteredFormat: { numberFormat: { type: 'NUMBER', pattern: '#,##0.##' } } },
+            fields: 'userEnteredFormat.numberFormat'
+          })
+        }),
+        expect.objectContaining({
+          repeatCell: expect.objectContaining({
+            range: {
+              sheetId: 456,
+              startRowIndex: 4,
+              endRowIndex: 5,
+              startColumnIndex: 1,
+              endColumnIndex: 2
+            },
+            cell: { userEnteredFormat: { numberFormat: { type: 'NUMBER', pattern: '#,##0' } } },
+            fields: 'userEnteredFormat.numberFormat'
+          })
+        })
+      ])
+    );
+    expect(createFile).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Ingredients Mon,20-Apr-2026.xlsx' }),
+      { folderId: 'exports-folder' }
+    );
   });
 
   test('renders Sheets-backed summary HTML templates through Cloud Run RPC', async () => {

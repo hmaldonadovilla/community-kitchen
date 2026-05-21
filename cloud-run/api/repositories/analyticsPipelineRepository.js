@@ -19,6 +19,7 @@ const QUEUE_HEADERS = [
   'Summary JSON'
 ];
 const DEFAULT_QUEUED_NOTICE = "Report request sent. We'll email it to the Operations Manager.";
+const DEFAULT_REPORT_SPREADSHEET_LOCALE = 'nl_BE';
 const REPORT_WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const REPORT_MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -101,6 +102,40 @@ const toNumber = raw => {
   if (!text) return null;
   const direct = Number(text.replace(/\s+/g, '').replace(',', '.'));
   return Number.isFinite(direct) ? direct : null;
+};
+
+const toFiniteNumber = value => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string') return null;
+  const text = value.trim();
+  if (!text) return null;
+  const parsed = Number(text.replace(/\s+/g, '').replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const isEffectivelyInteger = value => Math.abs(value - Math.round(value)) < 1e-9;
+
+const resolveNumericFormat = (value, rule) => {
+  const numeric = toFiniteNumber(value);
+  if (numeric === null) return '';
+  return isEffectivelyInteger(numeric) ? toText(rule && rule.integer) : toText(rule && rule.decimal);
+};
+
+const normalizeSpreadsheetLocale = value => {
+  const locale = toText(value).replace('-', '_');
+  return locale || DEFAULT_REPORT_SPREADSHEET_LOCALE;
+};
+
+const resolveReportSpreadsheetLocale = env =>
+  normalizeSpreadsheetLocale(env && env.CK_REPORT_SPREADSHEET_LOCALE);
+
+const resolveReportNumberFormatPatterns = spreadsheetLocale => {
+  normalizeSpreadsheetLocale(spreadsheetLocale);
+  // Sheets format pattern syntax is en_US-style. The spreadsheet locale controls rendered separators.
+  return {
+    decimal: '#,##0.##',
+    integer: '#,##0'
+  };
 };
 
 const replaceTemplateTokens = (template, placeholders) =>
@@ -334,15 +369,26 @@ const normalizeIngredientUsageQuantity = args => {
       quantity *= gramsPerTablespoon;
       unit = 'gr';
     }
-  }
-  if (isGramUnit(unit) && quantity > 1000) {
-    quantity /= 1000;
-    unit = 'kg';
+  } else if (isGramUnit(unit)) {
+    unit = 'gr';
   }
   return {
-    quantity: Math.round(quantity * 1000000) / 1000000,
+    quantity,
     unit
   };
+};
+
+const normalizeIngredientUsageAggregateQuantity = args => {
+  let quantity = args.quantity;
+  let unit = toText(args.unit);
+  if (isGramUnit(unit)) {
+    unit = 'gr';
+    if (quantity >= 1000) {
+      quantity /= 1000;
+      unit = 'kg';
+    }
+  }
+  return { quantity, unit };
 };
 
 const isMissingSheetError = err => /Unable to parse range|Google Sheets tab not found|not found|does not exist/i.test(toText(err && err.message));
@@ -378,6 +424,8 @@ class AnalyticsPipelineRepository {
     this.driveClient = options.driveClient || createGoogleDriveClient(options);
     this.gmailClient = options.gmailClient || createGoogleGmailClient(options);
     this.dataSourceDetailsCache = new Map();
+    this.reportSpreadsheetLocale = resolveReportSpreadsheetLocale(this.env);
+    this.reportNumberFormats = resolveReportNumberFormatPatterns(this.reportSpreadsheetLocale);
   }
 
   getSpreadsheetId() {
@@ -594,6 +642,7 @@ class AnalyticsPipelineRepository {
             ['Ingredients', 'Quantity', 'Unit', 'Category'],
             ...aggregation.rows.map(row => [row.ingredient, row.quantity, row.unit, row.category])
           ],
+          numericColumnFormatRules: { 2: { decimal: this.reportNumberFormats.decimal, integer: this.reportNumberFormats.integer } },
           defaultSheetName: 'Ingredients'
         };
       }
@@ -644,6 +693,8 @@ class AnalyticsPipelineRepository {
       pipeline: args.pipeline,
       values: built.values,
       sheets: built.sheets,
+      columnNumberFormats: built.columnNumberFormats,
+      numericColumnFormatRules: built.numericColumnFormatRules,
       startDate,
       endDate,
       recordCount: built.recordCount,
@@ -806,8 +857,26 @@ class AnalyticsPipelineRepository {
       }
     }
 
+    const finalGrouped = new Map();
+    Array.from(grouped.values()).forEach(row => {
+      const normalized = normalizeIngredientUsageAggregateQuantity({
+        quantity: row.quantity,
+        unit: row.unit
+      });
+      const key = `${row.ingredient.toLowerCase()}::${normalized.unit.toLowerCase()}`;
+      const current = finalGrouped.get(key) || {
+        ingredient: row.ingredient,
+        unit: normalized.unit,
+        quantity: 0,
+        category: ''
+      };
+      current.quantity += normalized.quantity;
+      if (!current.category && row.category) current.category = row.category;
+      finalGrouped.set(key, current);
+    });
+
     return {
-      rows: Array.from(grouped.values()).sort((left, right) => left.ingredient.localeCompare(right.ingredient) || left.unit.localeCompare(right.unit)),
+      rows: Array.from(finalGrouped.values()).sort((left, right) => left.ingredient.localeCompare(right.ingredient) || left.unit.localeCompare(right.unit)),
       recordCount
     };
   }
@@ -1053,15 +1122,20 @@ class AnalyticsPipelineRepository {
         : [
             {
               name: toText(args.pipeline.attachment && args.pipeline.attachment.sheetName) || args.defaultSheetName || 'Report',
-              values: args.values
+              values: args.values,
+              columnNumberFormats: args.columnNumberFormats,
+              numericColumnFormatRules: args.numericColumnFormatRules
             }
           ];
     const firstSheetName = toText(workbookSheets[0] && workbookSheets[0].name) || args.defaultSheetName || 'Report';
-    const created = await this.sheetsClient.createSpreadsheet(fileName.replace(/\.xlsx$/i, ''), { sheetName: firstSheetName });
+    const created = await this.sheetsClient.createSpreadsheet(fileName.replace(/\.xlsx$/i, ''), {
+      sheetName: firstSheetName,
+      locale: this.reportSpreadsheetLocale
+    });
     const tempId = toText(created && created.spreadsheetId);
     if (!tempId) throw new Error('Google Sheets create did not return spreadsheetId.');
     try {
-      const boldRequests = [];
+      const formatRequests = [];
       for (let index = 0; index < workbookSheets.length; index += 1) {
         const entry = workbookSheets[index] || {};
         const sheetName = toText(entry.name) || `Report ${index + 1}`;
@@ -1089,17 +1163,77 @@ class AnalyticsPipelineRepository {
         });
         await this.sheetsClient.updateValuesRange(tempId, `${escapeSheetName(sheetName)}!A1:${columnName(width)}${normalizedValues.length}`, normalizedValues);
         if (sheetId !== undefined) {
-          boldRequests.push({
+          formatRequests.push({
             repeatCell: {
               range: { sheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: width },
               cell: { userEnteredFormat: { textFormat: { bold: true } } },
               fields: 'userEnteredFormat.textFormat.bold'
             }
           });
+          Object.entries(entry.columnNumberFormats || {}).forEach(([rawColumnIndex, rawPattern]) => {
+            const columnIndex = Number(rawColumnIndex);
+            const pattern = toText(rawPattern);
+            if (!Number.isInteger(columnIndex) || columnIndex < 1 || columnIndex > width || normalizedValues.length <= 1 || !pattern) return;
+            formatRequests.push({
+              repeatCell: {
+                range: {
+                  sheetId,
+                  startRowIndex: 1,
+                  endRowIndex: normalizedValues.length,
+                  startColumnIndex: columnIndex - 1,
+                  endColumnIndex: columnIndex
+                },
+                cell: { userEnteredFormat: { numberFormat: { type: 'NUMBER', pattern } } },
+                fields: 'userEnteredFormat.numberFormat'
+              }
+            });
+          });
+          Object.entries(entry.numericColumnFormatRules || {}).forEach(([rawColumnIndex, rule]) => {
+            const columnIndex = Number(rawColumnIndex);
+            if (!Number.isInteger(columnIndex) || columnIndex < 1 || columnIndex > width || normalizedValues.length <= 1 || !rule) return;
+            let runPattern = '';
+            let runStartIndex = 0;
+            let runEndIndex = 0;
+            const flushRun = () => {
+              if (!runPattern || runStartIndex >= runEndIndex) return;
+              formatRequests.push({
+                repeatCell: {
+                  range: {
+                    sheetId,
+                    startRowIndex: runStartIndex,
+                    endRowIndex: runEndIndex,
+                    startColumnIndex: columnIndex - 1,
+                    endColumnIndex: columnIndex
+                  },
+                  cell: { userEnteredFormat: { numberFormat: { type: 'NUMBER', pattern: runPattern } } },
+                  fields: 'userEnteredFormat.numberFormat'
+                }
+              });
+            };
+            for (let rowIndex = 1; rowIndex < normalizedValues.length; rowIndex += 1) {
+              const pattern = resolveNumericFormat(normalizedValues[rowIndex] && normalizedValues[rowIndex][columnIndex - 1], rule);
+              if (!pattern) {
+                flushRun();
+                runPattern = '';
+                runStartIndex = 0;
+                runEndIndex = 0;
+                continue;
+              }
+              if (pattern === runPattern && runEndIndex === rowIndex) {
+                runEndIndex = rowIndex + 1;
+                continue;
+              }
+              flushRun();
+              runPattern = pattern;
+              runStartIndex = rowIndex;
+              runEndIndex = rowIndex + 1;
+            }
+            flushRun();
+          });
         }
       }
-      if (boldRequests.length && typeof this.sheetsClient.batchUpdate === 'function') {
-        await this.sheetsClient.batchUpdate(tempId, boldRequests);
+      if (formatRequests.length && typeof this.sheetsClient.batchUpdate === 'function') {
+        await this.sheetsClient.batchUpdate(tempId, formatRequests);
       }
       const buffer = await this.driveClient.exportFile(tempId, XLSX_MIME_TYPE);
       const folderId =

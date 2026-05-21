@@ -24,8 +24,7 @@ import { aggregateGeneratedBankReport, type GeneratedBankReportSheet } from './g
 import {
   buildAnalyticsReportTemplatePlaceholders,
   normalizeIngredientUsageAggregateQuantity,
-  normalizeIngredientUsageQuantity,
-  roundReportQuantity
+  normalizeIngredientUsageQuantity
 } from './reportFormatting';
 
 const XLSX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -33,6 +32,8 @@ const DEFAULT_DATE_LABEL = 'Date';
 const DEFAULT_SUBMIT_LABEL = 'Send report';
 const DEFAULT_PENDING_LABEL = 'Sending...';
 const DEFAULT_QUEUED_NOTICE = "Report request sent. We'll email it to the Operations Manager.";
+const REPORT_SPREADSHEET_LOCALE_PROPERTY_KEY = 'CK_REPORT_SPREADSHEET_LOCALE';
+const DEFAULT_REPORT_SPREADSHEET_LOCALE = 'nl_BE';
 const EXPORT_SYNC_ATTEMPTS = 4;
 const EXPORT_SYNC_SLEEP_MS = 1_500;
 
@@ -62,6 +63,21 @@ type RecordTableAggregation = {
   headers: string[];
   rows: any[][];
   recordCount: number;
+};
+
+type NumericColumnFormatRule = {
+  integer?: string;
+  decimal?: string;
+};
+
+type ReportNumberFormatPatterns = {
+  decimal: string;
+  integer: string;
+};
+
+type WorkbookSheet = GeneratedBankReportSheet & {
+  columnNumberFormats?: Record<number, string>;
+  numericColumnFormatRules?: Record<number, NumericColumnFormatRule>;
 };
 
 export type AnalyticsPipelineExecutionSummary = {
@@ -183,6 +199,34 @@ const resolveTempSpreadsheetCreate = (): ((name: string) => GoogleAppsScript.Spr
   return create.bind(SpreadsheetApp);
 };
 
+const resolveScriptProperty = (key: string): string => {
+  try {
+    const props = typeof PropertiesService !== 'undefined' && PropertiesService.getScriptProperties
+      ? PropertiesService.getScriptProperties()
+      : null;
+    return (props?.getProperty(key) || '').toString().trim();
+  } catch {
+    return '';
+  }
+};
+
+const normalizeSpreadsheetLocale = (value: any): string => {
+  const locale = (value === undefined || value === null ? '' : value.toString().trim()).replace('-', '_');
+  return locale || DEFAULT_REPORT_SPREADSHEET_LOCALE;
+};
+
+const resolveReportSpreadsheetLocale = (): string =>
+  normalizeSpreadsheetLocale(resolveScriptProperty(REPORT_SPREADSHEET_LOCALE_PROPERTY_KEY));
+
+const resolveReportNumberFormatPatterns = (spreadsheetLocale: string): ReportNumberFormatPatterns => {
+  normalizeSpreadsheetLocale(spreadsheetLocale);
+  // Sheets format pattern syntax is en_US-style. The spreadsheet locale controls rendered separators.
+  return {
+    decimal: '#,##0.##',
+    integer: '#,##0'
+  };
+};
+
 const trashFileById = (fileId: string): void => {
   const id = (fileId || '').toString().trim();
   if (!id) return;
@@ -260,10 +304,29 @@ const rangeValuesMatch = (actual: any[][] | null, expected: any[][]): boolean =>
   return true;
 };
 
+const toFiniteNumber = (value: any): number | null => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string') return null;
+  const text = value.trim();
+  if (!text) return null;
+  const parsed = Number(text.replace(/\s+/g, '').replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const isEffectivelyInteger = (value: number): boolean => Math.abs(value - Math.round(value)) < 1e-9;
+
+const resolveNumericFormat = (value: any, rule: NumericColumnFormatRule): string => {
+  const numeric = toFiniteNumber(value);
+  if (numeric === null) return '';
+  return isEffectivelyInteger(numeric) ? (rule.integer || '') : (rule.decimal || '');
+};
+
 export class AnalyticsPipelineService {
   private readonly ss: GoogleAppsScript.Spreadsheet.Spreadsheet;
   private readonly submissions: SubmissionService;
   private readonly dataSources: DataSourceService;
+  private readonly reportSpreadsheetLocale: string;
+  private readonly reportNumberFormats: ReportNumberFormatPatterns;
 
   constructor(
     ss: GoogleAppsScript.Spreadsheet.Spreadsheet,
@@ -273,6 +336,8 @@ export class AnalyticsPipelineService {
     this.ss = ss;
     this.submissions = submissions;
     this.dataSources = dataSources;
+    this.reportSpreadsheetLocale = resolveReportSpreadsheetLocale();
+    this.reportNumberFormats = resolveReportNumberFormatPatterns(this.reportSpreadsheetLocale);
   }
 
   buildDashboardPipelines(forms: FormConfig[]): AnalyticsDashboardPipeline[] {
@@ -563,7 +628,6 @@ export class AnalyticsPipelineService {
         category: ''
       };
       current.quantity += normalized.quantity;
-      current.quantity = roundReportQuantity(current.quantity);
       if (!current.category && row.category) current.category = row.category;
       finalGrouped.set(key, current);
     });
@@ -976,6 +1040,7 @@ export class AnalyticsPipelineService {
       sourceForm: args.sourceForm,
       pipeline: args.pipeline,
       values,
+      numericColumnFormatRules: { 2: { decimal: this.reportNumberFormats.decimal, integer: this.reportNumberFormats.integer } },
       startDate: args.startDate,
       endDate: args.endDate,
       recordCount: args.recordCount,
@@ -988,7 +1053,9 @@ export class AnalyticsPipelineService {
     sourceForm: FormConfig;
     pipeline: AnalyticsPipelineConfig;
     values?: any[][];
-    sheets?: GeneratedBankReportSheet[];
+    sheets?: WorkbookSheet[];
+    columnNumberFormats?: Record<number, string>;
+    numericColumnFormatRules?: Record<number, NumericColumnFormatRule>;
     startDate: string;
     endDate: string;
     recordCount: number;
@@ -1006,6 +1073,7 @@ export class AnalyticsPipelineService {
     });
     const createSpreadsheet = resolveTempSpreadsheetCreate();
     const temp = createSpreadsheet(fileName.replace(/\.xlsx$/i, ''));
+    this.applyReportSpreadsheetLocale(temp);
     const tempId = temp.getId();
 
     try {
@@ -1015,7 +1083,9 @@ export class AnalyticsPipelineService {
           : [
               {
                 name: (args.pipeline.attachment?.sheetName || args.defaultSheetName || 'Report').toString().trim(),
-                values: Array.isArray(args.values) ? args.values : []
+                values: Array.isArray(args.values) ? args.values : [],
+                columnNumberFormats: args.columnNumberFormats,
+                numericColumnFormatRules: args.numericColumnFormatRules
               }
             ];
       workbookSheets.forEach((entry, index) => {
@@ -1031,6 +1101,14 @@ export class AnalyticsPipelineService {
         const values = entry.values.length ? entry.values : [['No data']];
         sheet.getRange(1, 1, values.length, values[0].length).setValues(values);
         sheet.getRange(1, 1, 1, values[0].length).setFontWeight('bold');
+        this.applyColumnNumberFormats({
+          sheet,
+          rowCount: values.length,
+          columnCount: values[0].length,
+          values,
+          columnNumberFormats: entry.columnNumberFormats,
+          numericColumnFormatRules: entry.numericColumnFormatRules
+        });
 
         this.waitForWorkbookContentToPersist({
           spreadsheetId: tempId,
@@ -1053,6 +1131,64 @@ export class AnalyticsPipelineService {
       };
     } finally {
       trashFileById(tempId);
+    }
+  }
+
+  private applyColumnNumberFormats(args: {
+    sheet: GoogleAppsScript.Spreadsheet.Sheet;
+    rowCount: number;
+    columnCount: number;
+    values: any[][];
+    columnNumberFormats?: Record<number, string>;
+    numericColumnFormatRules?: Record<number, NumericColumnFormatRule>;
+  }): void {
+    if (args.rowCount <= 1) return;
+    Object.entries(args.columnNumberFormats || {}).forEach(([rawColumnIndex, rawFormat]) => {
+      const columnIndex = Number(rawColumnIndex);
+      const format = (rawFormat || '').toString().trim();
+      if (!Number.isInteger(columnIndex) || columnIndex < 1 || columnIndex > args.columnCount || !format) return;
+      args.sheet.getRange(2, columnIndex, args.rowCount - 1, 1).setNumberFormat(format);
+    });
+    Object.entries(args.numericColumnFormatRules || {}).forEach(([rawColumnIndex, rule]) => {
+      const columnIndex = Number(rawColumnIndex);
+      if (!Number.isInteger(columnIndex) || columnIndex < 1 || columnIndex > args.columnCount || !rule) return;
+      let runFormat = '';
+      let runStartRow = 0;
+      let runLength = 0;
+      const flushRun = () => {
+        if (!runFormat || runStartRow <= 0 || runLength <= 0) return;
+        args.sheet.getRange(runStartRow, columnIndex, runLength, 1).setNumberFormat(runFormat);
+      };
+      for (let rowIndex = 1; rowIndex < args.values.length; rowIndex += 1) {
+        const format = resolveNumericFormat(args.values[rowIndex]?.[columnIndex - 1], rule);
+        const sheetRow = rowIndex + 1;
+        if (!format) {
+          flushRun();
+          runFormat = '';
+          runStartRow = 0;
+          runLength = 0;
+          continue;
+        }
+        if (format === runFormat && runStartRow > 0) {
+          runLength += 1;
+          continue;
+        }
+        flushRun();
+        runFormat = format;
+        runStartRow = sheetRow;
+        runLength = 1;
+      }
+      flushRun();
+    });
+  }
+
+  private applyReportSpreadsheetLocale(spreadsheet: GoogleAppsScript.Spreadsheet.Spreadsheet): void {
+    const setLocale = (spreadsheet as any)?.setSpreadsheetLocale;
+    if (typeof setLocale !== 'function') return;
+    try {
+      setLocale.call(spreadsheet, this.reportSpreadsheetLocale);
+    } catch {
+      // Keep report generation best-effort if the Sheets runtime rejects the locale.
     }
   }
 

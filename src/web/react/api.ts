@@ -947,7 +947,6 @@ export const DEFAULT_HYBRID_HTTP_FUNCTIONS = [
   'fetchFormConfig',
   'fetchFormCatalog',
   'fetchAnalyticsDashboard',
-  'queueAnalyticsPipelineRun',
   'enqueueFollowupEmail',
   'runQueuedFollowupEmailJobs',
   'fetchSubmissions',
@@ -1477,24 +1476,6 @@ const invokeDriveArtifactTransport = async <T,>(fnName: string, ...args: any[]):
   }
 };
 
-const invokeAnalyticsPipelineTransport = async <T,>(fnName: string, ...args: any[]): Promise<T> => {
-  try {
-    return await invokeTransport<T>(fnName, ...args);
-  } catch (err) {
-    if (
-      activeTransport.isHttpRouted?.(fnName) &&
-      (isCloudRunGmailNotConfiguredError(err) || isDriveServiceAccountQuotaError(err))
-    ) {
-      logBackendTransportConfig('analyticsPipeline.appsScriptFallback', {
-        fnName,
-        reason: isCloudRunGmailNotConfiguredError(err) ? 'gmailNotConfigured' : 'driveServiceAccountQuota'
-      });
-      return runAppsScript<T>(fnName, ...args);
-    }
-    throw err;
-  }
-};
-
 export const configureBackendTransportFromRuntime = (
   runtimeConfig?: BackendRuntimeConfig | null
 ): BackendTransport => {
@@ -1912,7 +1893,7 @@ export const fetchAnalyticsDashboardApi = (): Promise<AnalyticsDashboardPayload>
 export const queueAnalyticsPipelineRunApi = (
   request: QueueAnalyticsPipelineRequest
 ): Promise<QueueAnalyticsPipelineResult> =>
-  invokeAnalyticsPipelineTransport<QueueAnalyticsPipelineResult>('queueAnalyticsPipelineRun', request);
+  runAppsScript<QueueAnalyticsPipelineResult>('queueAnalyticsPipelineRun', request);
 
 configureDataSourceFetcher(req => fetchDataSourceApi(req));
 configureBackendTransportFromRuntime();

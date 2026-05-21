@@ -94,7 +94,7 @@ describe('react api transport', () => {
     expect(transport.isHttpRouted?.('renderHtmlTemplate')).toBe(false);
   });
 
-  test('routes analytics dashboard reads and queued exports to HTTP by default', () => {
+  test('routes analytics dashboard reads to HTTP but keeps queued exports on Apps Script by default', () => {
     const httpInvoke = jest.fn();
     const appsInvoke = jest.fn();
     const transport = createHybridTransport({
@@ -104,7 +104,7 @@ describe('react api transport', () => {
     });
 
     expect(transport.isHttpRouted?.('fetchAnalyticsDashboard')).toBe(true);
-    expect(transport.isHttpRouted?.('queueAnalyticsPipelineRun')).toBe(true);
+    expect(transport.isHttpRouted?.('queueAnalyticsPipelineRun')).toBe(false);
   });
 
   test('does not enable HTTP from runtime config unless mode explicitly opts in', async () => {
@@ -644,7 +644,7 @@ describe('react api transport', () => {
     expect(runner.renderDocTemplateHtml).toHaveBeenCalledWith(payload, 'REPORT');
   });
 
-  test('falls back queued analytics exports to Apps Script when Cloud Run Gmail is not configured', async () => {
+  test('queues analytics exports through Apps Script even when Cloud Run is configured', async () => {
     const invoke = jest.fn().mockRejectedValue(new Error('Cloud Run SEND_EMAIL requires CK_GMAIL_DELEGATED_USER to be configured for Gmail domain-wide delegation.'));
     const runner: any = {
       success: null,
@@ -677,7 +677,7 @@ describe('react api transport', () => {
       message: 'Queued by Apps Script.'
     });
 
-    expect(invoke).toHaveBeenCalledWith('queueAnalyticsPipelineRun', request);
+    expect(invoke).not.toHaveBeenCalled();
     expect(runner.queueAnalyticsPipelineRun).toHaveBeenCalledWith(request);
   });
 

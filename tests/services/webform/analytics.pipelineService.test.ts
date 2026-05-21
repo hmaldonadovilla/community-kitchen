@@ -107,12 +107,14 @@ describe('AnalyticsPipelineService', () => {
 
     let persistedVisible = false;
     let writtenValues: any[][] = [[]];
+    const numberFormatRanges: Array<{ row: number; col: number; numRows: number; numCols: number; format: string }> = [];
     const tempSheet = {
       setName: jest.fn(),
       getRange: jest.fn((row: number, col: number, numRows: number, numCols: number) => {
         type MockRange = {
           setValues: jest.Mock<MockRange, [any[][]]>;
           setFontWeight: jest.Mock<MockRange, []>;
+          setNumberFormat: jest.Mock<MockRange, [string]>;
           getValues: jest.Mock<any[][], []>;
         };
         const range: MockRange = {
@@ -121,6 +123,10 @@ describe('AnalyticsPipelineService', () => {
             return range;
           }),
           setFontWeight: jest.fn<MockRange, []>(() => range),
+          setNumberFormat: jest.fn<MockRange, [string]>((format: string) => {
+            numberFormatRanges.push({ row, col, numRows, numCols, format });
+            return range;
+          }),
           getValues: jest.fn<any[][], []>(() => {
             if (!persistedVisible) {
               return Array.from({ length: numRows }, () => Array.from({ length: numCols }, () => ''));
@@ -137,7 +143,8 @@ describe('AnalyticsPipelineService', () => {
       getId: () => 'temp-spreadsheet-id',
       getSheets: () => [tempSheet],
       getSheetByName: (name: string) => (name === 'Ingredient usage' ? tempSheet : null),
-      insertSheet: () => tempSheet
+      insertSheet: () => tempSheet,
+      setSpreadsheetLocale: jest.fn()
     };
     (global as any).SpreadsheetApp.create = jest.fn(() => tempSpreadsheet);
     (global as any).SpreadsheetApp.openById = jest.fn(() => tempSpreadsheet);
@@ -302,10 +309,13 @@ describe('AnalyticsPipelineService', () => {
     expect(writtenValues).toEqual([
       ['Ingredients', 'Quantity', 'Unit', 'Category'],
       ['Beans', 3.5, 'kg', 'Legumes'],
-      ['Rice', 1.51, 'kg', 'Dry carbohydrates'],
+      ['Rice', 1.505, 'kg', 'Dry carbohydrates'],
       ['Salt', 1.8, 'kg', 'Herbs'],
-      ['Sugar', 0.25, 'kg', 'Herbs']
+      ['Sugar', 250, 'gr', 'Herbs']
     ]);
+    expect(tempSpreadsheet.setSpreadsheetLocale).toHaveBeenCalledWith('nl_BE');
+    expect(numberFormatRanges).toContainEqual({ row: 2, col: 2, numRows: 3, numCols: 1, format: '#,##0.##' });
+    expect(numberFormatRanges).toContainEqual({ row: 5, col: 2, numRows: 1, numCols: 1, format: '#,##0' });
     expect(createFile).toHaveBeenCalledTimes(1);
     expect((global as any).SpreadsheetApp.openById).toHaveBeenCalledWith('temp-spreadsheet-id');
     expect((global as any).SpreadsheetApp.flush).toHaveBeenCalled();

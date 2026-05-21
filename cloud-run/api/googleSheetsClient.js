@@ -40,11 +40,15 @@ const createGoogleSheetsClient = (deps = {}) => {
     async createSpreadsheet(title, options = {}) {
       const name = (title || '').toString().trim() || 'Spreadsheet';
       const sheetName = (options.sheetName || 'Report').toString().trim() || 'Report';
+      const locale = (options.locale || '').toString().trim();
       const url = SHEETS_API_BASE_URL;
       return googleApiClient.request(url, {
         method: 'POST',
         body: {
-          properties: { title: name },
+          properties: {
+            title: name,
+            ...(locale ? { locale } : {})
+          },
           sheets: [
             {
               properties: {
