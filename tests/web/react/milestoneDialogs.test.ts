@@ -1,6 +1,9 @@
 import {
+  GENERATED_SUBMIT_EFFECT_RECORDS_FIELD,
+  buildGeneratedSubmitEffectRecordsTemplateJson,
   filterGeneratedRecordsForDialog,
   getGeneratedRecordsFromFollowupResult,
+  mergeGeneratedSubmitEffectRecordsIntoValues,
   renderGeneratedRecordLine,
   selectMilestoneConfirmationDialog,
   selectMilestoneProgressDialog
@@ -159,5 +162,66 @@ describe('milestoneDialogs', () => {
     ).toEqual([
       { effectId: 'captureProducedLeftovers', targetFormKey: 'Config: Leftover Bank', recordId: 'inv-1' }
     ]);
+  });
+
+  test('builds summary template payload from generated submit-effect records', () => {
+    const json = buildGeneratedSubmitEffectRecordsTemplateJson([
+      {
+        effectId: 'captureProducedEntireDishLeftovers',
+        targetFormKey: 'Config: Leftover Bank',
+        recordId: 'leftover::MP-1::entire::Standard',
+        values: {
+          LEFTOVER_ID: 'MI-6',
+          LEFTOVER_KIND: 'Multi-ingredient',
+          LEFTOVER_RECIPE: 'Courgette creamy pasta',
+          LEFTOVER_PORTIONS: 15
+        }
+      }
+    ]);
+
+    expect(JSON.parse(json)).toEqual({
+      byTargetFormKey: {
+        'Config: Leftover Bank': [
+          {
+            effectId: 'captureProducedEntireDishLeftovers',
+            targetFormKey: 'Config: Leftover Bank',
+            recordId: 'leftover::MP-1::entire::Standard',
+            values: {
+              LEFTOVER_ID: 'MI-6',
+              LEFTOVER_KIND: 'Multi-ingredient',
+              LEFTOVER_RECIPE: 'Courgette creamy pasta',
+              LEFTOVER_PORTIONS: 15
+            }
+          }
+        ]
+      }
+    });
+  });
+
+  test('merges generated submit-effect records into summary render values without mutating empty results', () => {
+    const values = { MP_ID: 'MP-1' };
+    expect(mergeGeneratedSubmitEffectRecordsIntoValues(values, [])).toBe(values);
+
+    const next = mergeGeneratedSubmitEffectRecordsIntoValues(values, [
+      {
+        targetFormKey: 'Config: Leftover Bank',
+        recordId: 'leftover::MP-1::entire::Standard',
+        values: { LEFTOVER_ID: 'MI-6' }
+      }
+    ]);
+
+    expect(next).not.toBe(values);
+    expect(next.MP_ID).toBe('MP-1');
+    expect(JSON.parse(next[GENERATED_SUBMIT_EFFECT_RECORDS_FIELD])).toEqual({
+      byTargetFormKey: {
+        'Config: Leftover Bank': [
+          {
+            targetFormKey: 'Config: Leftover Bank',
+            recordId: 'leftover::MP-1::entire::Standard',
+            values: { LEFTOVER_ID: 'MI-6' }
+          }
+        ]
+      }
+    });
   });
 });

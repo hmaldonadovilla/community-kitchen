@@ -62,6 +62,47 @@ export const getGeneratedRecordsFromFollowupResult = (result: FollowupActionResu
   );
 };
 
+export const GENERATED_SUBMIT_EFFECT_RECORDS_FIELD = '__CK_GENERATED_SUBMIT_EFFECT_RECORDS_JSON';
+
+export const buildGeneratedSubmitEffectRecordsTemplateJson = (
+  records: SubmitEffectGeneratedRecord[] | null | undefined
+): string => {
+  const byTargetFormKey: Record<string, SubmitEffectGeneratedRecord[]> = {};
+  (Array.isArray(records) ? records : [])
+    .filter(
+      (entry): entry is SubmitEffectGeneratedRecord =>
+        Boolean(entry && typeof entry === 'object' && entry.recordId && entry.targetFormKey)
+    )
+    .forEach(entry => {
+      const targetFormKey = (entry.targetFormKey || '').toString().trim();
+      if (!targetFormKey) return;
+      byTargetFormKey[targetFormKey] = [
+        ...(byTargetFormKey[targetFormKey] || []),
+        {
+          effectId: entry.effectId,
+          targetFormKey,
+          recordId: entry.recordId,
+          values: entry.values && typeof entry.values === 'object' ? { ...entry.values } : {}
+        }
+      ];
+    });
+  if (!Object.keys(byTargetFormKey).length) return '';
+  return JSON.stringify({ byTargetFormKey });
+};
+
+export const mergeGeneratedSubmitEffectRecordsIntoValues = (
+  values: Record<string, any>,
+  records: SubmitEffectGeneratedRecord[] | null | undefined
+): Record<string, any> => {
+  const json = buildGeneratedSubmitEffectRecordsTemplateJson(records);
+  if (!json) return values;
+  if ((values || {})[GENERATED_SUBMIT_EFFECT_RECORDS_FIELD] === json) return values;
+  return {
+    ...(values || {}),
+    [GENERATED_SUBMIT_EFFECT_RECORDS_FIELD]: json
+  };
+};
+
 export const filterGeneratedRecordsForDialog = (args: {
   config: StepGeneratedRecordsDialogConfig | undefined;
   records: SubmitEffectGeneratedRecord[];

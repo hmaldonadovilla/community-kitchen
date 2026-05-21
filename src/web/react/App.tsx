@@ -312,8 +312,10 @@ import { shouldApplyDedupPrecheckResult } from './app/dedupRaceGuards';
 import { resolveFollowupResultApplicationTarget } from './app/followupResultScope';
 import type { GuidedStepsVirtualState } from './features/steps/domain/resolveVirtualStepField';
 import {
+  GENERATED_SUBMIT_EFFECT_RECORDS_FIELD,
   filterGeneratedRecordsForDialog,
   getGeneratedRecordsFromFollowupResult,
+  mergeGeneratedSubmitEffectRecordsIntoValues,
   renderGeneratedRecordLine,
   selectMilestoneConfirmationDialog,
   selectMilestoneProgressDialog
@@ -3797,6 +3799,49 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     const records = bootstrap?.records || {};
     return { response, records };
   });
+  const attachGeneratedSubmitEffectRecordsToActiveDraft = useCallback(
+    (records: ReturnType<typeof getGeneratedRecordsFromFollowupResult>, reason: string): boolean => {
+      const nextValues = mergeGeneratedSubmitEffectRecordsIntoValues(valuesRef.current || {}, records);
+      if (nextValues === valuesRef.current) return false;
+      valuesRef.current = nextValues;
+      setValues(nextValues);
+      setPrefetchedSummaryHtml(null);
+
+      const activeRecordId =
+        selectedRecordIdRef.current ||
+        selectedRecordSnapshotRef.current?.id ||
+        lastSubmissionMetaRef.current?.id ||
+        '';
+      const snapshot = selectedRecordSnapshotRef.current;
+      if (snapshot?.id && (!activeRecordId || snapshot.id === activeRecordId)) {
+        const nextSnapshot = {
+          ...snapshot,
+          values: {
+            ...((snapshot.values || {}) as Record<string, any>),
+            [GENERATED_SUBMIT_EFFECT_RECORDS_FIELD]: nextValues[GENERATED_SUBMIT_EFFECT_RECORDS_FIELD]
+          }
+        };
+        selectedRecordSnapshotRef.current = nextSnapshot;
+        setSelectedRecordSnapshot(nextSnapshot);
+        setListCache(prev => ({
+          response: prev.response,
+          records: {
+            ...prev.records,
+            [snapshot.id as string]: nextSnapshot
+          }
+        }));
+      }
+
+      logEvent('summary.generatedSubmitEffects.attached', {
+        reason,
+        recordId: activeRecordId || null,
+        generatedRecords: Array.isArray(records) ? records.length : 0,
+        targetFormKeys: Array.from(new Set((records || []).map(record => record.targetFormKey).filter(Boolean)))
+      });
+      return true;
+    },
+    [logEvent, setListCache, setPrefetchedSummaryHtml, setSelectedRecordSnapshot, setValues]
+  );
   const [preservedListSearchByForm, setPreservedListSearchByForm] = useState<
     Record<string, { inputValue: string; queryValue: string }>
   >({});
@@ -11717,6 +11762,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
             status: resMeta.status || closeStatus,
             submitEffects: resMeta.submitEffects || null
           };
+          attachGeneratedSubmitEffectRecordsToActiveDraft(
+            getGeneratedRecordsFromFollowupResult(closeResult),
+            `${reason}.primaryClose`
+          );
           const submitEffectsCreated = Number(resMeta.submitEffects?.created || 0) || 0;
           const submitEffectsUpdated = Number(resMeta.submitEffects?.updated || 0) || 0;
           invalidateClientSharedDataCaches({ includePersistedDataSources: true });
@@ -11990,6 +12039,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
     },
     [
       applyFollowupBatchResults,
+      attachGeneratedSubmitEffectRecordsToActiveDraft,
       autoSaveDebounceMs,
       autoSaveEnabled,
       definition,
@@ -13195,6 +13245,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           setStatusLevel('success');
 
           const closeActionResult = closeResultByAction.get('CLOSE_RECORD') || null;
+          attachGeneratedSubmitEffectRecordsToActiveDraft(
+            getGeneratedRecordsFromFollowupResult(closeActionResult),
+            'submit.afterSubmit.pre'
+          );
           const generatedDialogShown = await maybeOpenSubmitGeneratedRecordsDialog(closeActionResult);
           const navigateTarget = (() => {
             const raw = (configuredAfterSubmit.navigateTo || 'auto').toString().trim().toLowerCase();
