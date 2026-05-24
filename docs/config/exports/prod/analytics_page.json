@@ -1,36 +1,22 @@
 {
-  "pageTitle": "Analytics",
-  "pageDescription": "Review analytics across applications.",
+  "pageTitle": "Reports",
+  "pageDescription": "",
   "appHeader": {
-    "logoFormKey": "Config: Meal Production"
+    "logoUrl": "https://lh3.googleusercontent.com/d/11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K=w256"
   },
   "landingTile": {
-    "title": "Analytics",
-    "description": "Review analytics across applications.",
+    "title": "Reports",
+    "description": "Send operational reports by email.",
     "section": "admin",
     "order": 40,
-    "imagePath": "docs/images/analytics.png"
+    "imageUrl": "https://lh3.googleusercontent.com/d/1_wGMM5C-vCiU4lImejfLb2Uz0BOL9PND=w512"
   },
   "copy": {
-    "loadingLabel": "Loading analytics...",
-    "emptyLabel": "No analytics widgets are configured for this dashboard.",
+    "loadingLabel": "Loading reports...",
+    "emptyLabel": "No reports are available.",
     "backToLandingLabel": "← Apps",
     "pendingNavigationTitle": "",
     "pendingNavigationMessage": "Please wait while we open the Community Kitchen Home page. This may take a few seconds."
   },
-  "sections": [
-    {
-      "id": "operations",
-      "title": "Operations",
-      "description": "Operational metrics.",
-      "widgets": [
-        {
-          "id": "meal_production_portions_delivered",
-          "sourceFormKey": "Config: Meal Production",
-          "sourceWidgetId": "portions_delivered",
-          "title": "Portions delivered"
-        }
-      ]
-    }
-  ]
+  "sections": []
 }

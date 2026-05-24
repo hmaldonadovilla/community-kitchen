@@ -1,0 +1,365 @@
+{
+  "formKey": "Config: Distributor",
+  "generatedAt": "2026-04-07T11:30:18.608Z",
+  "form": {
+    "title": "Customer Management",
+    "configSheet": "Config: Distributor",
+    "destinationTab": "Distributor Data",
+    "description": "Capture info about distributors",
+    "appUrl": "https://script.google.com/a/communitykitchen.be/macros/s/AKfycbzHNGgE2wOFt8_FEI_vs6f1WsnDmlcseUqI4XDUxeiDnrtEMV65un2yj_eQmSnFFsFfgA/exec?form=Config%3A%20Distributor",
+    "formId": "https://script.google.com/a/communitykitchen.be/macros/s/AKfycbzHNGgE2wOFt8_FEI_vs6f1WsnDmlcseUqI4XDUxeiDnrtEMV65un2yj_eQmSnFFsFfgA/exec?form=Config%3A%20Distributor",
+    "rowIndex": 7,
+    "followupConfig": {
+      "statusTransitions": {
+        "inProgress": {
+          "en": "Draft"
+        },
+        "reOpened": {
+          "en": "Disabled"
+        },
+        "onClose": {
+          "en": "Active"
+        }
+      }
+    },
+    "appHeader": {
+      "logoUrl": "https://drive.google.com/uc?export=view&id=1JUaqKbQbGwYIpOmpg1CBNJcOrFJv3EHr",
+      "sidebarEnabled": false
+    }
+  },
+  "questions": [
+    {
+      "id": "DIST_NAME",
+      "type": "TEXT",
+      "qEn": "Name",
+      "required": true,
+      "listView": true,
+      "options": [],
+      "status": "Active"
+    },
+    {
+      "id": "NICKNAME",
+      "type": "TEXT",
+      "qEn": "Nickname",
+      "required": true,
+      "listView": true,
+      "options": [],
+      "status": "Active"
+    },
+    {
+      "id": "DIST_EMAIL",
+      "type": "TEXT",
+      "qEn": "Email",
+      "required": true,
+      "listView": false,
+      "options": [],
+      "status": "Active"
+    },
+    {
+      "id": "DIST_PH",
+      "type": "TEXT",
+      "qEn": "Phone Number",
+      "required": false,
+      "listView": false,
+      "options": [],
+      "status": "Active"
+    },
+    {
+      "id": "DIST_ADDR_1",
+      "type": "TEXT",
+      "qEn": "Address",
+      "required": false,
+      "listView": false,
+      "options": [],
+      "status": "Active"
+    },
+    {
+      "id": "DIST_ADDR_2",
+      "type": "TEXT",
+      "qEn": "Address Line 2",
+      "required": false,
+      "listView": false,
+      "options": [],
+      "status": "Active"
+    },
+    {
+      "id": "DIST_CITY",
+      "type": "TEXT",
+      "qEn": "City",
+      "required": false,
+      "listView": false,
+      "options": [
+        "Clean",
+        "Needs Attention"
+      ],
+      "status": "Active"
+    },
+    {
+      "id": "DIST_REGION",
+      "type": "TEXT",
+      "qEn": "Region",
+      "required": false,
+      "listView": false,
+      "options": [],
+      "status": "Active"
+    },
+    {
+      "id": "DIST_COUNTRY",
+      "type": "TEXT",
+      "qEn": "Country",
+      "required": false,
+      "listView": false,
+      "options": [],
+      "status": "Active"
+    },
+    {
+      "id": "DIST_POST_CODE",
+      "type": "TEXT",
+      "qEn": "Postal Code",
+      "required": false,
+      "listView": false,
+      "options": [],
+      "status": "Active"
+    },
+    {
+      "id": "RE_OPEN",
+      "type": "BUTTON",
+      "qEn": "Deactivate",
+      "required": false,
+      "listView": false,
+      "options": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "status",
+          "equals": "Active"
+        }
+      },
+      "button": {
+        "action": "updateRecord",
+        "set": {
+          "status": "Disabled"
+        },
+        "navigateTo": "form",
+        "confirm": {
+          "title": {
+            "en": ""
+          },
+          "message": {
+            "en": "Deactivate Customer?\nThis customer will no longer appear in Meal Production. Do you want to proceed?\n[No, go back] or [Yes, deactivate customer]"
+          },
+          "confirmLabel": {
+            "en": "Yes"
+          },
+          "cancelLabel": {
+            "en": "No"
+          }
+        },
+        "placements": [
+          "summaryBar"
+        ]
+      }
+    }
+  ],
+  "dedupRules": [],
+  "definition": {
+    "title": "Customer Management",
+    "description": "Capture info about distributors",
+    "destinationTab": "Distributor Data",
+    "languages": [
+      "EN"
+    ],
+    "defaultLanguage": "EN",
+    "languageSelectorEnabled": false,
+    "questions": [
+      {
+        "id": "DIST_NAME",
+        "type": "TEXT",
+        "label": {
+          "en": "Name"
+        },
+        "required": true,
+        "listView": true
+      },
+      {
+        "id": "NICKNAME",
+        "type": "TEXT",
+        "label": {
+          "en": "Nickname"
+        },
+        "required": true,
+        "listView": true
+      },
+      {
+        "id": "DIST_EMAIL",
+        "type": "TEXT",
+        "label": {
+          "en": "Email"
+        },
+        "required": true,
+        "listView": false
+      },
+      {
+        "id": "DIST_PH",
+        "type": "TEXT",
+        "label": {
+          "en": "Phone Number"
+        },
+        "required": false,
+        "listView": false
+      },
+      {
+        "id": "DIST_ADDR_1",
+        "type": "TEXT",
+        "label": {
+          "en": "Address"
+        },
+        "required": false,
+        "listView": false
+      },
+      {
+        "id": "DIST_ADDR_2",
+        "type": "TEXT",
+        "label": {
+          "en": "Address Line 2"
+        },
+        "required": false,
+        "listView": false
+      },
+      {
+        "id": "DIST_CITY",
+        "type": "TEXT",
+        "label": {
+          "en": "City"
+        },
+        "required": false,
+        "listView": false,
+        "options": {
+          "en": [
+            "Clean",
+            "Needs Attention"
+          ]
+        }
+      },
+      {
+        "id": "DIST_REGION",
+        "type": "TEXT",
+        "label": {
+          "en": "Region"
+        },
+        "required": false,
+        "listView": false
+      },
+      {
+        "id": "DIST_COUNTRY",
+        "type": "TEXT",
+        "label": {
+          "en": "Country"
+        },
+        "required": false,
+        "listView": false
+      },
+      {
+        "id": "DIST_POST_CODE",
+        "type": "TEXT",
+        "label": {
+          "en": "Postal Code"
+        },
+        "required": false,
+        "listView": false
+      },
+      {
+        "id": "RE_OPEN",
+        "type": "BUTTON",
+        "label": {
+          "en": "Deactivate"
+        },
+        "required": false,
+        "listView": false,
+        "button": {
+          "action": "updateRecord",
+          "set": {
+            "status": "Disabled"
+          },
+          "navigateTo": "form",
+          "confirm": {
+            "title": {
+              "en": ""
+            },
+            "message": {
+              "en": "Deactivate Customer?\nThis customer will no longer appear in Meal Production. Do you want to proceed?\n[No, go back] or [Yes, deactivate customer]"
+            },
+            "confirmLabel": {
+              "en": "Yes"
+            },
+            "cancelLabel": {
+              "en": "No"
+            }
+          },
+          "placements": [
+            "summaryBar"
+          ]
+        },
+        "visibility": {
+          "showWhen": {
+            "fieldId": "status",
+            "equals": "Active"
+          }
+        }
+      }
+    ],
+    "dataSources": [],
+    "listView": {
+      "columns": [
+        {
+          "fieldId": "DIST_NAME",
+          "label": {
+            "en": "Name"
+          },
+          "kind": "question"
+        },
+        {
+          "fieldId": "NICKNAME",
+          "label": {
+            "en": "Nickname"
+          },
+          "kind": "question"
+        },
+        {
+          "fieldId": "updatedAt",
+          "label": {
+            "en": "Updated"
+          },
+          "kind": "meta"
+        }
+      ],
+      "metaColumns": [
+        "updatedAt"
+      ],
+      "defaultSort": {
+        "fieldId": "updatedAt",
+        "direction": "desc"
+      }
+    },
+    "dedupRules": [],
+    "startRoute": "list",
+    "followup": {
+      "statusTransitions": {
+        "inProgress": {
+          "en": "Draft"
+        },
+        "reOpened": {
+          "en": "Disabled"
+        },
+        "onClose": {
+          "en": "Active"
+        }
+      }
+    },
+    "appHeader": {
+      "logoUrl": "https://drive.google.com/uc?export=view&id=1JUaqKbQbGwYIpOmpg1CBNJcOrFJv3EHr",
+      "sidebarEnabled": false
+    }
+  },
+  "validationErrors": []
+}

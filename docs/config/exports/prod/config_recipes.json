@@ -13,19 +13,13 @@
       "statusFieldId": "Status",
       "statusTransitions": {
         "inProgress": {
-          "en": "Draft",
-          "fr": "Brouillon",
-          "nl": "Conceptverslag"
+          "en": "Draft"
         },
         "reOpened": {
-          "en": "Disabled",
-          "fr": "Désactivé",
-          "nl": "Uitgeschakeld"
+          "en": "Disabled"
         },
         "onClose": {
-          "en": "Active",
-          "fr": "Actif",
-          "nl": "Actief"
+          "en": "Active"
         }
       }
     },
@@ -43,16 +37,12 @@
         "type": "rule",
         "fieldId": "action",
         "label": {
-          "en": "Action",
-          "fr": "Action",
-          "nl": "Actie"
+          "en": "Action"
         },
         "cases": [
           {
             "text": {
-              "en": "Edit",
-              "fr": "Modifier",
-              "nl": "Bewerken"
+              "en": "Edit"
             },
             "when": {
               "fieldId": "status",
@@ -64,9 +54,7 @@
           },
           {
             "text": {
-              "en": "View",
-              "fr": "Voir",
-              "nl": "Bekijken"
+              "en": "View"
             },
             "when": {
               "fieldId": "status",
@@ -82,16 +70,12 @@
         "type": "rule",
         "fieldId": "copy_record",
         "label": {
-          "en": "Copy",
-          "fr": "Copier",
-          "nl": "Kopieren"
+          "en": "Copy"
         },
         "cases": [
           {
             "text": {
-              "en": "Copy",
-              "fr": "Copier",
-              "nl": "Kopieren"
+              "en": "Copy"
             },
             "when": {
               "all": [
@@ -115,16 +99,12 @@
         "type": "rule",
         "fieldId": "close_record",
         "label": {
-          "en": "Activate",
-          "fr": "Activer",
-          "nl": "Activeren"
+          "en": "Activate"
         },
         "cases": [
           {
             "text": {
-              "en": "Activate",
-              "fr": "Activer",
-              "nl": "Activeren"
+              "en": "Activate"
             },
             "when": {
               "fieldId": "status",
@@ -142,16 +122,12 @@
         "type": "rule",
         "fieldId": "disable",
         "label": {
-          "en": "Disable",
-          "fr": "Désactivé",
-          "nl": "Uitschakelen"
+          "en": "Disable"
         },
         "cases": [
           {
             "text": {
-              "en": "Disable",
-              "fr": "Désactivé",
-              "nl": "Uitschakelen"
+              "en": "Disable"
             },
             "when": {
               "fieldId": "status",
@@ -171,22 +147,16 @@
       {
         "icon": "edit",
         "text": {
-          "en": "Edit",
-          "fr": "Modifier",
-          "nl": "Bewerken"
+          "en": "Edit"
         }
       },
       {
         "text": {
-          "en": "being written, not usable",
-          "fr": "en cours d'écriture, non utilisable",
-          "nl": "wordt geschreven, niet bruikbaar"
+          "en": "being written, not usable"
         },
         "pill": {
           "text": {
-            "en": "Draft",
-            "fr": "Brouillon",
-            "nl": "Conceptverslag"
+            "en": "Draft"
           },
           "tone": "default"
         }
@@ -194,22 +164,16 @@
       {
         "icon": "view",
         "text": {
-          "en": "View",
-          "fr": "Voir",
-          "nl": "Bekijken"
+          "en": "View"
         }
       },
       {
         "text": {
-          "en": "usable for meal production",
-          "fr": "utilisable pour la production de repas",
-          "nl": "bruikbaar voor maaltijdproductie"
+          "en": "usable for meal production"
         },
         "pill": {
           "text": {
-            "en": "Active",
-            "fr": "Actif",
-            "nl": "Actief"
+            "en": "Active"
           },
           "tone": "muted"
         }
@@ -217,22 +181,16 @@
       {
         "icon": "copy",
         "text": {
-          "en": "Copy",
-          "fr": "Copier",
-          "nl": "Kopieren"
+          "en": "Copy"
         }
       },
       {
         "text": {
-          "en": "no longer usable for meal production",
-          "fr": "non plus utilisable pour la production de repas",
-          "nl": "niet langer bruikbaar voor maaltijdproductie"
+          "en": "no longer usable for meal production"
         },
         "pill": {
           "text": {
-            "en": "Disabled",
-            "fr": "Désactivé",
-            "nl": "Uitgeschakeld"
+            "en": "Disabled"
           },
           "tone": "strong"
         }
@@ -247,14 +205,10 @@
     "listViewSearch": {
       "mode": "text",
       "placeholder": {
-        "en": "Search by name, dietary or status",
-        "fr": "Rechercher par nom, diététique ou statut",
-        "nl": "Zoek op receptnaam, diëtarische categorie of status"
+        "en": "Search by name, dietary or status"
       },
       "presetsTitle": {
-        "en": "View recipes:",
-        "fr": "Voir les recettes:",
-        "nl": "Bekijk recepten:"
+        "en": "View recipes:"
       }
     },
     "listViewView": {
@@ -270,14 +224,10 @@
       "QFTD5RD2EM"
     ],
     "createButtonLabel": {
-      "en": "New",
-      "fr": "Nouvelle",
-      "nl": "Nieuw"
+      "en": "New"
     },
     "copyCurrentRecordLabel": {
-      "en": "Copy",
-      "fr": "Copier",
-      "nl": "Kopieren"
+      "en": "Copy"
     },
     "actionBars": {
       "top": {
@@ -335,7 +285,8 @@
       }
     },
     "appHeader": {
-      "logoUrl": "https://drive.google.com/uc?export=view&id=1JUaqKbQbGwYIpOmpg1CBNJcOrFJv3EHr"
+      "logoUrl": "https://drive.google.com/uc?export=view&id=18iy1pxiUD0iHsW9WV1e5VrUMu0JEkM0h",
+      "sidebarEnabled": false
     },
     "groupBehavior": {
       "autoCollapseOnComplete": true,
@@ -350,55 +301,37 @@
     },
     "portraitOnly": true,
     "submissionConfirmationMessage": {
-      "en": "Ready to activate this recipe?",
-      "fr": "Prêt à activer cette recette ?",
-      "nl": "Klaar om deze recept te activeren?"
+      "en": "Ready to activate this recipe?"
     },
     "submissionConfirmationTitle": {
-      "en": "Please confirm",
-      "fr": "Veuillez confirmer",
-      "nl": "Vergoeding bevestigen"
+      "en": "Please confirm"
     },
     "submissionConfirmationConfirmLabel": {
-      "en": "Yes, activate recipe",
-      "fr": "Oui, activer la recette",
-      "nl": "Ja, recept activeren"
+      "en": "Yes, activate recipe"
     },
     "submissionConfirmationCancelLabel": {
-      "en": "No, continue editing",
-      "fr": "Non, continuer la modification",
-      "nl": "Nee, verder bewerken"
+      "en": "No, continue editing"
     },
     "submitButtonLabel": {
-      "en": "Activate",
-      "fr": "Activer",
-      "nl": "Activeren"
+      "en": "Activate"
     },
     "summaryButtonLabel": {
-      "en": "View Draft",
-      "fr": "Voir brouillon",
-      "nl": "Bekijk conceptverslag"
+      "en": "View Draft"
     },
     "languages": [
-      "EN",
-      "FR",
-      "NL"
+      "EN"
     ],
     "defaultLanguage": "EN",
-    "languageSelectorEnabled": true
+    "languageSelectorEnabled": false
   },
   "questions": [
     {
       "id": "QFTD5RD2EM",
       "type": "TEXT",
       "qEn": "Recipe Name",
-      "qFr": "Dish Name",
-      "qNl": "Dish Name",
       "required": true,
       "listView": true,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active",
       "listViewSort": {
         "direction": "asc",
@@ -409,50 +342,36 @@
       "id": "CREATED_BY",
       "type": "TEXT",
       "qEn": "Created by",
-      "qFr": "Créé par",
-      "qNl": "Gemaakt door",
       "required": false,
       "ui": {
         "helperText": {
-          "en": "Enter a name",
-          "fr": "Entrez un nom",
-          "nl": "Voer een naam in"
+          "en": "Enter a name"
         },
         "helperPlacement": "placeholder"
       },
       "listView": false,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active"
     },
     {
       "id": "MODIFIED_BY",
       "type": "TEXT",
       "qEn": "Modified by",
-      "qFr": "Modifié par",
-      "qNl": "Gewijzigd door",
       "required": false,
       "ui": {
         "helperText": {
-          "en": "Enter a name",
-          "fr": "Entrez un nom",
-          "nl": "Voer een naam in"
+          "en": "Enter a name"
         },
         "helperPlacement": "placeholder"
       },
       "listView": false,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active"
     },
     {
       "id": "DISH_TYPE",
       "type": "CHECKBOX",
       "qEn": "Applicable dietary category",
-      "qFr": "Applies to",
-      "qNl": "Applies to",
       "required": true,
       "listView": true,
       "options": [
@@ -461,31 +380,15 @@
         "Vegan",
         "Diabetic"
       ],
-      "optionsFr": [
-        "Standard",
-        "Végétarien",
-        "Végan",
-        "Diabétique"
-      ],
-      "optionsNl": [
-        "Standard",
-        "Végétarien",
-        "Végan",
-        "Diabétique"
-      ],
       "status": "Active"
     },
     {
       "id": "NUM_PORTIONS",
       "type": "NUMBER",
       "qEn": "Serves",
-      "qFr": "Portions",
-      "qNl": "Porties",
       "required": true,
       "listView": false,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active",
       "validationRules": [
         {
@@ -499,9 +402,7 @@
             "integer": true
           },
           "message": {
-            "en": "Please enter a value greater than 0",
-            "fr": "Veuillez entrer une valeur supérieure à 0",
-            "nl": "Voer een waarde in die groter is dan 0"
+            "en": "Please enter a value greater than 0"
           }
         }
       ]
@@ -510,14 +411,10 @@
       "id": "Q65ILNUSGL",
       "type": "LINE_ITEM_GROUP",
       "qEn": "Ingredients",
-      "qFr": "Ingredients",
-      "qNl": "Ingredients",
       "required": true,
       "ui": {
         "helperText": {
-          "en": "To proceed with writing the instructions, you must first select ingredients.",
-          "fr": "Pour poursuivre la rédaction des instructions, vous devez d'abord sélectionner les ingrédients.",
-          "nl": "Om verder te gaan met het schrijven van de instructies, moet u eerst ingrediënten selecteren."
+          "en": "To proceed with writing the instructions, you must first select ingredients."
         }
       },
       "listView": false,
@@ -528,32 +425,14 @@
         "CAT",
         "ALLERGEN"
       ],
-      "optionsFr": [
-        "CHOICE",
-        "NUMBER",
-        "CHOICE",
-        "TEXT",
-        "TEXT"
-      ],
-      "optionsNl": [
-        "Ingredient",
-        "Quantity",
-        "Unit",
-        "Category",
-        "Allergen"
-      ],
       "optionsRaw": [
         {
           "ID": "ING",
           "Type": "CHOICE",
           "Label EN": "Ingredient",
-          "Label FR": "Ingrédient",
-          "Label NL": "Ingrediënt",
           "Required?": true,
           "Options (EN)": "REF:IngredientsOptions",
-          "Options (FR)": "",
-          "Options (NL)": "",
-          "Config (JSON/REF)": "{\n  \"ui\": {\n    \"hideLabel\": true,\n    \"readOnly\": true\n  },\n  \"optionFilter\": {\n    \"dependsOn\": \"DISH_TYPE\",\n    \"optionMapRef\": {\n      \"ref\": \"REF:IngredientsOptions\",\n      \"keyColumn\": \"dietaryApplicability\",\n      \"lookupColumn\": \"optionEn\",\n      \"splitKey\": true\n    },\n    \"matchMode\": \"or\"\n  },\n  \"validationRules\": [\n    {\n      \"level\": \"warning\",\n      \"warningDisplay\": \"field\",\n      \"when\": {\n        \"fieldId\": \"__ckNonMatchOptions\",\n        \"notEmpty\": true\n      },\n      \"message\": {\n        \"en\": \"This ingredient does not satisfy all dietary restrictions.\",\n        \"fr\": \"Cet ingrédient ne satisfait pas toutes les restrictions diététiques.\",\n        \"nl\": \"Deze ingrediënt voldoet niet aan alle diëtetische beperkingen.\"\n      }\n    }\n  ]\n}",
+          "Config (JSON/REF)": "{\n  \"ui\": {\n    \"hideLabel\": true,\n    \"readOnly\": true\n  },\n  \"optionFilter\": {\n    \"dependsOn\": \"DISH_TYPE\",\n    \"optionMapRef\": {\n      \"ref\": \"REF:IngredientsOptions\",\n      \"keyColumn\": \"dietaryApplicability\",\n      \"lookupColumn\": \"optionEn\",\n      \"splitKey\": true\n    },\n    \"matchMode\": \"or\"\n  },\n  \"validationRules\": [\n    {\n      \"level\": \"warning\",\n      \"warningDisplay\": \"field\",\n      \"when\": {\n        \"fieldId\": \"__ckNonMatchOptions\",\n        \"notEmpty\": true\n      },\n      \"message\": {\n        \"en\": \"This ingredient does not satisfy all dietary restrictions.\"\n      }\n    }\n  ]\n}",
           "Option Filter (JSON)": "",
           "Validation Rules (JSON)": "",
           "List View?": "",
@@ -564,12 +443,8 @@
           "ID": "QTY",
           "Type": "NUMBER",
           "Label EN": "Quantity",
-          "Label FR": "Quantité",
-          "Label NL": "Hoeveelheid",
           "Required?": true,
           "Options (EN)": "",
-          "Options (FR)": "",
-          "Options (NL)": "",
           "Config (JSON/REF)": "{\"pair\": \"qty_unt\"}",
           "Option Filter (JSON)": "",
           "Validation Rules (JSON)": "",
@@ -581,12 +456,8 @@
           "ID": "UNIT",
           "Type": "CHOICE",
           "Label EN": "Unit",
-          "Label FR": "Unité",
-          "Label NL": "Eenheid",
           "Required?": true,
           "Options (EN)": "REF:UnitOptions",
-          "Options (FR)": "",
-          "Options (NL)": "",
           "Config (JSON/REF)": "{\n  \"pair\": \"qty_unt\",\n  \"optionFilter\": {\n    \"dependsOn\": \"ING\",\n    \"optionMapRef\": {\n      \"ref\": \"REF:IngredientsOptions\",\n      \"keyColumn\": \"optionEn\",\n      \"lookupColumn\": \"allowedUnits\"\n    }\n  },\n  \"ui\": {\n    \"control\": \"select\"\n  }\n}",
           "Option Filter (JSON)": "",
           "Validation Rules (JSON)": "",
@@ -598,12 +469,8 @@
           "ID": "CAT",
           "Type": "TEXT",
           "Label EN": "Category",
-          "Label FR": "Catégorie",
-          "Label NL": "Categorie",
           "Required?": false,
           "Options (EN)": "REF:CategoryOptions",
-          "Options (FR)": "",
-          "Options (NL)": "",
           "Config (JSON/REF)": "{\n  \"valueMap\": {\n    \"dependsOn\": \"ING\",\n    \"optionMapRef\": {\n      \"ref\": \"REF:IngredientsOptions\",\n      \"keyColumn\": \"optionEn\",\n      \"lookupColumn\": \"Category\"\n    }\n  },\n  \"pair\": \"cat_all\",\n  \"readOnly\": true,\n  \"visibility\": {\n    \"showWhen\": { \"fieldId\": \"NEVER_SHOW\", \"equals\": \"1\" }\n  }\n}",
           "Option Filter (JSON)": "",
           "Validation Rules (JSON)": "",
@@ -615,12 +482,8 @@
           "ID": "ALLERGEN",
           "Type": "TEXT",
           "Label EN": "Allergen",
-          "Label FR": "Allergène",
-          "Label NL": "Allergeen",
           "Required?": false,
           "Options (EN)": "REF:AllergenOptions",
-          "Options (FR)": "",
-          "Options (NL)": "",
           "Config (JSON/REF)": "{\n  \"valueMap\": {\n    \"dependsOn\": \"ING\",\n    \"optionMapRef\": {\n      \"ref\": \"REF:IngredientsOptions\",\n      \"keyColumn\": \"optionEn\",\n      \"lookupColumn\": \"Allergens\"\n    }\n  },\n  \"pair\": \"cat_all\",\n  \"readOnly\": true,\n  \"visibility\": {\n    \"showWhen\": { \"fieldId\": \"NEVER_SHOW\", \"equals\": \"1\" }\n  }\n}",
           "Option Filter (JSON)": "",
           "Validation Rules (JSON)": "",
@@ -632,9 +495,7 @@
       "status": "Active",
       "lineItemConfig": {
         "label": {
-          "en": "View/edit ingredients",
-          "fr": "Voir/modifier les ingrédients",
-          "nl": "Bekijken/bewerken van ingrediënten"
+          "en": "View/edit ingredients"
         },
         "ui": {
           "mode": "table",
@@ -651,9 +512,7 @@
           },
           "tableHideUntilAnchor": true,
           "needsAttentionMessage": {
-            "en": "Ingredient already exist with the same unit. Change the unit or Remove the duplicate.",
-            "fr": "Ingrédient déjà existant avec la même unité. Modifier l'unité ou supprimer le doublon.",
-            "nl": "Ingrediënt bestaat al met dezelfde eenheid. Wijzig de eenheid of verwijder de dubbele."
+            "en": "Ingredient already exist with the same unit. Change the unit or Remove the duplicate."
           },
           "showItemPill": false,
           "openInOverlay": true,
@@ -762,35 +621,23 @@
         },
         "maxRows": 200,
         "addButtonLabel": {
-          "en": "Add",
-          "fr": "Ajouter",
-          "nl": "Toevoegen"
+          "en": "Add"
         },
         "anchorFieldId": "ING",
         "addMode": "selectorOverlay",
         "sectionSelector": {
           "id": "ITEM_FILTER",
           "labelEn": "Search ingredients",
-          "labelFr": "Rechercher des ingrédients",
-          "labelNl": "Zoek ingrediënten",
           "helperText": {
-            "en": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
-            "fr": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
-            "nl": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
+            "en": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
           },
           "placeholder": {
-            "en": "Search name, category, dietary, supplier or allergen",
-            "fr": "Rechercher par nom, catégorie, restriction diététique, fournisseur ou allergène",
-            "nl": "Zoek op naam, categorie, diëtetische beperking, leverancier of allergie"
+            "en": "Search name, category, dietary, supplier or allergen"
           },
           "placeholderEn": "Search name, category, dietary, supplier or allergen",
-          "placeholderFr": "Rechercher par nom, catégorie, restriction diététique, fournisseur ou allergène",
-          "placeholderNl": "Zoek op naam, categorie, diëtetische beperking, leverancier of allergie",
           "hideLabel": true,
           "required": true,
-          "options": [],
-          "optionsFr": [],
-          "optionsNl": []
+          "options": []
         },
         "dedupRules": [
           {
@@ -799,9 +646,7 @@
               "UNIT"
             ],
             "message": {
-              "en": "Ingredient already exist with the same unit. Change the unit or Remove the duplicate.",
-              "fr": "Ingrédient/unité dupliqué. Modifier l'unité ou supprimer le doublon.",
-              "nl": "Ingrediënt/eenheid dupliceren. Wijzig de eenheid of verwijder de dubbele."
+              "en": "Ingredient already exist with the same unit. Change the unit or Remove the duplicate."
             }
           }
         ],
@@ -810,8 +655,6 @@
             "id": "ING",
             "type": "CHOICE",
             "labelEn": "Ingredient",
-            "labelFr": "Ingrédient",
-            "labelNl": "Ingrediënt",
             "required": true,
             "ui": {
               "hideLabel": true
@@ -838,9 +681,7 @@
                   "notEmpty": true
                 },
                 "message": {
-                  "en": "This ingredient does not satisfy all dietary restrictions.",
-                  "fr": "Cet ingrédient ne satisfait pas toutes les restrictions diététiques.",
-                  "nl": "Deze ingrediënt voldoet niet aan alle diëtetische beperkingen."
+                  "en": "This ingredient does not satisfy all dietary restrictions."
                 }
               }
             ],
@@ -857,6 +698,7 @@
                 "ALLOWED_UNIT",
                 "CATEGORY",
                 "ALLERGEN",
+                "TBSP_GRAMS",
                 "STATUS"
               ],
               "formKey": "Config: Ingredients Management",
@@ -899,20 +741,14 @@
             "id": "QTY",
             "type": "NUMBER",
             "labelEn": "Quantity",
-            "labelFr": "Quantité",
-            "labelNl": "Hoeveelheid",
             "required": true,
             "pair": "qty_unt",
-            "options": [],
-            "optionsFr": [],
-            "optionsNl": []
+            "options": []
           },
           {
             "id": "UNIT",
             "type": "CHOICE",
             "labelEn": "Unit",
-            "labelFr": "Unité",
-            "labelNl": "Eenheid",
             "required": true,
             "pair": "qty_unt",
             "ui": {
@@ -931,8 +767,6 @@
             "id": "CAT",
             "type": "TEXT",
             "labelEn": "Category",
-            "labelFr": "Catégorie",
-            "labelNl": "Categorie",
             "required": false,
             "pair": "cat_all",
             "readOnly": true,
@@ -955,8 +789,6 @@
             "id": "ALLERGEN",
             "type": "TEXT",
             "labelEn": "Allergen",
-            "labelFr": "Allergène",
-            "labelNl": "Allergeen",
             "required": false,
             "pair": "cat_all",
             "readOnly": true,
@@ -982,42 +814,27 @@
       "id": "REC_INST",
       "type": "PARAGRAPH",
       "qEn": "Instructions",
-      "qFr": "Instructions",
-      "qNl": "Instructions",
       "required": true,
       "ui": {
         "labelLayout": "stacked",
         "helperText": {
-          "en": "Write step-by-step cooking instructions. Include temperatures, timings, and dietary-specific steps.",
-          "fr": "Écrivez des instructions de cuisson étape par étape. Incluez les températures, les temps et les étapes spécifiques à la diétique.",
-          "nl": "Schrijf stapsgewijze kookinstructies. Neem temperatuur, tijden en diëtetische stappen op."
+          "en": "Write step-by-step cooking instructions. Include temperatures, timings, and dietary-specific steps."
         },
         "helperPlacement": "belowLabel",
         "paragraphRows": 12,
         "paragraphDisclaimer": {
           "sourceGroupId": "Q65ILNUSGL",
           "title": {
-            "en": "Attention required:",
-            "fr": "Attention requise:",
-            "nl": "Attentie vereist:"
+            "en": "Attention required:"
           },
           "listMessage": {
-            "en": "For {value}, do not use: {keys}.",
-            "fr": "Pour {value}, n'utilisez pas : {keys}.",
-            "nl": "Voor {value}, gebruik niet: {keys}."
-          },
-          "message": {
-            "en": "No-salt portions must be served first before adding salt. Remember to record and photograph the core temperature.",
-            "fr": "N'oubliez pas d'ajouter le sel uniquement après avoir réservé les portions sans sel.",
-            "nl": "Onthoud dat je alleen zout toevoegt na het reserveren van niet-zoute porties."
+            "en": "For {value}, do not use: {keys}."
           },
           "editable": true
         }
       },
       "listView": false,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active",
       "visibility": {
         "showWhen": {
@@ -1036,13 +853,9 @@
       "id": "RE_OPEN",
       "type": "BUTTON",
       "qEn": "Deactivate",
-      "qFr": "Désactiver",
-      "qNl": "Deactiveren",
       "required": false,
       "listView": false,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active",
       "visibility": {
         "showWhen": {
@@ -1061,19 +874,67 @@
             "en": "Please confirm"
           },
           "message": {
-            "en": "This recipe will stop appearing in the Meal Production form. Do you want to proceed?",
-            "fr": "Cette recette ne s'affichera plus dans le formulaire de production de repas. Voulez-vous procéder ?",
-            "nl": "Deze recept zal niet meer verschijnen in het maaltijdproductieformulier. Wil je doorgaan?"
+            "en": "This recipe will stop appearing in the Meal Production form. Do you want to proceed?"
           },
           "confirmLabel": {
-            "en": "Yes",
-            "fr": "Oui",
-            "nl": "Ja"
+            "en": "Yes"
           },
           "cancelLabel": {
-            "en": "No",
-            "fr": "Non",
-            "nl": "Nee"
+            "en": "No"
+          }
+        },
+        "dependencyGuard": {
+          "targetFormKey": "Meal Production",
+          "mode": "block",
+          "when": {
+            "all": [
+              {
+                "fieldId": "status",
+                "equals": "In progress"
+              },
+              {
+                "fieldId": "MP_PREP_DATE",
+                "isToday": true
+              },
+              {
+                "lineItems": {
+                  "groupId": "MP_MEALS_REQUEST",
+                  "subGroupId": "MP_TYPE_LI",
+                  "when": {
+                    "all": [
+                      {
+                        "fieldId": "PREP_TYPE",
+                        "equals": "Cook"
+                      },
+                      {
+                        "fieldId": "RECIPE",
+                        "equals": "{{source.QFTD5RD2EM}}"
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          "dialog": {
+            "title": {
+              "en": "Recipe used in meal production"
+            },
+            "message": {
+              "en": "This recipe is currently used in today’s meal production and cannot be deactivated. Select another recipe in Meal Production first, or return after today’s production is completed. Concerned records:\n{{recordsList}}"
+            },
+            "confirmLabel": {
+              "en": "OK"
+            },
+            "cancelLabel": {
+              "en": "Cancel"
+            },
+            "showCancel": false,
+            "recordList": {
+              "template": {
+                "en": "- {{target.MP_DISTRIBUTOR}} | {{target.MP_SERVICE}}"
+              }
+            }
           }
         },
         "placements": [
@@ -1085,13 +946,9 @@
       "id": "IN_USE",
       "type": "CHECKBOX",
       "qEn": "Record in use",
-      "qFr": "Record in use",
-      "qNl": "Record in use",
       "required": false,
       "listView": false,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active",
       "visibility": {
         "showWhen": {
@@ -1104,13 +961,9 @@
       "id": "DRAFT_BTN",
       "type": "BUTTON",
       "qEn": "Draft",
-      "qFr": "Draft",
-      "qNl": "Draft",
       "required": false,
       "listView": false,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active",
       "button": {
         "action": "listViewSearchPreset",
@@ -1124,13 +977,9 @@
       "id": "ACTIVE_BTN",
       "type": "BUTTON",
       "qEn": "Active",
-      "qFr": "Active",
-      "qNl": "Active",
       "required": false,
       "listView": false,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active",
       "button": {
         "action": "listViewSearchPreset",
@@ -1144,13 +993,9 @@
       "id": "INACTIVE_BTN",
       "type": "BUTTON",
       "qEn": "Disabled",
-      "qFr": "Inactive",
-      "qNl": "Inactive",
       "required": false,
       "listView": false,
       "options": [],
-      "optionsFr": [],
-      "optionsNl": [],
       "status": "Active",
       "button": {
         "action": "listViewSearchPreset",
@@ -1180,20 +1025,16 @@
     "description": "Capture recipes info and ingredients",
     "destinationTab": "Recipes Data",
     "languages": [
-      "EN",
-      "FR",
-      "NL"
+      "EN"
     ],
     "defaultLanguage": "EN",
-    "languageSelectorEnabled": true,
+    "languageSelectorEnabled": false,
     "questions": [
       {
         "id": "QFTD5RD2EM",
         "type": "TEXT",
         "label": {
-          "en": "Recipe Name",
-          "fr": "Dish Name",
-          "nl": "Dish Name"
+          "en": "Recipe Name"
         },
         "required": true,
         "listView": true,
@@ -1206,16 +1047,12 @@
         "id": "CREATED_BY",
         "type": "TEXT",
         "label": {
-          "en": "Created by",
-          "fr": "Créé par",
-          "nl": "Gemaakt door"
+          "en": "Created by"
         },
         "required": false,
         "ui": {
           "helperText": {
-            "en": "Enter a name",
-            "fr": "Entrez un nom",
-            "nl": "Voer een naam in"
+            "en": "Enter a name"
           },
           "helperPlacement": "placeholder"
         },
@@ -1225,16 +1062,12 @@
         "id": "MODIFIED_BY",
         "type": "TEXT",
         "label": {
-          "en": "Modified by",
-          "fr": "Modifié par",
-          "nl": "Gewijzigd door"
+          "en": "Modified by"
         },
         "required": false,
         "ui": {
           "helperText": {
-            "en": "Enter a name",
-            "fr": "Entrez un nom",
-            "nl": "Voer een naam in"
+            "en": "Enter a name"
           },
           "helperPlacement": "placeholder"
         },
@@ -1244,9 +1077,7 @@
         "id": "DISH_TYPE",
         "type": "CHECKBOX",
         "label": {
-          "en": "Applicable dietary category",
-          "fr": "Applies to",
-          "nl": "Applies to"
+          "en": "Applicable dietary category"
         },
         "required": true,
         "listView": true,
@@ -1256,18 +1087,6 @@
             "Vegetarian",
             "Vegan",
             "Diabetic"
-          ],
-          "fr": [
-            "Standard",
-            "Végétarien",
-            "Végan",
-            "Diabétique"
-          ],
-          "nl": [
-            "Standard",
-            "Végétarien",
-            "Végan",
-            "Diabétique"
           ]
         }
       },
@@ -1275,9 +1094,7 @@
         "id": "NUM_PORTIONS",
         "type": "NUMBER",
         "label": {
-          "en": "Serves",
-          "fr": "Portions",
-          "nl": "Porties"
+          "en": "Serves"
         },
         "required": true,
         "listView": false,
@@ -1293,9 +1110,7 @@
               "integer": true
             },
             "message": {
-              "en": "Please enter a value greater than 0",
-              "fr": "Veuillez entrer une valeur supérieure à 0",
-              "nl": "Voer een waarde in die groter is dan 0"
+              "en": "Please enter a value greater than 0"
             }
           }
         ]
@@ -1304,16 +1119,12 @@
         "id": "Q65ILNUSGL",
         "type": "LINE_ITEM_GROUP",
         "label": {
-          "en": "Ingredients",
-          "fr": "Ingredients",
-          "nl": "Ingredients"
+          "en": "Ingredients"
         },
         "required": true,
         "ui": {
           "helperText": {
-            "en": "To proceed with writing the instructions, you must first select ingredients.",
-            "fr": "Pour poursuivre la rédaction des instructions, vous devez d'abord sélectionner les ingrédients.",
-            "nl": "Om verder te gaan met het schrijven van de instructies, moet u eerst ingrediënten selecteren."
+            "en": "To proceed with writing the instructions, you must first select ingredients."
           }
         },
         "listView": false,
@@ -1325,32 +1136,14 @@
             "CAT",
             "ALLERGEN"
           ],
-          "fr": [
-            "CHOICE",
-            "NUMBER",
-            "CHOICE",
-            "TEXT",
-            "TEXT"
-          ],
-          "nl": [
-            "Ingredient",
-            "Quantity",
-            "Unit",
-            "Category",
-            "Allergen"
-          ],
           "raw": [
             {
               "ID": "ING",
               "Type": "CHOICE",
               "Label EN": "Ingredient",
-              "Label FR": "Ingrédient",
-              "Label NL": "Ingrediënt",
               "Required?": true,
               "Options (EN)": "REF:IngredientsOptions",
-              "Options (FR)": "",
-              "Options (NL)": "",
-              "Config (JSON/REF)": "{\n  \"ui\": {\n    \"hideLabel\": true,\n    \"readOnly\": true\n  },\n  \"optionFilter\": {\n    \"dependsOn\": \"DISH_TYPE\",\n    \"optionMapRef\": {\n      \"ref\": \"REF:IngredientsOptions\",\n      \"keyColumn\": \"dietaryApplicability\",\n      \"lookupColumn\": \"optionEn\",\n      \"splitKey\": true\n    },\n    \"matchMode\": \"or\"\n  },\n  \"validationRules\": [\n    {\n      \"level\": \"warning\",\n      \"warningDisplay\": \"field\",\n      \"when\": {\n        \"fieldId\": \"__ckNonMatchOptions\",\n        \"notEmpty\": true\n      },\n      \"message\": {\n        \"en\": \"This ingredient does not satisfy all dietary restrictions.\",\n        \"fr\": \"Cet ingrédient ne satisfait pas toutes les restrictions diététiques.\",\n        \"nl\": \"Deze ingrediënt voldoet niet aan alle diëtetische beperkingen.\"\n      }\n    }\n  ]\n}",
+              "Config (JSON/REF)": "{\n  \"ui\": {\n    \"hideLabel\": true,\n    \"readOnly\": true\n  },\n  \"optionFilter\": {\n    \"dependsOn\": \"DISH_TYPE\",\n    \"optionMapRef\": {\n      \"ref\": \"REF:IngredientsOptions\",\n      \"keyColumn\": \"dietaryApplicability\",\n      \"lookupColumn\": \"optionEn\",\n      \"splitKey\": true\n    },\n    \"matchMode\": \"or\"\n  },\n  \"validationRules\": [\n    {\n      \"level\": \"warning\",\n      \"warningDisplay\": \"field\",\n      \"when\": {\n        \"fieldId\": \"__ckNonMatchOptions\",\n        \"notEmpty\": true\n      },\n      \"message\": {\n        \"en\": \"This ingredient does not satisfy all dietary restrictions.\"\n      }\n    }\n  ]\n}",
               "Option Filter (JSON)": "",
               "Validation Rules (JSON)": "",
               "List View?": "",
@@ -1361,12 +1154,8 @@
               "ID": "QTY",
               "Type": "NUMBER",
               "Label EN": "Quantity",
-              "Label FR": "Quantité",
-              "Label NL": "Hoeveelheid",
               "Required?": true,
               "Options (EN)": "",
-              "Options (FR)": "",
-              "Options (NL)": "",
               "Config (JSON/REF)": "{\"pair\": \"qty_unt\"}",
               "Option Filter (JSON)": "",
               "Validation Rules (JSON)": "",
@@ -1378,12 +1167,8 @@
               "ID": "UNIT",
               "Type": "CHOICE",
               "Label EN": "Unit",
-              "Label FR": "Unité",
-              "Label NL": "Eenheid",
               "Required?": true,
               "Options (EN)": "REF:UnitOptions",
-              "Options (FR)": "",
-              "Options (NL)": "",
               "Config (JSON/REF)": "{\n  \"pair\": \"qty_unt\",\n  \"optionFilter\": {\n    \"dependsOn\": \"ING\",\n    \"optionMapRef\": {\n      \"ref\": \"REF:IngredientsOptions\",\n      \"keyColumn\": \"optionEn\",\n      \"lookupColumn\": \"allowedUnits\"\n    }\n  },\n  \"ui\": {\n    \"control\": \"select\"\n  }\n}",
               "Option Filter (JSON)": "",
               "Validation Rules (JSON)": "",
@@ -1395,12 +1180,8 @@
               "ID": "CAT",
               "Type": "TEXT",
               "Label EN": "Category",
-              "Label FR": "Catégorie",
-              "Label NL": "Categorie",
               "Required?": false,
               "Options (EN)": "REF:CategoryOptions",
-              "Options (FR)": "",
-              "Options (NL)": "",
               "Config (JSON/REF)": "{\n  \"valueMap\": {\n    \"dependsOn\": \"ING\",\n    \"optionMapRef\": {\n      \"ref\": \"REF:IngredientsOptions\",\n      \"keyColumn\": \"optionEn\",\n      \"lookupColumn\": \"Category\"\n    }\n  },\n  \"pair\": \"cat_all\",\n  \"readOnly\": true,\n  \"visibility\": {\n    \"showWhen\": { \"fieldId\": \"NEVER_SHOW\", \"equals\": \"1\" }\n  }\n}",
               "Option Filter (JSON)": "",
               "Validation Rules (JSON)": "",
@@ -1412,12 +1193,8 @@
               "ID": "ALLERGEN",
               "Type": "TEXT",
               "Label EN": "Allergen",
-              "Label FR": "Allergène",
-              "Label NL": "Allergeen",
               "Required?": false,
               "Options (EN)": "REF:AllergenOptions",
-              "Options (FR)": "",
-              "Options (NL)": "",
               "Config (JSON/REF)": "{\n  \"valueMap\": {\n    \"dependsOn\": \"ING\",\n    \"optionMapRef\": {\n      \"ref\": \"REF:IngredientsOptions\",\n      \"keyColumn\": \"optionEn\",\n      \"lookupColumn\": \"Allergens\"\n    }\n  },\n  \"pair\": \"cat_all\",\n  \"readOnly\": true,\n  \"visibility\": {\n    \"showWhen\": { \"fieldId\": \"NEVER_SHOW\", \"equals\": \"1\" }\n  }\n}",
               "Option Filter (JSON)": "",
               "Validation Rules (JSON)": "",
@@ -1429,9 +1206,7 @@
         },
         "lineItemConfig": {
           "label": {
-            "en": "View/edit ingredients",
-            "fr": "Voir/modifier les ingrédients",
-            "nl": "Bekijken/bewerken van ingrediënten"
+            "en": "View/edit ingredients"
           },
           "ui": {
             "mode": "table",
@@ -1448,9 +1223,7 @@
             },
             "tableHideUntilAnchor": true,
             "needsAttentionMessage": {
-              "en": "Ingredient already exist with the same unit. Change the unit or Remove the duplicate.",
-              "fr": "Ingrédient déjà existant avec la même unité. Modifier l'unité ou supprimer le doublon.",
-              "nl": "Ingrediënt bestaat al met dezelfde eenheid. Wijzig de eenheid of verwijder de dubbele."
+              "en": "Ingredient already exist with the same unit. Change the unit or Remove the duplicate."
             },
             "showItemPill": false,
             "openInOverlay": true,
@@ -1559,35 +1332,23 @@
           },
           "maxRows": 200,
           "addButtonLabel": {
-            "en": "Add",
-            "fr": "Ajouter",
-            "nl": "Toevoegen"
+            "en": "Add"
           },
           "anchorFieldId": "ING",
           "addMode": "selectorOverlay",
           "sectionSelector": {
             "id": "ITEM_FILTER",
             "labelEn": "Search ingredients",
-            "labelFr": "Rechercher des ingrédients",
-            "labelNl": "Zoek ingrediënten",
             "helperText": {
-              "en": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
-              "fr": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia).",
-              "nl": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
+              "en": "Uses exact words for Search (example: tomato or tomatoes, not tom, diabetic, not dia)."
             },
             "placeholder": {
-              "en": "Search name, category, dietary, supplier or allergen",
-              "fr": "Rechercher par nom, catégorie, restriction diététique, fournisseur ou allergène",
-              "nl": "Zoek op naam, categorie, diëtetische beperking, leverancier of allergie"
+              "en": "Search name, category, dietary, supplier or allergen"
             },
             "placeholderEn": "Search name, category, dietary, supplier or allergen",
-            "placeholderFr": "Rechercher par nom, catégorie, restriction diététique, fournisseur ou allergène",
-            "placeholderNl": "Zoek op naam, categorie, diëtetische beperking, leverancier of allergie",
             "hideLabel": true,
             "required": true,
-            "options": [],
-            "optionsFr": [],
-            "optionsNl": []
+            "options": []
           },
           "dedupRules": [
             {
@@ -1596,9 +1357,7 @@
                 "UNIT"
               ],
               "message": {
-                "en": "Ingredient already exist with the same unit. Change the unit or Remove the duplicate.",
-                "fr": "Ingrédient/unité dupliqué. Modifier l'unité ou supprimer le doublon.",
-                "nl": "Ingrediënt/eenheid dupliceren. Wijzig de eenheid of verwijder de dubbele."
+                "en": "Ingredient already exist with the same unit. Change the unit or Remove the duplicate."
               }
             }
           ],
@@ -1607,8 +1366,6 @@
               "id": "ING",
               "type": "CHOICE",
               "labelEn": "Ingredient",
-              "labelFr": "Ingrédient",
-              "labelNl": "Ingrediënt",
               "required": true,
               "ui": {
                 "hideLabel": true
@@ -1635,9 +1392,7 @@
                     "notEmpty": true
                   },
                   "message": {
-                    "en": "This ingredient does not satisfy all dietary restrictions.",
-                    "fr": "Cet ingrédient ne satisfait pas toutes les restrictions diététiques.",
-                    "nl": "Deze ingrediënt voldoet niet aan alle diëtetische beperkingen."
+                    "en": "This ingredient does not satisfy all dietary restrictions."
                   }
                 }
               ],
@@ -1654,6 +1409,7 @@
                   "ALLOWED_UNIT",
                   "CATEGORY",
                   "ALLERGEN",
+                  "TBSP_GRAMS",
                   "STATUS"
                 ],
                 "formKey": "Config: Ingredients Management",
@@ -1696,20 +1452,14 @@
               "id": "QTY",
               "type": "NUMBER",
               "labelEn": "Quantity",
-              "labelFr": "Quantité",
-              "labelNl": "Hoeveelheid",
               "required": true,
               "pair": "qty_unt",
-              "options": [],
-              "optionsFr": [],
-              "optionsNl": []
+              "options": []
             },
             {
               "id": "UNIT",
               "type": "CHOICE",
               "labelEn": "Unit",
-              "labelFr": "Unité",
-              "labelNl": "Eenheid",
               "required": true,
               "pair": "qty_unt",
               "ui": {
@@ -1728,8 +1478,6 @@
               "id": "CAT",
               "type": "TEXT",
               "labelEn": "Category",
-              "labelFr": "Catégorie",
-              "labelNl": "Categorie",
               "required": false,
               "pair": "cat_all",
               "readOnly": true,
@@ -1752,8 +1500,6 @@
               "id": "ALLERGEN",
               "type": "TEXT",
               "labelEn": "Allergen",
-              "labelFr": "Allergène",
-              "labelNl": "Allergeen",
               "required": false,
               "pair": "cat_all",
               "readOnly": true,
@@ -1779,36 +1525,23 @@
         "id": "REC_INST",
         "type": "PARAGRAPH",
         "label": {
-          "en": "Instructions",
-          "fr": "Instructions",
-          "nl": "Instructions"
+          "en": "Instructions"
         },
         "required": true,
         "ui": {
           "labelLayout": "stacked",
           "helperText": {
-            "en": "Write step-by-step cooking instructions. Include temperatures, timings, and dietary-specific steps.",
-            "fr": "Écrivez des instructions de cuisson étape par étape. Incluez les températures, les temps et les étapes spécifiques à la diétique.",
-            "nl": "Schrijf stapsgewijze kookinstructies. Neem temperatuur, tijden en diëtetische stappen op."
+            "en": "Write step-by-step cooking instructions. Include temperatures, timings, and dietary-specific steps."
           },
           "helperPlacement": "belowLabel",
           "paragraphRows": 12,
           "paragraphDisclaimer": {
             "sourceGroupId": "Q65ILNUSGL",
             "title": {
-              "en": "Attention required:",
-              "fr": "Attention requise:",
-              "nl": "Attentie vereist:"
+              "en": "Attention required:"
             },
             "listMessage": {
-              "en": "For {value}, do not use: {keys}.",
-              "fr": "Pour {value}, n'utilisez pas : {keys}.",
-              "nl": "Voor {value}, gebruik niet: {keys}."
-            },
-            "message": {
-              "en": "No-salt portions must be served first before adding salt. Remember to record and photograph the core temperature.",
-              "fr": "N'oubliez pas d'ajouter le sel uniquement après avoir réservé les portions sans sel.",
-              "nl": "Onthoud dat je alleen zout toevoegt na het reserveren van niet-zoute porties."
+              "en": "For {value}, do not use: {keys}."
             },
             "editable": true
           }
@@ -1831,9 +1564,7 @@
         "id": "RE_OPEN",
         "type": "BUTTON",
         "label": {
-          "en": "Deactivate",
-          "fr": "Désactiver",
-          "nl": "Deactiveren"
+          "en": "Deactivate"
         },
         "required": false,
         "listView": false,
@@ -1848,19 +1579,67 @@
               "en": "Please confirm"
             },
             "message": {
-              "en": "This recipe will stop appearing in the Meal Production form. Do you want to proceed?",
-              "fr": "Cette recette ne s'affichera plus dans le formulaire de production de repas. Voulez-vous procéder ?",
-              "nl": "Deze recept zal niet meer verschijnen in het maaltijdproductieformulier. Wil je doorgaan?"
+              "en": "This recipe will stop appearing in the Meal Production form. Do you want to proceed?"
             },
             "confirmLabel": {
-              "en": "Yes",
-              "fr": "Oui",
-              "nl": "Ja"
+              "en": "Yes"
             },
             "cancelLabel": {
-              "en": "No",
-              "fr": "Non",
-              "nl": "Nee"
+              "en": "No"
+            }
+          },
+          "dependencyGuard": {
+            "targetFormKey": "Meal Production",
+            "mode": "block",
+            "when": {
+              "all": [
+                {
+                  "fieldId": "status",
+                  "equals": "In progress"
+                },
+                {
+                  "fieldId": "MP_PREP_DATE",
+                  "isToday": true
+                },
+                {
+                  "lineItems": {
+                    "groupId": "MP_MEALS_REQUEST",
+                    "subGroupId": "MP_TYPE_LI",
+                    "when": {
+                      "all": [
+                        {
+                          "fieldId": "PREP_TYPE",
+                          "equals": "Cook"
+                        },
+                        {
+                          "fieldId": "RECIPE",
+                          "equals": "{{source.QFTD5RD2EM}}"
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            "dialog": {
+              "title": {
+                "en": "Recipe used in meal production"
+              },
+              "message": {
+                "en": "This recipe is currently used in today’s meal production and cannot be deactivated. Select another recipe in Meal Production first, or return after today’s production is completed. Concerned records:\n{{recordsList}}"
+              },
+              "confirmLabel": {
+                "en": "OK"
+              },
+              "cancelLabel": {
+                "en": "Cancel"
+              },
+              "showCancel": false,
+              "recordList": {
+                "template": {
+                  "en": "- {{target.MP_DISTRIBUTOR}} | {{target.MP_SERVICE}}"
+                }
+              }
             }
           },
           "placements": [
@@ -1878,9 +1657,7 @@
         "id": "IN_USE",
         "type": "CHECKBOX",
         "label": {
-          "en": "Record in use",
-          "fr": "Record in use",
-          "nl": "Record in use"
+          "en": "Record in use"
         },
         "required": false,
         "listView": false,
@@ -1895,9 +1672,7 @@
         "id": "DRAFT_BTN",
         "type": "BUTTON",
         "label": {
-          "en": "Draft",
-          "fr": "Draft",
-          "nl": "Draft"
+          "en": "Draft"
         },
         "required": false,
         "listView": false,
@@ -1913,9 +1688,7 @@
         "id": "ACTIVE_BTN",
         "type": "BUTTON",
         "label": {
-          "en": "Active",
-          "fr": "Active",
-          "nl": "Active"
+          "en": "Active"
         },
         "required": false,
         "listView": false,
@@ -1931,9 +1704,7 @@
         "id": "INACTIVE_BTN",
         "type": "BUTTON",
         "label": {
-          "en": "Disabled",
-          "fr": "Inactive",
-          "nl": "Inactive"
+          "en": "Disabled"
         },
         "required": false,
         "listView": false,
@@ -1953,16 +1724,12 @@
           "type": "rule",
           "fieldId": "action",
           "label": {
-            "en": "Action",
-            "fr": "Action",
-            "nl": "Actie"
+            "en": "Action"
           },
           "cases": [
             {
               "text": {
-                "en": "Edit",
-                "fr": "Modifier",
-                "nl": "Bewerken"
+                "en": "Edit"
               },
               "when": {
                 "fieldId": "status",
@@ -1974,9 +1741,7 @@
             },
             {
               "text": {
-                "en": "View",
-                "fr": "Voir",
-                "nl": "Bekijken"
+                "en": "View"
               },
               "when": {
                 "fieldId": "status",
@@ -1992,16 +1757,12 @@
           "type": "rule",
           "fieldId": "copy_record",
           "label": {
-            "en": "Copy",
-            "fr": "Copier",
-            "nl": "Kopieren"
+            "en": "Copy"
           },
           "cases": [
             {
               "text": {
-                "en": "Copy",
-                "fr": "Copier",
-                "nl": "Kopieren"
+                "en": "Copy"
               },
               "when": {
                 "all": [
@@ -2025,16 +1786,12 @@
           "type": "rule",
           "fieldId": "close_record",
           "label": {
-            "en": "Activate",
-            "fr": "Activer",
-            "nl": "Activeren"
+            "en": "Activate"
           },
           "cases": [
             {
               "text": {
-                "en": "Activate",
-                "fr": "Activer",
-                "nl": "Activeren"
+                "en": "Activate"
               },
               "when": {
                 "fieldId": "status",
@@ -2052,16 +1809,12 @@
           "type": "rule",
           "fieldId": "disable",
           "label": {
-            "en": "Disable",
-            "fr": "Désactivé",
-            "nl": "Uitschakelen"
+            "en": "Disable"
           },
           "cases": [
             {
               "text": {
-                "en": "Disable",
-                "fr": "Désactivé",
-                "nl": "Uitschakelen"
+                "en": "Disable"
               },
               "when": {
                 "fieldId": "status",
@@ -2079,18 +1832,14 @@
         {
           "fieldId": "QFTD5RD2EM",
           "label": {
-            "en": "Recipe Name",
-            "fr": "Dish Name",
-            "nl": "Dish Name"
+            "en": "Recipe Name"
           },
           "kind": "question"
         },
         {
           "fieldId": "DISH_TYPE",
           "label": {
-            "en": "Applicable dietary category",
-            "fr": "Applies to",
-            "nl": "Applies to"
+            "en": "Applicable dietary category"
           },
           "kind": "question"
         }
@@ -2105,22 +1854,16 @@
         {
           "icon": "edit",
           "text": {
-            "en": "Edit",
-            "fr": "Modifier",
-            "nl": "Bewerken"
+            "en": "Edit"
           }
         },
         {
           "text": {
-            "en": "being written, not usable",
-            "fr": "en cours d'écriture, non utilisable",
-            "nl": "wordt geschreven, niet bruikbaar"
+            "en": "being written, not usable"
           },
           "pill": {
             "text": {
-              "en": "Draft",
-              "fr": "Brouillon",
-              "nl": "Conceptverslag"
+              "en": "Draft"
             },
             "tone": "default"
           }
@@ -2128,22 +1871,16 @@
         {
           "icon": "view",
           "text": {
-            "en": "View",
-            "fr": "Voir",
-            "nl": "Bekijken"
+            "en": "View"
           }
         },
         {
           "text": {
-            "en": "usable for meal production",
-            "fr": "utilisable pour la production de repas",
-            "nl": "bruikbaar voor maaltijdproductie"
+            "en": "usable for meal production"
           },
           "pill": {
             "text": {
-              "en": "Active",
-              "fr": "Actif",
-              "nl": "Actief"
+              "en": "Active"
             },
             "tone": "muted"
           }
@@ -2151,22 +1888,16 @@
         {
           "icon": "copy",
           "text": {
-            "en": "Copy",
-            "fr": "Copier",
-            "nl": "Kopieren"
+            "en": "Copy"
           }
         },
         {
           "text": {
-            "en": "no longer usable for meal production",
-            "fr": "non plus utilisable pour la production de repas",
-            "nl": "niet langer bruikbaar voor maaltijdproductie"
+            "en": "no longer usable for meal production"
           },
           "pill": {
             "text": {
-              "en": "Disabled",
-              "fr": "Désactivé",
-              "nl": "Uitgeschakeld"
+              "en": "Disabled"
             },
             "tone": "strong"
           }
@@ -2183,14 +1914,10 @@
       "search": {
         "mode": "text",
         "placeholder": {
-          "en": "Search by name, dietary or status",
-          "fr": "Rechercher par nom, diététique ou statut",
-          "nl": "Zoek op receptnaam, diëtarische categorie of status"
+          "en": "Search by name, dietary or status"
         },
         "presetsTitle": {
-          "en": "View recipes:",
-          "fr": "Voir les recettes:",
-          "nl": "Bekijk recepten:"
+          "en": "View recipes:"
         }
       },
       "headerSortEnabled": false,
@@ -2217,19 +1944,13 @@
       "statusFieldId": "Status",
       "statusTransitions": {
         "inProgress": {
-          "en": "Draft",
-          "fr": "Brouillon",
-          "nl": "Conceptverslag"
+          "en": "Draft"
         },
         "reOpened": {
-          "en": "Disabled",
-          "fr": "Désactivé",
-          "nl": "Uitgeschakeld"
+          "en": "Disabled"
         },
         "onClose": {
-          "en": "Active",
-          "fr": "Actif",
-          "nl": "Actief"
+          "en": "Active"
         }
       }
     },
@@ -2243,14 +1964,10 @@
       "QFTD5RD2EM"
     ],
     "createButtonLabel": {
-      "en": "New",
-      "fr": "Nouvelle",
-      "nl": "Nieuw"
+      "en": "New"
     },
     "copyCurrentRecordLabel": {
-      "en": "Copy",
-      "fr": "Copier",
-      "nl": "Kopieren"
+      "en": "Copy"
     },
     "actionBars": {
       "top": {
@@ -2308,7 +2025,8 @@
       }
     },
     "appHeader": {
-      "logoUrl": "https://drive.google.com/uc?export=view&id=18iy1pxiUD0iHsW9WV1e5VrUMu0JEkM0h"
+      "logoUrl": "https://drive.google.com/uc?export=view&id=18iy1pxiUD0iHsW9WV1e5VrUMu0JEkM0h",
+      "sidebarEnabled": false
     },
     "groupBehavior": {
       "autoCollapseOnComplete": true,
@@ -2323,34 +2041,22 @@
     },
     "portraitOnly": true,
     "submissionConfirmationMessage": {
-      "en": "Ready to activate this recipe?",
-      "fr": "Prêt à activer cette recette ?",
-      "nl": "Klaar om deze recept te activeren?"
+      "en": "Ready to activate this recipe?"
     },
     "submissionConfirmationTitle": {
-      "en": "Please confirm",
-      "fr": "Veuillez confirmer",
-      "nl": "Vergoeding bevestigen"
+      "en": "Please confirm"
     },
     "submissionConfirmationConfirmLabel": {
-      "en": "Yes, activate recipe",
-      "fr": "Oui, activer la recette",
-      "nl": "Ja, recept activeren"
+      "en": "Yes, activate recipe"
     },
     "submissionConfirmationCancelLabel": {
-      "en": "No, continue editing",
-      "fr": "Non, continuer la modification",
-      "nl": "Nee, verder bewerken"
+      "en": "No, continue editing"
     },
     "submitButtonLabel": {
-      "en": "Activate",
-      "fr": "Activer",
-      "nl": "Activeren"
+      "en": "Activate"
     },
     "summaryButtonLabel": {
-      "en": "View Draft",
-      "fr": "Voir brouillon",
-      "nl": "Bekijk conceptverslag"
+      "en": "View Draft"
     }
   },
   "validationErrors": []

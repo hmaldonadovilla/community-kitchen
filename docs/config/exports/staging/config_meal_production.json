@@ -4153,7 +4153,9 @@
         "⁠Nezka",
         "⁠Haven",
         "⁠Ruby",
-        "⁠Aline"
+        "⁠Aline",
+        "Gayl",
+        "Beatrice"
       ],
       "optionsRaw": [
         {
@@ -4183,6 +4185,14 @@
         {
           "Options (EN)": "⁠Aline",
           "__ckOptionValue": "⁠Aline"
+        },
+        {
+          "Options (EN)": "⁠Gayl",
+          "__ckOptionValue": "⁠Gayl"
+        },
+        {
+          "Options (EN)": "⁠Beatrice",
+          "__ckOptionValue": "⁠Beatrice"
         }
       ],
       "status": "Active"
@@ -7680,7 +7690,9 @@
           "⁠Nezka",
           "⁠Haven",
           "⁠Ruby",
-          "⁠Aline"
+          "⁠Aline",
+          "Gayl",
+          "Beatrice"
         ],
         "optionsRaw": [
           {
@@ -7710,6 +7722,14 @@
           {
             "Options (EN)": "⁠Aline",
             "__ckOptionValue": "⁠Aline"
+          },
+          {
+            "Options (EN)": "Gayl",
+            "__ckOptionValue": "Gayl"
+          },
+          {
+            "Options (EN)": "Beatrice",
+            "__ckOptionValue": "Beatrice"
           }
         ],
         "status": "Active"
