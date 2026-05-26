@@ -725,7 +725,7 @@
         {
           "when": {
             "fieldId": "MP_PREP_DATE",
-            "beforeDate": "2026-05-20"
+            "beforeDate": "2026-05-27"
           },
           "templateId": {
             "EN": "bundle:meal_production.summary.legacy-temp.html"
@@ -11815,7 +11815,7 @@
         {
           "when": {
             "fieldId": "MP_PREP_DATE",
-            "beforeDate": "2026-05-20"
+            "beforeDate": "2026-05-27"
           },
           "templateId": {
             "EN": "bundle:meal_production.summary.legacy-temp.html"
