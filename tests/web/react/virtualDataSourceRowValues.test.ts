@@ -194,6 +194,107 @@ describe('virtual data source row value helpers', () => {
     expect(values.maxQuantity).toBe(0);
   });
 
+  test('keeps an existing allocation valid when optimistic sibling utilisation briefly overcounts the source', () => {
+    const values = buildVirtualDataSourceRowValuesAction({
+      config: {
+        rowKeyFieldId: 'LEFTOVER_ID',
+        selectedFieldId: 'selected',
+        quantityFieldId: 'quantity',
+        availability: {
+          sourcePortionsFieldId: 'remainingPortions',
+          targetPortionsFieldId: 'freePortions',
+          targetMaxPortionsFieldId: 'maxPortions'
+        }
+      },
+      sourceRow: {
+        LEFTOVER_ID: 'leftover-1',
+        remainingPortions: 5,
+        __ckServerCurrentRecordUtilisedQuantity: 15
+      },
+      outputRow: {
+        id: 'row-standard',
+        values: {
+          selected: true,
+          quantity: '15'
+        }
+      } as any,
+      parentRowId: 'standard',
+      resolveCurrentUtilisationStateForSource: () => ({ totalUtilisedQuantity: 25, currentRowQuantity: 15 }),
+      resolveCommittedUtilisationStateForSource: () => ({ totalUtilisedQuantity: 15, currentRowQuantity: 15 })
+    });
+
+    expect(values.maxPortions).toBe(15);
+  });
+
+  test('keeps an existing allocation valid when authoritative availability reports a sibling row quantity', () => {
+    const values = buildVirtualDataSourceRowValuesAction({
+      config: {
+        rowKeyFieldId: 'LEFTOVER_ID',
+        selectedFieldId: 'selected',
+        quantityFieldId: 'quantity',
+        availability: {
+          sourcePortionsFieldId: 'remainingPortions',
+          targetPortionsFieldId: 'freePortions',
+          targetMaxPortionsFieldId: 'maxPortions'
+        }
+      },
+      sourceRow: {
+        LEFTOVER_ID: 'MI-10',
+        remainingPortions: 2,
+        __ckFreeQuantity: 2,
+        __ckFreeQuantityAuthoritative: true,
+        __ckCurrentUtilisationQuantity: 8,
+        __ckServerCurrentRecordUtilisedQuantity: 23
+      },
+      outputRow: {
+        id: 'row-standard',
+        values: {
+          selected: true,
+          quantity: '15'
+        }
+      } as any,
+      parentRowId: 'standard',
+      resolveCurrentUtilisationStateForSource: () => ({ totalUtilisedQuantity: 23, currentRowQuantity: 15 }),
+      resolveCommittedUtilisationStateForSource: () => ({ totalUtilisedQuantity: 23, currentRowQuantity: 15 })
+    });
+
+    expect(values.freePortions).toBe(2);
+    expect(values.maxPortions).toBe(17);
+  });
+
+  test('does not let a new sibling allocation inherit another row current utilisation quantity', () => {
+    const values = buildVirtualDataSourceRowValuesAction({
+      config: {
+        rowKeyFieldId: 'LEFTOVER_ID',
+        selectedFieldId: 'selected',
+        quantityFieldId: 'quantity',
+        availability: {
+          sourcePortionsFieldId: 'remainingPortions',
+          targetPortionsFieldId: 'freePortions',
+          targetMaxPortionsFieldId: 'maxPortions'
+        }
+      },
+      sourceRow: {
+        LEFTOVER_ID: 'MI-10',
+        remainingPortions: 2,
+        __ckFreeQuantity: 2,
+        __ckFreeQuantityAuthoritative: true,
+        __ckCurrentUtilisationQuantity: 8,
+        __ckServerCurrentRecordUtilisedQuantity: 23
+      },
+      draftValues: {
+        selected: true,
+        quantity: '8'
+      },
+      parentRowId: 'diabetic',
+      resolveCurrentUtilisationStateForSource: () => ({ totalUtilisedQuantity: 31, currentRowQuantity: 8 }),
+      resolveCommittedUtilisationStateForSource: () => ({ totalUtilisedQuantity: 23, currentRowQuantity: 0 })
+    });
+
+    expect(values.freePortions).toBe(2);
+    expect(values.maxPortions).toBe(2);
+  });
+
   test('uses authoritative conflict availability after a rejected row is deselected', () => {
     const values = buildVirtualDataSourceRowValuesAction({
       config: {

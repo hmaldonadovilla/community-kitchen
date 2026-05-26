@@ -4,6 +4,7 @@ import { resolveUtilisationSourceItemKey } from '../../utilisations/sourceFields
 import { hasAvailabilityValue } from './lineItemPresentation';
 import {
   computeOptimisticRowMaxQuantity,
+  ensureEditableMaxIncludesCurrentValue,
   resolveServerCurrentRecordUtilisedQuantity,
   toFiniteNumberValue
 } from '../../../app/quantityConstraints';
@@ -32,22 +33,21 @@ const computeAvailabilityEditableMaxQuantity = (args: {
   serverCurrentRecordUtilisedQuantity: number;
   localCurrentRecordUtilisedQuantity: number;
   currentRowQuantity: number;
+  preserveExistingCurrentQuantity?: boolean;
 }): number => {
   if (hasAuthoritativeFreeQuantity(args.sourceRow)) {
-    const currentUtilisationQuantity = Object.prototype.hasOwnProperty.call(
-      args.sourceRow,
-      '__ckCurrentUtilisationQuantity'
-    )
-      ? toFiniteNumberValue(args.sourceRow.__ckCurrentUtilisationQuantity)
-      : args.currentRowQuantity;
+    const currentUtilisationQuantity = args.preserveExistingCurrentQuantity ? args.currentRowQuantity : 0;
     return Math.max(0, toFiniteNumberValue(args.sourceRow.__ckFreeQuantity) + currentUtilisationQuantity);
   }
-  return computeOptimisticRowMaxQuantity({
+  const computedMax = computeOptimisticRowMaxQuantity({
     remainingQuantity: args.sourceRow?.[args.sourceFieldId],
     serverCurrentRecordUtilisedQuantity: args.serverCurrentRecordUtilisedQuantity,
     localCurrentRecordUtilisedQuantity: args.localCurrentRecordUtilisedQuantity,
     currentRowQuantity: args.currentRowQuantity
   });
+  return args.preserveExistingCurrentQuantity
+    ? ensureEditableMaxIncludesCurrentValue(computedMax, args.currentRowQuantity)
+    : computedMax;
 };
 
 export const resolveServerCurrentRecordUtilisedQuantityFromRow = (
@@ -144,6 +144,14 @@ export const buildVirtualDataSourceRowValuesAction = (args: {
     localUtilisationState.currentRowQuantity,
     toFiniteNumberValue(next[`${args.config?.quantityFieldId || ''}`.trim()])
   );
+  const hasExistingOutputQuantity = (() => {
+    if (!args.outputRow?.values) return false;
+    const quantityFieldId = `${args.config?.quantityFieldId || ''}`.trim();
+    if (!quantityFieldId) return false;
+    const selectedFieldId = `${args.config?.selectedFieldId || ''}`.trim();
+    if (selectedFieldId && args.outputRow.values[selectedFieldId] === false) return false;
+    return toFiniteNumberValue(args.outputRow.values[quantityFieldId]) > 0;
+  })();
 
   const sourceQuantityFieldId = `${availabilityConfig.sourceQuantityFieldId || ''}`.trim();
   const targetQuantityFieldId = `${availabilityConfig.targetQuantityFieldId || ''}`.trim();
@@ -164,7 +172,8 @@ export const buildVirtualDataSourceRowValuesAction = (args: {
       sourceFieldId: sourceQuantityFieldId,
       serverCurrentRecordUtilisedQuantity,
       localCurrentRecordUtilisedQuantity,
-      currentRowQuantity
+      currentRowQuantity,
+      preserveExistingCurrentQuantity: hasExistingOutputQuantity
     });
   }
   if (sourceQuantityFieldId && resolvedQuantityDisplayFieldId) {
@@ -190,7 +199,8 @@ export const buildVirtualDataSourceRowValuesAction = (args: {
       sourceFieldId: sourcePortionsFieldId,
       serverCurrentRecordUtilisedQuantity,
       localCurrentRecordUtilisedQuantity,
-      currentRowQuantity
+      currentRowQuantity,
+      preserveExistingCurrentQuantity: hasExistingOutputQuantity
     });
   }
   if (sourcePortionsFieldId && resolvedPortionsDisplayFieldId) {
