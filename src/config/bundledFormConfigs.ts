@@ -588,7 +588,9 @@ export const BUNDLED_FORM_CONFIGS = [
           "⁠Nezka",
           "⁠Haven",
           "⁠Ruby",
-          "⁠Aline"
+          "⁠Aline",
+          "⁠Gayl",
+          "⁠Beatrice"
         ],
         "optionsFr": [
           "⁠Akkara",
@@ -597,7 +599,9 @@ export const BUNDLED_FORM_CONFIGS = [
           "⁠Nezka",
           "⁠Haven",
           "⁠Ruby",
-          "⁠Aline"
+          "⁠Aline",
+          "⁠Gayl",
+          "⁠Beatrice"
         ],
         "optionsNl": [
           "⁠Akkara",
@@ -606,7 +610,9 @@ export const BUNDLED_FORM_CONFIGS = [
           "⁠Nezka",
           "⁠Haven",
           "⁠Ruby",
-          "⁠Aline"
+          "⁠Aline",
+          "Gayl",
+          "Beatrice"
         ],
         "optionsRaw": [
           {
@@ -650,6 +656,18 @@ export const BUNDLED_FORM_CONFIGS = [
             "Options (FR)": "⁠Aline",
             "Options (NL)": "⁠Aline",
             "__ckOptionValue": "⁠Aline"
+          },
+          {
+            "Options (EN)": "⁠Gayl",
+            "Options (FR)": "⁠Gayl",
+            "Options (NL)": "⁠Gayl",
+            "__ckOptionValue": "⁠Gayl"
+          },
+          {
+            "Options (EN)": "⁠Beatrice",
+            "Options (FR)": "⁠Beatrice",
+            "Options (NL)": "⁠Beatrice",
+            "__ckOptionValue": "⁠Beatrice"
           }
         ],
         "status": "Active"
@@ -3655,7 +3673,9 @@ export const BUNDLED_FORM_CONFIGS = [
               "⁠Nezka",
               "⁠Haven",
               "⁠Ruby",
-              "⁠Aline"
+              "⁠Aline",
+              "⁠Gayl",
+              "⁠Beatrice"
             ],
             "fr": [
               "⁠Akkara",
@@ -3664,7 +3684,9 @@ export const BUNDLED_FORM_CONFIGS = [
               "⁠Nezka",
               "⁠Haven",
               "⁠Ruby",
-              "⁠Aline"
+              "⁠Aline",
+              "⁠Gayl",
+              "⁠Beatrice"
             ],
             "nl": [
               "⁠Akkara",
@@ -3673,7 +3695,9 @@ export const BUNDLED_FORM_CONFIGS = [
               "⁠Nezka",
               "⁠Haven",
               "⁠Ruby",
-              "⁠Aline"
+              "⁠Aline",
+              "⁠Gayl",
+              "⁠Beatrice"
             ],
             "raw": [
               {
@@ -3717,6 +3741,18 @@ export const BUNDLED_FORM_CONFIGS = [
                 "Options (FR)": "⁠Aline",
                 "Options (NL)": "⁠Aline",
                 "__ckOptionValue": "⁠Aline"
+              },
+              {
+                "Options (EN)": "⁠Gayl",
+                "Options (FR)": "⁠Gayl",
+                "Options (NL)": "⁠Gayl",
+                "__ckOptionValue": "⁠Gayl"
+              },
+              {
+                "Options (EN)": "⁠Beatrice",
+                "Options (FR)": "⁠Beatrice",
+                "Options (NL)": "⁠Beatrice",
+                "__ckOptionValue": "⁠Beatrice"
               }
             ]
           }
@@ -9888,7 +9924,9 @@ export const BUNDLED_FORM_CONFIGS = [
           "⁠Nezka",
           "⁠Haven",
           "⁠Ruby",
-          "⁠Aline"
+          "⁠Aline",
+          "Gayl",
+          "Beatrice"
         ],
         "optionsFr": [
           "⁠Akkara",
@@ -9897,7 +9935,9 @@ export const BUNDLED_FORM_CONFIGS = [
           "⁠Nezka",
           "⁠Haven",
           "⁠Ruby",
-          "⁠Aline"
+          "⁠Aline",
+          "Gayl",
+          "Beatrice"
         ],
         "optionsNl": [
           "⁠Akkara",
@@ -9906,7 +9946,9 @@ export const BUNDLED_FORM_CONFIGS = [
           "⁠Nezka",
           "⁠Haven",
           "⁠Ruby",
-          "⁠Aline"
+          "⁠Aline",
+          "Gayl",
+          "Beatrice"
         ],
         "optionsRaw": [
           {
@@ -9950,6 +9992,18 @@ export const BUNDLED_FORM_CONFIGS = [
             "Options (FR)": "⁠Aline",
             "Options (NL)": "⁠Aline",
             "__ckOptionValue": "⁠Aline"
+          },
+          {
+            "Options (EN)": "Gayl",
+            "Options (FR)": "Gayl",
+            "Options (NL)": "Gayl",
+            "__ckOptionValue": "Gayl"
+          },
+          {
+            "Options (EN)": "Beatrice",
+            "Options (FR)": "Beatrice",
+            "Options (NL)": "Beatrice",
+            "__ckOptionValue": "Beatrice"
           }
         ],
         "status": "Active"
@@ -12248,7 +12302,9 @@ export const BUNDLED_FORM_CONFIGS = [
               "⁠Nezka",
               "⁠Haven",
               "⁠Ruby",
-              "⁠Aline"
+              "⁠Aline",
+              "Gayl",
+              "Beatrice"
             ],
             "fr": [
               "⁠Akkara",
@@ -12257,7 +12313,9 @@ export const BUNDLED_FORM_CONFIGS = [
               "⁠Nezka",
               "⁠Haven",
               "⁠Ruby",
-              "⁠Aline"
+              "⁠Aline",
+              "Gayl",
+              "Beatrice"
             ],
             "nl": [
               "⁠Akkara",
@@ -12266,7 +12324,9 @@ export const BUNDLED_FORM_CONFIGS = [
               "⁠Nezka",
               "⁠Haven",
               "⁠Ruby",
-              "⁠Aline"
+              "⁠Aline",
+              "Gayl",
+              "Beatrice"
             ],
             "raw": [
               {
@@ -12310,6 +12370,18 @@ export const BUNDLED_FORM_CONFIGS = [
                 "Options (FR)": "⁠Aline",
                 "Options (NL)": "⁠Aline",
                 "__ckOptionValue": "⁠Aline"
+              },
+              {
+                "Options (EN)": "Gayl",
+                "Options (FR)": "Gayl",
+                "Options (NL)": "Gayl",
+                "__ckOptionValue": "Gayl"
+              },
+              {
+                "Options (EN)": "Beatrice",
+                "Options (FR)": "Beatrice",
+                "Options (NL)": "Beatrice",
+                "__ckOptionValue": "Beatrice"
               }
             ]
           }

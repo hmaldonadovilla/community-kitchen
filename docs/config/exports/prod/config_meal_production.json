@@ -2174,7 +2174,9 @@
         "⁠Nezka",
         "⁠Haven",
         "⁠Ruby",
-        "⁠Aline"
+        "⁠Aline",
+        "Gayl",
+        "Beatrice"
       ],
       "optionsFr": [
         "⁠Akkara",
@@ -2183,7 +2185,9 @@
         "⁠Nezka",
         "⁠Haven",
         "⁠Ruby",
-        "⁠Aline"
+        "⁠Aline",
+        "Gayl",
+        "Beatrice"
       ],
       "optionsNl": [
         "⁠Akkara",
@@ -2192,7 +2196,9 @@
         "⁠Nezka",
         "⁠Haven",
         "⁠Ruby",
-        "⁠Aline"
+        "⁠Aline",
+        "Gayl",
+        "Beatrice"
       ],
       "optionsRaw": [
         {
@@ -2236,6 +2242,18 @@
           "Options (FR)": "⁠Aline",
           "Options (NL)": "⁠Aline",
           "__ckOptionValue": "⁠Aline"
+        },
+        {
+          "Options (EN)": "Gayl",
+          "Options (FR)": "Gayl",
+          "Options (NL)": "Gayl",
+          "__ckOptionValue": "Gayl"
+        },
+        {
+          "Options (EN)": "Beatrice",
+          "Options (FR)": "Beatrice",
+          "Options (NL)": "Beatrice",
+          "__ckOptionValue": "Beatrice"
         }
       ],
       "status": "Active"
@@ -4534,7 +4552,9 @@
             "⁠Nezka",
             "⁠Haven",
             "⁠Ruby",
-            "⁠Aline"
+            "⁠Aline",
+            "Gayl",
+            "Beatrice"
           ],
           "fr": [
             "⁠Akkara",
@@ -4543,7 +4563,9 @@
             "⁠Nezka",
             "⁠Haven",
             "⁠Ruby",
-            "⁠Aline"
+            "⁠Aline",
+            "Gayl",
+            "Beatrice"
           ],
           "nl": [
             "⁠Akkara",
@@ -4552,7 +4574,9 @@
             "⁠Nezka",
             "⁠Haven",
             "⁠Ruby",
-            "⁠Aline"
+            "⁠Aline",
+            "Gayl",
+            "Beatrice"
           ],
           "raw": [
             {
@@ -4596,6 +4620,18 @@
               "Options (FR)": "⁠Aline",
               "Options (NL)": "⁠Aline",
               "__ckOptionValue": "⁠Aline"
+            },
+            {
+              "Options (EN)": "Gayl",
+              "Options (FR)": "Gayl",
+              "Options (NL)": "Gayl",
+              "__ckOptionValue": "Gayl"
+            },
+            {
+              "Options (EN)": "Beatrice",
+              "Options (FR)": "Beatrice",
+              "Options (NL)": "Beatrice",
+              "__ckOptionValue": "Beatrice"
             }
           ]
         }
