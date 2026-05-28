@@ -31,7 +31,7 @@ jobs:
       webapp_url: ${{ steps.deploy.outputs.webapp_url }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -68,7 +68,7 @@ jobs:
     if: ${{ needs.deploy.outputs.webapp_url != '' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node
         uses: actions/setup-node@v6
@@ -108,7 +108,7 @@ jobs:
     if: ${{ needs.deploy.outputs.webapp_url != '' && needs.e2e-smoke-staging.result == 'success' }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node
         uses: actions/setup-node@v6
