@@ -37,7 +37,17 @@ describe('copyCurrentRecordProfile', () => {
       lineItems: {
         G: [
           { id: 'r1', values: { MEAL_TYPE: 'V', ORD_QTY: 0, MP_COOK_TEMP: true } },
-          { id: 'r2', values: { MEAL_TYPE: 'V', ORD_QTY: 2, MP_COOK_TEMP: true, __ckRowSource: 'auto' } }
+          {
+            id: 'r2',
+            values: {
+              MEAL_TYPE: 'V',
+              ORD_QTY: 2,
+              MP_COOK_TEMP: true,
+              __ckRowSource: 'auto',
+              __ckRecipeIngredientsDirty: true,
+              __ckNonMatchOptions: ['MEAL_TYPE']
+            }
+          }
         ],
         'G::r2::SUB': [{ id: 'sr1', values: { X: 'x' } }]
       } as any
@@ -62,6 +72,7 @@ describe('copyCurrentRecordProfile', () => {
             fields: [
               { id: 'MEAL_TYPE', type: 'CHOICE', required: false },
               { id: 'ORD_QTY', type: 'NUMBER', required: false },
+              { id: 'MP_TO_COOK', type: 'NUMBER', required: false },
               { id: 'FINAL_QTY', type: 'NUMBER', required: false }
             ]
           }
@@ -73,7 +84,8 @@ describe('copyCurrentRecordProfile', () => {
             groupId: 'MP_MEALS_REQUEST',
             fields: ['MEAL_TYPE', 'ORD_QTY'],
             fieldValues: {
-              FINAL_QTY: '$row.ORD_QTY'
+              FINAL_QTY: '$row.ORD_QTY',
+              MP_TO_COOK: '$row.ORD_QTY'
             }
           }
         ]
@@ -90,6 +102,7 @@ describe('copyCurrentRecordProfile', () => {
             values: {
               MEAL_TYPE: 'Diabetic',
               ORD_QTY: 50,
+              MP_TO_COOK: 30,
               FINAL_QTY: 60
             }
           }
@@ -100,7 +113,70 @@ describe('copyCurrentRecordProfile', () => {
     expect(out?.lineItems?.MP_MEALS_REQUEST?.[0]?.values).toEqual({
       MEAL_TYPE: 'Diabetic',
       ORD_QTY: 50,
+      MP_TO_COOK: 50,
       FINAL_QTY: 50
+    });
+  });
+
+  it('preserves only structural row metadata when copying line items', () => {
+    const definition: any = {
+      questions: [
+        {
+          id: 'MP_MEALS_REQUEST',
+          type: 'LINE_ITEM_GROUP',
+          required: false,
+          lineItemConfig: {
+            fields: [
+              { id: 'MEAL_TYPE', type: 'CHOICE', required: false },
+              { id: 'ORD_QTY', type: 'NUMBER', required: false }
+            ]
+          }
+        }
+      ],
+      copyCurrentRecordProfile: {
+        lineItems: [
+          {
+            groupId: 'MP_MEALS_REQUEST',
+            fields: ['MEAL_TYPE', 'ORD_QTY']
+          }
+        ]
+      }
+    };
+
+    const out = applyCopyCurrentRecordProfile({
+      definition,
+      values: {} as any,
+      lineItems: {
+        MP_MEALS_REQUEST: [
+          {
+            id: 'meal1',
+            values: {
+              MEAL_TYPE: 'Vegetarian',
+              ORD_QTY: 400,
+              __ckRowId: 'meal1',
+              __ckRowSource: 'auto',
+              __ckSelectionEffectId: 'seedMeal',
+              __ckHideRemove: true,
+              __ckParentGroupId: 'ROOT',
+              __ckParentRowId: 'root1',
+              __ckRecipeIngredientsDirty: true,
+              __ckNonMatchOptions: ['MEAL_TYPE'],
+              __ckFreeQuantity: 12
+            }
+          }
+        ]
+      } as any
+    });
+
+    expect(out?.lineItems?.MP_MEALS_REQUEST?.[0]?.values).toEqual({
+      MEAL_TYPE: 'Vegetarian',
+      ORD_QTY: 400,
+      __ckRowId: 'meal1',
+      __ckRowSource: 'auto',
+      __ckSelectionEffectId: 'seedMeal',
+      __ckHideRemove: true,
+      __ckParentGroupId: 'ROOT',
+      __ckParentRowId: 'root1'
     });
   });
 
@@ -114,7 +190,8 @@ describe('copyCurrentRecordProfile', () => {
           lineItemConfig: {
             fields: [
               { id: 'MEAL_TYPE', type: 'CHOICE', required: false, options: [], optionsFr: [], optionsNl: [] },
-              { id: 'ORD_QTY', type: 'NUMBER', required: false, options: [], optionsFr: [], optionsNl: [] }
+              { id: 'ORD_QTY', type: 'NUMBER', required: false, options: [], optionsFr: [], optionsNl: [] },
+              { id: 'MP_TO_COOK', type: 'NUMBER', required: false, options: [], optionsFr: [], optionsNl: [] }
             ]
           }
         }
@@ -124,11 +201,17 @@ describe('copyCurrentRecordProfile', () => {
           {
             groupId: 'MEALS',
             fields: ['MEAL_TYPE', 'ORD_QTY'],
+            fieldValues: {
+              MP_TO_COOK: '$row.ORD_QTY'
+            },
             includeWhen: { fieldId: 'ORD_QTY', greaterThan: 0 },
             subGroups: [
               {
                 groupId: 'COOK_ROWS',
-                fields: ['PREP_TYPE', 'PREP_QTY', 'RECIPE'],
+                fields: ['PREP_TYPE', 'RECIPE'],
+                fieldValues: {
+                  PREP_QTY: '$parent.ORD_QTY'
+                },
                 includeWhen: {
                   all: [
                     { fieldId: 'PREP_TYPE', equals: ['Cook'] },
@@ -146,11 +229,11 @@ describe('copyCurrentRecordProfile', () => {
       definition,
       values: {} as any,
       lineItems: {
-        MEALS: [{ id: 'meal1', values: { MEAL_TYPE: 'Vegetarian', ORD_QTY: 50 } }],
+        MEALS: [{ id: 'meal1', values: { MEAL_TYPE: 'Vegetarian', ORD_QTY: 50, MP_TO_COOK: 30 } }],
         'MEALS::meal1::COOK_ROWS': [
           {
             id: 'cook1',
-            values: { PREP_TYPE: 'Cook', PREP_QTY: 50, RECIPE: 'Chili', __ckRowSource: 'auto', EXTRA: 'x' }
+            values: { PREP_TYPE: 'Cook', PREP_QTY: 30, RECIPE: 'Chili', __ckRowSource: 'auto', EXTRA: 'x' }
           },
           {
             id: 'cook2',
@@ -162,7 +245,7 @@ describe('copyCurrentRecordProfile', () => {
     });
 
     expect(out?.lineItems?.MEALS?.map(r => ({ id: r.id, values: r.values }))).toEqual([
-      { id: 'meal1', values: { MEAL_TYPE: 'Vegetarian', ORD_QTY: 50 } }
+      { id: 'meal1', values: { MEAL_TYPE: 'Vegetarian', ORD_QTY: 50, MP_TO_COOK: 50 } }
     ]);
     expect(out?.lineItems?.['MEALS::meal1::COOK_ROWS']?.map(r => ({ id: r.id, values: r.values }))).toEqual([
       { id: 'cook1', values: { PREP_TYPE: 'Cook', PREP_QTY: 50, RECIPE: 'Chili', __ckRowSource: 'auto' } }

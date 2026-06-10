@@ -2,9 +2,25 @@ import { matchesWhenClause } from '../../core';
 import type { CopyCurrentRecordLineItemProfile, CopyCurrentRecordProfile, WebFormDefinition } from '../../../types';
 import type { FieldValue, VisibilityContext } from '../../types';
 import type { LineItemState } from '../types';
-import { buildInitialLineItems, buildSubgroupKey } from './lineItems';
+import {
+  ROW_HIDE_REMOVE_KEY,
+  ROW_ID_KEY,
+  ROW_PARENT_GROUP_ID_KEY,
+  ROW_PARENT_ROW_ID_KEY,
+  ROW_SELECTION_EFFECT_ID_KEY,
+  ROW_SOURCE_KEY,
+  buildInitialLineItems,
+  buildSubgroupKey
+} from './lineItems';
 
-const SYSTEM_ROW_VALUE_PREFIX = '__ck';
+const COPYABLE_ROW_METADATA_KEYS = new Set<string>([
+  ROW_ID_KEY,
+  ROW_SOURCE_KEY,
+  ROW_HIDE_REMOVE_KEY,
+  ROW_PARENT_GROUP_ID_KEY,
+  ROW_PARENT_ROW_ID_KEY,
+  ROW_SELECTION_EFFECT_ID_KEY
+]);
 
 const normalizeIdList = (raw: any): string[] => {
   const list = Array.isArray(raw) ? raw : raw ? [raw] : [];
@@ -35,12 +51,16 @@ const normalizeLineItemProfiles = (raw: any): CopyCurrentRecordLineItemProfile[]
 const resolveCopyProfileValue = (
   raw: FieldValue,
   rowValues: Record<string, FieldValue>,
-  topValues: Record<string, FieldValue>
+  topValues: Record<string, FieldValue>,
+  parentValues?: Record<string, FieldValue>
 ): FieldValue => {
   if (typeof raw !== 'string') return raw;
   const trimmed = raw.trim();
   if (trimmed.startsWith('$row.')) {
     return rowValues[trimmed.slice('$row.'.length)];
+  }
+  if (trimmed.startsWith('$parent.')) {
+    return parentValues?.[trimmed.slice('$parent.'.length)];
   }
   if (trimmed.startsWith('$top.')) {
     return topValues[trimmed.slice('$top.'.length)];
@@ -52,7 +72,8 @@ const cloneRowWithFields = (
   row: any,
   fields: string[],
   fieldValues: Record<string, FieldValue> | undefined,
-  topValues: Record<string, FieldValue>
+  topValues: Record<string, FieldValue>,
+  parentValues?: Record<string, FieldValue>
 ): any => {
   const rowValues = ((row as any)?.values || {}) as Record<string, FieldValue>;
   const nextRowValues: Record<string, FieldValue> = {};
@@ -61,13 +82,13 @@ const cloneRowWithFields = (
   });
   Object.entries(fieldValues || {}).forEach(([fieldId, raw]) => {
     if (!fieldId) return;
-    const resolved = resolveCopyProfileValue(raw as FieldValue, rowValues, topValues);
+    const resolved = resolveCopyProfileValue(raw as FieldValue, rowValues, topValues, parentValues);
     if (resolved !== undefined) nextRowValues[fieldId] = resolved;
   });
-  // Preserve internal/system row attributes (e.g. __ckRowSource) so addMode="auto" sync
-  // can correctly recognize auto-generated rows and avoid duplicate auto-add behavior.
+  // Preserve only structural row metadata. Other __ck fields can be stale semantic
+  // state from the source record and should not leak into copied records.
   Object.keys(rowValues || {}).forEach(key => {
-    if (!key || !key.startsWith(SYSTEM_ROW_VALUE_PREFIX)) return;
+    if (!COPYABLE_ROW_METADATA_KEYS.has(key)) return;
     if (Object.prototype.hasOwnProperty.call(nextRowValues, key)) return;
     nextRowValues[key] = rowValues[key];
   });
@@ -78,9 +99,10 @@ const filterProfileRows = (args: {
   rows: any[];
   includeWhen: any;
   topValues: Record<string, FieldValue>;
+  parentValues?: Record<string, FieldValue>;
   lineState: LineItemState;
 }): any[] => {
-  const { rows, includeWhen, topValues, lineState } = args;
+  const { rows, includeWhen, topValues, parentValues, lineState } = args;
   if (!includeWhen) return rows || [];
   return (rows || []).filter(row => {
     const rowValues = ((row as any)?.values || {}) as Record<string, FieldValue>;
@@ -89,6 +111,7 @@ const filterProfileRows = (args: {
         const fid = (fieldId || '').toString();
         if (!fid) return undefined;
         if (Object.prototype.hasOwnProperty.call(rowValues, fid)) return rowValues[fid];
+        if (parentValues && Object.prototype.hasOwnProperty.call(parentValues, fid)) return parentValues[fid];
         return (topValues as any)[fid];
       },
       getLineItems: (groupId: string) => (lineState as any)[groupId] || [],
@@ -103,17 +126,21 @@ const copyLineItemGroup = (args: {
   sourceGroupKey: string;
   lineState: LineItemState;
   topValues: Record<string, FieldValue>;
+  parentValues?: Record<string, FieldValue>;
   nextLineItems: LineItemState;
 }): LineItemState => {
-  const { profile, sourceGroupKey, lineState, topValues } = args;
+  const { profile, sourceGroupKey, lineState, topValues, parentValues } = args;
   let nextLineItems = args.nextLineItems;
   const rows = lineState[sourceGroupKey] || [];
   const filtered = filterProfileRows({
     rows,
     includeWhen: profile.includeWhen,
     topValues,
+    parentValues,
     lineState
-  }).map(row => cloneRowWithFields(row, normalizeIdList(profile.fields), (profile as any).fieldValues, topValues));
+  }).map(row =>
+    cloneRowWithFields(row, normalizeIdList(profile.fields), (profile as any).fieldValues, topValues, parentValues)
+  );
   if (!filtered.length) return nextLineItems;
   nextLineItems = { ...nextLineItems, [sourceGroupKey]: filtered };
 
@@ -130,6 +157,7 @@ const copyLineItemGroup = (args: {
         sourceGroupKey: subgroupKey,
         lineState,
         topValues,
+        parentValues: ((row as any)?.values || {}) as Record<string, FieldValue>,
         nextLineItems
       });
     });
