@@ -433,7 +433,7 @@ test.describe('Meal Production manual script scenarios', () => {
       await waitForLoadingToSettle(frame);
       await selectRecipes(frame, ['Adassi']);
       await waitForSaved(frame);
-      const notice = frame.getByText('Ingredients receipt photo, food safety and portioning can only be recorded on the day of production.');
+      const notice = frame.getByText('Ingredients receipt evidence, food safety, portioning, and leftovers can only be recorded on the production date.');
       await expect(notice).toBeVisible({ timeout: 15_000 });
       await expect(frame.getByRole('button', { name: 'Next' })).toBeDisabled();
     } finally {
@@ -552,7 +552,7 @@ test.describe('Meal Production manual script scenarios', () => {
   pendingScenario('12', 'production helper and leftover summary details');
   pendingScenario('13', 'reheat leftovers reduce to-cook quantities and summary ingredients');
   pendingScenario('14', 'changing recipe refreshes ingredients and clears photo evidence');
-  pendingScenario('15', 'production blocks next without all recipes and ingredient receipt photos');
+  pendingScenario('15', 'production blocks next without all recipes and ingredient receipt evidence');
   pendingScenario('16', 'food safety confirmation and per-pot photo requirements');
   pendingScenario('17', 'portioning defaults to ordered portions and disallows under-delivery');
   pendingScenario('18', 'summary renders record, leftovers and ingredients details');

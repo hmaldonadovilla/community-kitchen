@@ -1,15 +1,7 @@
-export const extractDriveFileId = (value: string): string | undefined => {
-  const raw = (value || '').toString().trim();
-  if (!raw) return undefined;
+import { extractDriveFileIdFromLink } from '../../../features/uploads/domain/linkCapture';
 
-  const byPath = raw.match(/\/file\/d\/([a-zA-Z0-9_-]{10,})/);
-  if (byPath?.[1]) return byPath[1];
-  const byQuery = raw.match(/[?&]id=([a-zA-Z0-9_-]{10,})/);
-  if (byQuery?.[1]) return byQuery[1];
-  const byGoogleusercontent = raw.match(/googleusercontent\.com\/d\/([a-zA-Z0-9_-]{10,})/);
-  if (byGoogleusercontent?.[1]) return byGoogleusercontent[1];
-  if (/^[a-zA-Z0-9_-]{10,}$/.test(raw)) return raw;
-  return undefined;
+export const extractDriveFileId = (value: string): string | undefined => {
+  return extractDriveFileIdFromLink(value) || undefined;
 };
 
 export const isLikelyImageName = (name: string): boolean => /\.(png|jpe?g|webp|gif|bmp|svg|heic|heif)$/i.test(name || '');

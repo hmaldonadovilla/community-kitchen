@@ -111,7 +111,7 @@ Click on 🗑️. Verify that the leftover is removed.";Not run because script i
    ---> Ordered portions
    ---> Leftover number of portions yield if Leftover is Entire dish, recipe of Leftover and ingredients if number of portions <>0
   ---> Number of portions To cook and corresponding recipe and ingredients
-- Ingredients needed to cook all the dishes for Meal + ingredient receipt photo evidence
+- Ingredients needed to cook all the dishes for Meal + ingredient receipt evidence
 ";OK
 37;"Verify that the final report shows 
 - Community kitchen logo
@@ -126,7 +126,7 @@ Click on 🗑️. Verify that the leftover is removed.";Not run because script i
 - Total number of delivered portions
 - Any Notes added on Portioning page.
 ";OK
-38;Verify that the system prevents you from capturing Ingredients receipt photo evidence and entering Food safety or Portioning data for a future dated record and submitting it. ;OK
+38;Verify that the system prevents you from capturing Ingredients receipt evidence and entering Food safety or Portioning data for a future dated record and submitting it. ;OK
 39;"Create a complete record all the way to portioning, go back to order screen using the back button, change the production date to a future date. Verify that the system will display the following message: 
 Change production date?
 Changing the production will permanently delete service as well as any data or photos entered after service. A meal production record can only exist when customer, production date, and service are all filled in. If you wish to proceed with the change, make sure you enter the service before leaving the page otherwise the record will be permanently deleted. This action cannot be undone. 

@@ -927,7 +927,7 @@
               "dialogTrigger": "onEnable",
               "dialog": {
                 "message": {
-                  "en": "Ingredients receipt photos, food safety, portioning, and leftovers can only be recorded on the production date."
+                  "en": "Ingredients receipt evidence, food safety, portioning, and leftovers can only be recorded on the production date."
                 },
                 "confirmLabel": {
                   "en": "OK"
@@ -963,7 +963,7 @@
               "dialogTrigger": "onEnable",
               "dialog": {
                 "message": {
-                  "en": "Ingredients receipt photos, food safety, portioning, and leftovers can only be recorded on the production date."
+                  "en": "Ingredients receipt evidence, food safety, portioning, and leftovers can only be recorded on the production date."
                 },
                 "confirmLabel": {
                   "en": "OK"
@@ -2231,7 +2231,7 @@
         },
         {
           "helpText": {
-            "en": "Review and update recipe ingredients for today’s dish based on ingredient availability and selected leftovers.\nReduce recipe ingredients if you combine leftovers.\nCook only the stated “To cook” portions using listed ingredients and quantities.\nUpload ingredient receipt photos before cooking.\nReheat or combine leftovers as selected.\nFollow cooking and portioning instructions."
+            "en": "Review and update recipe ingredients for today’s dish based on ingredient availability and selected leftovers.\nReduce recipe ingredients if you combine leftovers.\nCook only the stated “To cook” portions using listed ingredients and quantities.\nAdd ingredient receipt evidence before cooking.\nReheat or combine leftovers as selected.\nFollow cooking and portioning instructions."
           },
           "id": "deliveryForm",
           "excludeWhen": {
@@ -6754,13 +6754,13 @@
     {
       "id": "ING_EVD",
       "type": "FILE_UPLOAD",
-      "qEn": "Ingredients receipt photo",
+      "qEn": "Ingredients receipt evidence",
       "required": true,
       "pair": "ing_ph",
       "listView": false,
       "ui": {
         "helperText": {
-          "en": "Upload up to 10 photos max 10 Mb each"
+          "en": "Scan a receipt QR code or upload up to 10 photos max 10 Mb each"
         },
         "helperPlacement": "belowLabel"
       },
@@ -6819,7 +6819,7 @@
         ],
         "errorMessages": {
           "minFiles": {
-            "en": "Upload at least 1 photo."
+            "en": "Scan one receipt QR code or upload at least 1 photo."
           },
           "maxFiles": {
             "en": "The maximum number of photos is {max}"
@@ -6842,7 +6842,38 @@
           }
         },
         "linkLabel": {
-          "en": "Photo {n}"
+          "en": "Receipt evidence {n}"
+        },
+        "linkCapture": {
+          "enabled": true,
+          "mode": "driveQr",
+          "allowManualPaste": false,
+          "dedupeBy": "driveFileId",
+          "labels": {
+            "scan": {
+              "en": "Scan QR"
+            },
+            "paste": {
+              "en": "Paste link"
+            },
+            "pastePlaceholder": {
+              "en": "Paste Google Drive receipt link"
+            }
+          },
+          "messages": {
+            "added": {
+              "en": "Receipt link added."
+            },
+            "duplicate": {
+              "en": "This receipt has already been added."
+            },
+            "invalid": {
+              "en": "Scan or paste a Google Drive receipt link."
+            },
+            "unsupported": {
+              "en": "QR scanning is not available in this browser. Paste the Drive link instead."
+            }
+          }
         },
         "ui": {
           "variant": "progressive"
@@ -6855,17 +6886,17 @@
           }
         },
         "discardChangesConfirm": {
-          "en": "The photos you changed are not saved yet. Close without saving them?"
+          "en": "The receipt evidence you changed is not saved yet. Close without saving it?"
         },
         "waitMessages": {
           "title": {
             "en": ""
           },
           "save": {
-            "en": "Do not leave the screen while we save your photo(s)"
+            "en": "Do not leave the screen while we save your receipt evidence"
           },
           "removeSelected": {
-            "en": "Do not leave the screen while we remove selected photo(s)"
+            "en": "Do not leave the screen while we remove selected receipt evidence"
           }
         }
       }
@@ -10375,13 +10406,13 @@
       {
         "id": "ING_EVD",
         "type": "FILE_UPLOAD",
-        "qEn": "Ingredients receipt photo",
+        "qEn": "Ingredients receipt evidence",
         "required": true,
         "pair": "ing_ph",
         "listView": false,
         "ui": {
           "helperText": {
-            "en": "Upload up to 10 photos max 10 Mb each"
+            "en": "Scan a receipt QR code or upload up to 10 photos max 10 Mb each"
           },
           "helperPlacement": "belowLabel"
         },
@@ -10440,7 +10471,7 @@
           ],
           "errorMessages": {
             "minFiles": {
-              "en": "Upload at least 1 photo."
+              "en": "Scan one receipt QR code or upload at least 1 photo."
             },
             "maxFiles": {
               "en": "The maximum number of photos is {max}"
@@ -10463,7 +10494,38 @@
             }
           },
           "linkLabel": {
-            "en": "Photo {n}"
+            "en": "Receipt evidence {n}"
+          },
+          "linkCapture": {
+            "enabled": true,
+            "mode": "driveQr",
+            "allowManualPaste": false,
+            "dedupeBy": "driveFileId",
+            "labels": {
+              "scan": {
+                "en": "Scan QR"
+              },
+              "paste": {
+                "en": "Paste link"
+              },
+              "pastePlaceholder": {
+                "en": "Paste Google Drive receipt link"
+              }
+            },
+            "messages": {
+              "added": {
+                "en": "Receipt link added."
+              },
+              "duplicate": {
+                "en": "This receipt has already been added."
+              },
+              "invalid": {
+                "en": "Scan or paste a Google Drive receipt link."
+              },
+              "unsupported": {
+                "en": "QR scanning is not available in this browser. Paste the Drive link instead."
+              }
+            }
           },
           "ui": {
             "variant": "progressive"
@@ -10476,17 +10538,17 @@
             }
           },
           "discardChangesConfirm": {
-            "en": "The photos you changed are not saved yet. Close without saving them?"
+            "en": "The receipt evidence you changed is not saved yet. Close without saving it?"
           },
           "waitMessages": {
             "title": {
               "en": ""
             },
             "save": {
-              "en": "Do not leave the screen while we save your photo(s)"
+              "en": "Do not leave the screen while we save your receipt evidence"
             },
             "removeSelected": {
-              "en": "Do not leave the screen while we remove selected photo(s)"
+              "en": "Do not leave the screen while we remove selected receipt evidence"
             }
           }
         }
@@ -12024,7 +12086,7 @@
               "dialogTrigger": "onEnable",
               "dialog": {
                 "message": {
-                  "en": "Ingredients receipt photos, food safety, portioning, and leftovers can only be recorded on the production date."
+                  "en": "Ingredients receipt evidence, food safety, portioning, and leftovers can only be recorded on the production date."
                 },
                 "confirmLabel": {
                   "en": "OK"
@@ -12060,7 +12122,7 @@
               "dialogTrigger": "onEnable",
               "dialog": {
                 "message": {
-                  "en": "Ingredients receipt photos, food safety, portioning, and leftovers can only be recorded on the production date."
+                  "en": "Ingredients receipt evidence, food safety, portioning, and leftovers can only be recorded on the production date."
                 },
                 "confirmLabel": {
                   "en": "OK"
@@ -13329,7 +13391,7 @@
         },
         {
           "helpText": {
-            "en": "Review and update recipe ingredients for today’s dish based on ingredient availability and selected leftovers.\nReduce recipe ingredients if you combine leftovers.\nCook only the stated “To cook” portions using listed ingredients and quantities.\nUpload ingredient receipt photos before cooking.\nReheat or combine leftovers as selected.\nFollow cooking and portioning instructions."
+            "en": "Review and update recipe ingredients for today’s dish based on ingredient availability and selected leftovers.\nReduce recipe ingredients if you combine leftovers.\nCook only the stated “To cook” portions using listed ingredients and quantities.\nAdd ingredient receipt evidence before cooking.\nReheat or combine leftovers as selected.\nFollow cooking and portioning instructions."
           },
           "id": "deliveryForm",
           "excludeWhen": {

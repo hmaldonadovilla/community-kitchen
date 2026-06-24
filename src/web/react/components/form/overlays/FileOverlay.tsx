@@ -33,7 +33,18 @@ export type FileOverlayProps = {
   noticeTone?: 'warning' | 'error';
   saveError?: string;
   saveRetrying?: boolean;
+  linkCapture?: {
+    scanLabel: string;
+    pasteLabel: string;
+    pastePlaceholder: string;
+    pasteSubmitLabel: string;
+    unsupportedMessage: string;
+    scanSupported: boolean;
+    allowManualPaste: boolean;
+  };
   onAdd: () => void;
+  onScanLink?: () => void;
+  onAddLink?: (value: string) => boolean;
   onSave?: () => void;
   onRetrySave?: () => void;
   onClearAll: () => void;
@@ -84,7 +95,10 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
   noticeTone = 'warning',
   saveError,
   saveRetrying,
+  linkCapture,
   onAdd,
+  onScanLink,
+  onAddLink,
   onSave,
   onRetrySave,
   onClearAll,
@@ -98,16 +112,8 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
   const maxed = uploadConfig?.maxFiles ? items.length >= uploadConfig.maxFiles : false;
   const locked = submitting || saving === true || saveRetrying === true || readOnly === true;
   const canSave = Boolean(onSave) && !!dirty && !locked;
-
-  const objectThumbSignature = useMemo(() => {
-    if (!open) return '';
-    return items
-      .map((it, idx) => {
-        if (!isFileInstance(it)) return `url:${idx}:${it}`;
-        return buildLocalFileThumbnailKey(it, idx);
-      })
-      .join('||');
-  }, [items, open]);
+  const [linkInputOpen, setLinkInputOpen] = useState(false);
+  const [linkInputValue, setLinkInputValue] = useState('');
 
   const [dataThumbs, setDataThumbs] = useState<Map<string, string>>(() => new Map());
 
@@ -152,7 +158,7 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [items, objectThumbSignature, open]);
+  }, [items, open]);
 
   const objectThumbs = useMemo(() => {
     if (!open) return new Map<string, string>();
@@ -168,7 +174,7 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
       map.set(key, URL.createObjectURL(file));
     });
     return map;
-  }, [objectThumbSignature, open]);
+  }, [items, open]);
 
   useEffect(() => {
     return () => {
@@ -177,6 +183,13 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
       }
     };
   }, [objectThumbs]);
+
+  useEffect(() => {
+    if (!open) {
+      setLinkInputOpen(false);
+      setLinkInputValue('');
+    }
+  }, [open]);
 
   if (!open) return null;
 
@@ -232,6 +245,26 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
             >
               {tSystem('files.add', language, 'Add photo')}
             </button>
+            {linkCapture?.scanSupported ? (
+              <button
+                type="button"
+                onClick={onScanLink}
+                disabled={locked || maxed || !onScanLink}
+                style={withDisabled(buttonStyles.secondary, locked || maxed || !onScanLink)}
+              >
+                {linkCapture.scanLabel}
+              </button>
+            ) : null}
+            {linkCapture?.allowManualPaste ? (
+              <button
+                type="button"
+                onClick={() => setLinkInputOpen(current => !current)}
+                disabled={locked || maxed || !onAddLink}
+                style={withDisabled(buttonStyles.secondary, locked || maxed || !onAddLink)}
+              >
+                {linkCapture.pasteLabel}
+              </button>
+            ) : null}
             {items.length ? (
               <button
                 type="button"
@@ -251,7 +284,50 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
               </button>
             ) : null}
             {maxed ? <span className="muted">{tSystem('files.maxReached', language, 'Required photos added.')}</span> : null}
+            {linkCapture && !linkCapture.scanSupported && linkCapture.unsupportedMessage ? (
+              <span className="muted">{linkCapture.unsupportedMessage}</span>
+            ) : null}
           </div>
+
+          {linkInputOpen && linkCapture ? (
+            <form
+              onSubmit={event => {
+                event.preventDefault();
+                const accepted = onAddLink?.(linkInputValue.trim()) || false;
+                if (accepted) {
+                  setLinkInputValue('');
+                  setLinkInputOpen(false);
+                }
+              }}
+              style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}
+            >
+              <input
+                type="text"
+                inputMode="url"
+                value={linkInputValue}
+                onChange={event => setLinkInputValue(event.currentTarget.value)}
+                placeholder={linkCapture.pastePlaceholder}
+                disabled={locked || maxed}
+                style={{
+                  flex: '1 1 260px',
+                  minWidth: 0,
+                  border: '1px solid var(--border)',
+                  borderRadius: 8,
+                  padding: '10px 12px',
+                  font: 'inherit',
+                  background: 'var(--card)',
+                  color: 'var(--text)'
+                }}
+              />
+              <button
+                type="submit"
+                disabled={locked || maxed || !linkInputValue.trim()}
+                style={withDisabled(buttonStyles.primary, locked || maxed || !linkInputValue.trim())}
+              >
+                {linkCapture.pasteSubmitLabel}
+              </button>
+            </form>
+          ) : null}
 
           {notice ? (
             <div

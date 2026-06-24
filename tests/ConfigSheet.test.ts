@@ -808,7 +808,7 @@ describe('ConfigSheet', () => {
         '',
         '',
         'Active',
-        '{"minFiles":2,"maxFiles":3,"maxFileSizeMb":5,"allowedExtensions":["jpg","png"],"allowedMimeTypes":["image/*"],"errorMessages":{"minFiles":{"en":"Need {min} photos"}}, "warningMessages":{"maxFilesPartial":{"en":"Only first {max} photos were added."}}, "helperText":{"en":"You can add {count} more photos."}, "waitMessages":{"save":{"en":"Saving photos..."},"removeSelected":{"en":"Removing photos..."}}, "linkLabel":{"en":"Photo {n}"}, "discardChangesConfirm":{"en":"Close without saving photos?"}, "ui":{"variant":"progressive","slotIcon":"clip"}, "compression":{"images":true},"destinationFolderId":"abc","blockUntilSaved":true}',
+        '{"minFiles":2,"maxFiles":3,"maxFileSizeMb":5,"allowedExtensions":["jpg","png"],"allowedMimeTypes":["image/*"],"errorMessages":{"minFiles":{"en":"Need {min} photos"}}, "warningMessages":{"maxFilesPartial":{"en":"Only first {max} photos were added."}}, "helperText":{"en":"You can add {count} more photos."}, "waitMessages":{"save":{"en":"Saving photos..."},"removeSelected":{"en":"Removing photos..."}}, "linkLabel":{"en":"Photo {n}"}, "linkCapture":{"enabled":true,"mode":"driveQr","dedupeBy":"driveFileId","labels":{"scan":{"en":"Scan QR"}}}, "discardChangesConfirm":{"en":"Close without saving photos?"}, "ui":{"variant":"progressive","slotIcon":"clip"}, "compression":{"images":true},"destinationFolderId":"abc","blockUntilSaved":true}',
         '',
         '',
         ''
@@ -836,6 +836,9 @@ describe('ConfigSheet', () => {
     expect(((questions[0].uploadConfig as any).waitMessages?.removeSelected || {}).en).toBe('Removing photos...');
     expect((questions[0].uploadConfig as any).linkLabel).toBeDefined();
     expect(((questions[0].uploadConfig as any).linkLabel || {}).en).toBe('Photo {n}');
+    expect((questions[0].uploadConfig as any).linkCapture).toBeDefined();
+    expect(((questions[0].uploadConfig as any).linkCapture || {}).mode).toBe('driveQr');
+    expect(((questions[0].uploadConfig as any).linkCapture?.labels?.scan || {}).en).toBe('Scan QR');
     expect((questions[0].uploadConfig as any).discardChangesConfirm).toBeDefined();
     expect(((questions[0].uploadConfig as any).discardChangesConfirm || {}).en).toBe('Close without saving photos?');
     expect((questions[0].uploadConfig as any).ui).toBeDefined();
