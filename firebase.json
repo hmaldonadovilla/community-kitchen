@@ -21,6 +21,15 @@
             "value": "no-cache"
           }
         ]
+      },
+      {
+        "source": "/qr-scanner.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
       }
     ]
   }

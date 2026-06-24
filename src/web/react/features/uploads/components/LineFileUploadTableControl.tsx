@@ -17,6 +17,7 @@ import type {
   LineFileUploadOrderedEntryCheckArgs,
   OpenFileOverlayArgs
 } from '../../../components/form/lineItemGroupQuestionTypes';
+import { resolveUploadLinkCaptureConfig } from '../domain/linkCapture';
 
 type LineFileInputChangeArgs = {
   group: WebQuestionDefinition;
@@ -75,6 +76,7 @@ export const LineFileUploadTableControl: React.FC<{
   const items = toUploadItems(value);
   const count = items.length;
   const uploadConfig = field.uploadConfig || {};
+  const linkCaptureConfig = resolveUploadLinkCaptureConfig(uploadConfig);
 
   if (renderAsLabel) {
     return (
@@ -168,6 +170,18 @@ export const LineFileUploadTableControl: React.FC<{
             }
             if (readOnly) return;
             if (checkFileUploadOrderedEntry({ group, rowId, field, fieldPath, source: 'add' })) return;
+            if (linkCaptureConfig) {
+              onDiagnostic?.('upload.linkCapture.overlayOpen', { scope: 'line', fieldPath, currentCount: items.length });
+              openFileOverlay({
+                scope: 'line',
+                title: label,
+                group,
+                rowId,
+                field,
+                fieldPath
+              });
+              return;
+            }
             onDiagnostic?.('upload.add.click', { scope: 'line', fieldPath, currentCount: items.length });
             fileInputsRef.current[fieldPath]?.click();
           }}

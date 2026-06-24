@@ -19,6 +19,9 @@ describe('staging integrity dialogs and list legend config', () => {
   const expectedPhotoDiscardConfirm = {
     en: 'The photos you changed are not saved yet. Close without saving them?'
   };
+  const expectedReceiptDiscardConfirm = {
+    en: 'The receipt evidence you changed is not saved yet. Close without saving it?'
+  };
   const expectedMealProductionUploadPartialWarning = {
     en: 'Maximum 10 photos allowed. Extra selected photos were not added. Please review your photos'
   };
@@ -54,17 +57,19 @@ describe('staging integrity dialogs and list legend config', () => {
 
     expect(uploadFields.length).toBeGreaterThan(0);
     uploadFields.forEach(field => {
-      expect(field.uploadConfig?.discardChangesConfirm).toEqual(expectedPhotoDiscardConfirm);
+      const expected = field?.id === 'ING_EVD' ? expectedReceiptDiscardConfirm : expectedPhotoDiscardConfirm;
+      expect(field.uploadConfig?.discardChangesConfirm).toEqual(expected);
     });
   });
 
   test('meal production photo upload helpers include photo count and size limits', () => {
     const cfg = readConfig('config_meal_production.json');
-    ['ING_EVD', 'TEMP_EVD'].forEach(id => {
-      expect(findQuestion(cfg.questions || [], id)?.ui?.helperText?.en).toBe('Upload up to 10 photos max 10 Mb each');
-      expect(findQuestion(cfg.definition?.questions || [], id)?.ui?.helperText?.en).toBe(
-        'Upload up to 10 photos max 10 Mb each'
-      );
+    [
+      ['ING_EVD', 'Scan a receipt QR code or upload up to 10 photos max 10 Mb each'],
+      ['TEMP_EVD', 'Upload up to 10 photos max 10 Mb each']
+    ].forEach(([id, expected]) => {
+      expect(findQuestion(cfg.questions || [], id)?.ui?.helperText?.en).toBe(expected);
+      expect(findQuestion(cfg.definition?.questions || [], id)?.ui?.helperText?.en).toBe(expected);
     });
   });
 

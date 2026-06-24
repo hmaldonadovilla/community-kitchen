@@ -6,7 +6,11 @@ import type { FormErrors } from '../../../types';
 import { resolveFieldLabel } from '../../../utils/labels';
 import { describeUploadItem, getUploadMinRequired, toUploadItems } from '../../../components/form/utils';
 import { RequiredStar, srOnly, withDisabled } from '../../../components/form/ui';
-import type { LineFileUploadOrderedEntryCheckArgs } from '../../../components/form/lineItemGroupQuestionTypes';
+import type {
+  LineFileUploadOrderedEntryCheckArgs,
+  OpenFileOverlayArgs
+} from '../../../components/form/lineItemGroupQuestionTypes';
+import { resolveUploadLinkCaptureConfig } from '../domain/linkCapture';
 
 type LineFileInputChangeArgs = {
   group: WebQuestionDefinition;
@@ -37,12 +41,14 @@ export const LineFileUploadListQuestion: React.FC<{
   renderWarnings: (fieldPath: string) => React.ReactNode;
   renderReadOnlyLine: (display: React.ReactNode) => React.ReactNode;
   checkFileUploadOrderedEntry: (args: LineFileUploadOrderedEntryCheckArgs) => boolean;
+  openFileOverlay: (args: OpenFileOverlayArgs) => void;
   handleFileInputChange: (args: LineFileInputChangeArgs) => void;
   removeFile: (args: { group: WebQuestionDefinition; rowId: string; field: LineItemFieldConfig; fieldPath: string; index: number }) => void;
   clearFiles: (args: { group: WebQuestionDefinition; rowId: string; field: LineItemFieldConfig; fieldPath: string }) => void;
   fileInputsRef: React.MutableRefObject<Record<string, HTMLInputElement | null>>;
   uploadAnnouncements: Record<string, string>;
   renderUploadFailure: (fieldPath: string, disabled: boolean) => React.ReactNode;
+  onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
 }> = ({
   group,
   rowId,
@@ -59,15 +65,18 @@ export const LineFileUploadListQuestion: React.FC<{
   renderWarnings,
   renderReadOnlyLine,
   checkFileUploadOrderedEntry,
+  openFileOverlay,
   handleFileInputChange,
   removeFile,
   clearFiles,
   fileInputsRef,
   uploadAnnouncements,
-  renderUploadFailure
+  renderUploadFailure,
+  onDiagnostic
 }) => {
   const readOnly = field.readOnly === true;
   const uploadConfig = field.uploadConfig || {};
+  const linkCaptureConfig = resolveUploadLinkCaptureConfig(uploadConfig);
   const items = toUploadItems(value);
   const label = resolveFieldLabel(field, language, field.id);
 
@@ -96,6 +105,18 @@ export const LineFileUploadListQuestion: React.FC<{
     if (submitting || readOnly) return;
     if (checkFileUploadOrderedEntry({ group, rowId, field, fieldPath, source: 'add' })) return;
     if (maxed) return;
+    if (linkCaptureConfig) {
+      onDiagnostic?.('upload.linkCapture.overlayOpen', { scope: 'line', fieldPath, currentCount: items.length });
+      openFileOverlay({
+        scope: 'line',
+        title: label,
+        group,
+        rowId,
+        field,
+        fieldPath
+      });
+      return;
+    }
     fileInputsRef.current[fieldPath]?.click();
   };
   const onClearAll = () => {

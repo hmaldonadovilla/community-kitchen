@@ -11,6 +11,7 @@ import {
 } from '../../app/lineItems';
 import { tSystem } from '../../../systemStrings';
 import { matchesWhenClause } from '../../../rules/visibility';
+import { formatDriveFileDisplayName } from '../../features/uploads/domain/linkCapture';
 
 type TemplateVars = Record<string, string | number | boolean | null | undefined>;
 
@@ -246,6 +247,8 @@ export const isHttpUrl = (url: string): boolean => /^https?:\/\//i.test((url || 
 export const fileNameFromUrl = (url: string): string => {
   const trimmed = (url || '').trim();
   if (!trimmed) return 'Photo';
+  const driveName = formatDriveFileDisplayName(trimmed);
+  if (driveName) return driveName;
   const noQuery = trimmed.split('?')[0] || trimmed;
   const last = noQuery.split('/').pop() || noQuery;
   try {

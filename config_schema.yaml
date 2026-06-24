@@ -1054,6 +1054,10 @@ components:
 
             Variables:
             - `{n}`: 1-based index of the file within this field
+        linkCapture:
+          $ref: '#/components/schemas/FileUploadLinkCaptureConfig'
+          description: |
+            Optional QR/link capture support for adding existing Google Drive files to a FILE_UPLOAD field without uploading a new file.
         discardChangesConfirm:
           $ref: '#/components/schemas/LocalizedString'
           description: |
@@ -1123,6 +1127,56 @@ components:
           description: |
             Message shown while a remove-one or remove-all transaction is in progress.
       description: Optional per-field overrides for blocking upload wait messages.
+
+    FileUploadLinkCaptureConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+          description: When true, enables link capture controls in the upload overlay.
+        mode:
+          type: string
+          enum: [driveQr]
+          description: |
+            `driveQr` accepts QR/manual values that are Google Drive/Docs file URLs or bare Drive file IDs, then stores a canonical Drive URL.
+        allowManualPaste:
+          type: boolean
+          description: |
+            When true, show a paste-link fallback in the upload overlay. Defaults to true.
+        dedupeBy:
+          type: string
+          enum: [url, driveFileId]
+          description: |
+            Duplicate policy for captured links. Use `driveFileId` when the same invoice may be scanned from different Drive URL shapes.
+        labels:
+          type: object
+          properties:
+            scan:
+              $ref: '#/components/schemas/LocalizedString'
+              description: Label for the QR scan action.
+            paste:
+              $ref: '#/components/schemas/LocalizedString'
+              description: Label for the paste-link action.
+            pastePlaceholder:
+              $ref: '#/components/schemas/LocalizedString'
+              description: Placeholder for the manual link input.
+        messages:
+          type: object
+          properties:
+            added:
+              $ref: '#/components/schemas/LocalizedString'
+              description: Message announced after a link is added.
+            duplicate:
+              $ref: '#/components/schemas/LocalizedString'
+              description: Message shown when the same Drive file is already attached.
+            invalid:
+              $ref: '#/components/schemas/LocalizedString'
+              description: Message shown for non-Drive QR/manual values.
+            unsupported:
+              $ref: '#/components/schemas/LocalizedString'
+              description: Message shown when QR camera scanning is unavailable and paste should be used.
+      description: |
+        Link capture settings for FILE_UPLOAD fields. Captured links are saved through the same queued record mutation lane as uploaded files. In `driveQr` mode, non-Drive content is rejected and `dedupeBy: driveFileId` prevents duplicate references to the same Drive document. Live QR scanning is launched from the external Firebase web asset host so the camera runs in a top-level HTTPS document instead of the Apps Script HTML-service iframe.
 
     FileUploadUiConfig:
       type: object

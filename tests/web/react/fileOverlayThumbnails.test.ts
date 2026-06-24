@@ -30,6 +30,7 @@ describe('fileOverlayThumbnails', () => {
   it('extracts Drive ids and local file keys consistently', () => {
     const driveId = '11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K';
     expect(extractDriveFileId(`https://drive.google.com/open?id=${driveId}`)).toBe(driveId);
+    expect(extractDriveFileId(`https://docs.google.com/document/d/${driveId}/edit`)).toBe(driveId);
     expect(extractDriveFileId(`https://lh3.googleusercontent.com/d/${driveId}=w512`)).toBe(driveId);
     expect(isLikelyImageName('scan.heic')).toBe(true);
     expect(buildLocalFileThumbnailKey({ name: 'receipt.jpg', size: 123, lastModified: 456, type: 'image/jpeg' }, 2)).toBe(

@@ -15,6 +15,7 @@ import {
   srOnly,
   withDisabled
 } from '../../../components/form/ui';
+import { resolveUploadLinkCaptureConfig } from '../domain/linkCapture';
 
 type LineFileUploadOrderedEntryCheckArgs = {
   group: WebQuestionDefinition;
@@ -100,6 +101,7 @@ export const LineFileUploadQuestion: React.FC<{
 }) => {
   const items = toUploadItems(value as any);
   const uploadConfig = field.uploadConfig || {};
+  const linkCaptureConfig = resolveUploadLinkCaptureConfig(uploadConfig);
   if (renderAsLabel && renderReadOnly) {
     const displayContent = items.length
       ? items.map((item: any, idx: number) => (
@@ -197,6 +199,18 @@ export const LineFileUploadQuestion: React.FC<{
                 source: 'add'
               })
             ) {
+              return;
+            }
+            if (linkCaptureConfig) {
+              onDiagnostic?.('upload.linkCapture.overlayOpen', { scope: 'line', fieldPath, currentCount: items.length });
+              openFileOverlay({
+                scope: 'line',
+                title: label,
+                group,
+                rowId,
+                field,
+                fieldPath
+              });
               return;
             }
             onDiagnostic?.('upload.add.click', { scope: 'line', fieldPath, currentCount: items.length });

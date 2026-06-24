@@ -650,6 +650,9 @@ export class ConfigSheet {
           root.file_label;
         if (linkLabel !== undefined && linkLabel !== null) (config as any).linkLabel = linkLabel;
 
+        const linkCapture = root.linkCapture ?? root.link_capture ?? root.qrCapture ?? root.qr_capture;
+        if (linkCapture !== undefined && linkCapture !== null) (config as any).linkCapture = linkCapture;
+
         const discardChangesConfirm =
           root.discardChangesConfirm ??
           root.discard_changes_confirm ??
@@ -849,6 +852,9 @@ export class ConfigSheet {
       root.fileLabel ??
       root.file_label;
     if (linkLabel !== undefined && linkLabel !== null) (cfg as any).linkLabel = linkLabel;
+
+    const linkCapture = root.linkCapture ?? root.link_capture ?? root.qrCapture ?? root.qr_capture;
+    if (linkCapture !== undefined && linkCapture !== null) (cfg as any).linkCapture = linkCapture;
 
     const discardChangesConfirm =
       root.discardChangesConfirm ??

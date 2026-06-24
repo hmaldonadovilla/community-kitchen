@@ -1537,8 +1537,13 @@ export interface FileUploadConfig {
    *
    * Variables:
    * - {n}: 1-based index of the file within this field
-   */
+  */
   linkLabel?: LocalizedString;
+  /**
+   * Optional QR/link capture support for FILE_UPLOAD fields. When enabled, the
+   * upload overlay can add an existing Drive file link alongside uploaded files.
+   */
+  linkCapture?: FileUploadLinkCaptureConfig;
   /**
    * Optional UI customization for how the upload control is rendered.
    * When omitted, the default dropzone + Files button UI is used.
@@ -1562,6 +1567,35 @@ export interface FileUploadConfig {
    * unsaved add/remove changes. Falls back to the built-in system string.
    */
   discardChangesConfirm?: LocalizedString;
+}
+
+export interface FileUploadLinkCaptureConfig {
+  enabled?: boolean;
+  /**
+   * Current supported mode. Reads QR/manual values as Google Drive file links or
+   * bare Drive file IDs and stores canonical Drive URLs.
+   */
+  mode?: 'driveQr';
+  /**
+   * When true, show a manual paste fallback for existing Drive links.
+   * Defaults to true.
+   */
+  allowManualPaste?: boolean;
+  /**
+   * Duplicate policy for captured links. Defaults to `driveFileId`.
+   */
+  dedupeBy?: 'url' | 'driveFileId';
+  labels?: {
+    scan?: LocalizedString;
+    paste?: LocalizedString;
+    pastePlaceholder?: LocalizedString;
+  };
+  messages?: {
+    duplicate?: LocalizedString;
+    invalid?: LocalizedString;
+    unsupported?: LocalizedString;
+    added?: LocalizedString;
+  };
 }
 
 export interface FileUploadErrorMessages {

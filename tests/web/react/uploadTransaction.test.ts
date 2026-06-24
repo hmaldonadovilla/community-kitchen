@@ -98,6 +98,26 @@ describe('upload transaction helpers', () => {
     expect(payload.values.OTHER_PHOTO).toBe('');
   });
 
+  it('keeps URL-only target upload values as URLs without creating file payloads', async () => {
+    const driveUrl = 'https://drive.google.com/open?id=11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K';
+    const payload = await buildUploadDraftPayload({
+      definition: {
+        title: 'Upload Test',
+        questions: [{ id: 'RECEIPT', type: 'FILE_UPLOAD', uploadConfig: { maxFiles: 10 } } as any]
+      } as any,
+      formKey: 'Config: Upload Test',
+      language: 'EN',
+      values: {
+        RECEIPT: [driveUrl] as any
+      },
+      lineItems: {},
+      existingRecordId: 'rec-1',
+      target: { scope: 'top', questionId: 'RECEIPT' }
+    });
+
+    expect(payload.values.RECEIPT).toEqual([driveUrl]);
+  });
+
   it('extracts and applies server upload values', () => {
     expect(splitUploadValue('https://a.test/1, https://a.test/2')).toEqual([
       'https://a.test/1',

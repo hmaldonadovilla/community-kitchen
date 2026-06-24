@@ -218,7 +218,7 @@ describe('meal production bundled HTML rendering', () => {
     expect(res.html).toContain('Green beans - frozen');
     expect(res.html).toContain('Salt');
     expect(res.html).toContain('ck-category-row');
-    expect(res.html).toContain('Ingredients receipt photo evidence');
+    expect(res.html).toContain('Ingredients receipt evidence');
     expect(res.html).not.toContain('MP-AA000818 |');
     expect(res.html).not.toContain('https://example.com/photo-1');
   });

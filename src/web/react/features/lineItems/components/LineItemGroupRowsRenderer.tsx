@@ -1385,12 +1385,14 @@ export const LineItemGroupRowsRenderer: React.FC<LineItemGroupRowsRendererProps>
                         renderWarnings={renderWarnings}
                         renderReadOnlyLine={renderReadOnlyLine}
                         checkFileUploadOrderedEntry={isFileUploadOrderedEntryBlocked}
+                        openFileOverlay={openFileOverlay}
                         handleFileInputChange={handleLineFileInputChange}
                         removeFile={removeLineFile}
                         clearFiles={clearLineFiles}
                         fileInputsRef={fileInputsRef}
                         uploadAnnouncements={uploadAnnouncements}
                         renderUploadFailure={renderUploadFailure}
+                        onDiagnostic={onDiagnostic}
                       />
                     );
                   default: {

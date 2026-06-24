@@ -20,6 +20,7 @@ import {
   srOnly,
   withDisabled
 } from '../../../components/form/ui';
+import { resolveUploadLinkCaptureConfig } from '../domain/linkCapture';
 
 type TopFileUploadOrderedEntryCheckArgs = {
   scope: 'top';
@@ -88,6 +89,7 @@ export const TopFileUploadQuestion: React.FC<{
 }) => {
   const items = toUploadItems(value);
   const uploadConfig = q.uploadConfig || {};
+  const linkCaptureConfig = resolveUploadLinkCaptureConfig(uploadConfig);
   const helperCfg = resolveFieldHelperText({ ui: q.ui, language });
   const helperText = helperCfg.belowLabelText;
   const readOnly = q.readOnly === true;
@@ -192,6 +194,16 @@ export const TopFileUploadQuestion: React.FC<{
                 source: 'add'
               })
             ) {
+              return;
+            }
+            if (linkCaptureConfig) {
+              onDiagnostic?.('upload.linkCapture.overlayOpen', { scope: 'top', fieldPath: q.id, currentCount: items.length });
+              openFileOverlay({
+                scope: 'top',
+                title: resolveLabel(q, language),
+                question: q,
+                fieldPath: q.id
+              });
               return;
             }
             onDiagnostic?.('upload.add.click', { scope: 'top', fieldPath: q.id, currentCount: items.length });
