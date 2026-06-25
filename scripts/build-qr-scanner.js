@@ -30,17 +30,15 @@ const htmlFor = (scriptFileName) => `<!doctype html>
   <style>
     :root { color-scheme: light; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
     body { margin: 0; background: #fff; color: #111; }
-    .shell { min-height: 100vh; display: flex; flex-direction: column; }
+    .shell { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
     header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #d0d0d0; }
     h1 { margin: 0; font-size: 1.25rem; font-weight: 650; }
-    main { display: flex; flex: 1; flex-direction: column; gap: 12px; padding: 12px; }
+    main { display: flex; flex: 1; min-height: 0; flex-direction: column; gap: 12px; padding: 12px 12px max(16px, env(safe-area-inset-bottom)); }
     .status { min-height: 1.5em; color: #555; font-size: 0.95rem; }
-    .preview { background: #777; border-radius: 8px; overflow: hidden; min-height: 320px; display: flex; align-items: center; justify-content: center; }
-    video { width: 100%; min-height: 320px; object-fit: cover; display: block; }
-    .actions { display: grid; gap: 8px; }
+    .status.success { color: #137333; font-weight: 700; }
+    .preview { background: #777; border-radius: 8px; overflow: hidden; height: min(58vh, 430px); height: min(58dvh, 430px); min-height: 220px; display: flex; align-items: center; justify-content: center; }
+    video { width: 100%; height: 100%; object-fit: cover; display: block; }
     button { min-height: 44px; border: 1px solid #aaa; border-radius: 8px; background: #fff; color: #111; font: inherit; font-weight: 600; padding: 10px 14px; }
-    button.primary { background: #1558d6; border-color: #1558d6; color: #fff; }
-    .result { overflow-wrap: anywhere; border: 1px solid #d0d0d0; border-radius: 8px; padding: 10px; font-size: 0.9rem; }
   </style>
 </head>
 <body>
@@ -54,13 +52,6 @@ const htmlFor = (scriptFileName) => `<!doctype html>
       <div class="preview">
         <video data-role="video" muted playsinline autoplay></video>
       </div>
-      <div class="actions">
-        <button type="button" class="primary" data-action="start">Start camera</button>
-        <button type="button" data-action="photo">Take or choose QR photo</button>
-        <button type="button" data-action="copy" hidden>Copy scanned link</button>
-      </div>
-      <div class="result" data-role="result" hidden></div>
-      <input data-role="photo-input" type="file" accept="image/*" capture="environment" hidden>
     </main>
   </div>
   <script defer src="/${scriptFileName}"></script>
@@ -85,6 +76,9 @@ const htmlFor = (scriptFileName) => `<!doctype html>
 
   const hash = crypto.createHash('sha256').update(output, 'utf8').digest('hex').slice(0, 12);
   const scriptFileName = `assets/qr-scanner.${hash}.js`;
+  fs.readdirSync(assetsDir)
+    .filter(name => /^qr-scanner\.[a-f0-9]+\.js$/.test(name) && name !== path.basename(scriptFileName))
+    .forEach(name => fs.rmSync(path.join(assetsDir, name), { force: true }));
   fs.writeFileSync(path.join(hostingDir, scriptFileName), output, 'utf8');
   fs.writeFileSync(path.join(hostingDir, 'qr-scanner.html'), htmlFor(scriptFileName), 'utf8');
   updateManifest({

@@ -56,7 +56,12 @@ export type AppendCapturedUploadLinkResult =
       url: string;
       driveFileId: string;
       maxFiles: number;
-    };
+  };
+
+export const shouldRetryDuplicateCapturedUploadLink = (args: {
+  blockUntilSaved?: boolean;
+  hasUploadFailure?: boolean;
+}): boolean => Boolean(args.blockUntilSaved && args.hasUploadFailure);
 
 const DRIVE_FILE_ID_RE = /^[a-zA-Z0-9_-]{10,}$/;
 
@@ -70,6 +75,82 @@ const firstUrlOrValue = (raw: string): string => {
   return (match?.[0] || raw).trim();
 };
 
+const tryDecodeURIComponent = (raw: string): string => {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+};
+
+const unescapeUrlText = (raw: string): string =>
+  raw
+    .replace(/\\\//g, '/')
+    .replace(/\\u0026/gi, '&')
+    .replace(/\\u003d/gi, '=')
+    .replace(/\\u003f/gi, '?')
+    .replace(/&amp;/gi, '&');
+
+const pushCandidate = (queue: string[], seen: Set<string>, raw: unknown): void => {
+  const value = normalizeString(raw);
+  if (!value || seen.has(value)) return;
+  seen.add(value);
+  queue.push(value);
+};
+
+const pushJsonUrlCandidates = (queue: string[], seen: Set<string>, raw: string): void => {
+  if (!raw || (!raw.startsWith('{') && !raw.startsWith('['))) return;
+  try {
+    const parsed = JSON.parse(raw);
+    const visit = (value: unknown, depth: number): void => {
+      if (depth > 3 || value === undefined || value === null) return;
+      if (typeof value === 'string' || typeof value === 'number') {
+        pushCandidate(queue, seen, value);
+        return;
+      }
+      if (Array.isArray(value)) {
+        value.forEach(item => visit(item, depth + 1));
+        return;
+      }
+      if (typeof value === 'object') {
+        ['value', 'url', 'href', 'link', 'rawValue', 'raw'].forEach(key => visit((value as any)[key], depth + 1));
+      }
+    };
+    visit(parsed, 0);
+  } catch {
+    // Ignore non-JSON candidates.
+  }
+};
+
+const collectDriveLinkCandidates = (value: string): string[] => {
+  const queue: string[] = [];
+  const seen = new Set<string>();
+  pushCandidate(queue, seen, value);
+
+  for (let index = 0; index < queue.length && index < 24; index += 1) {
+    const current = queue[index];
+    const firstUrl = firstUrlOrValue(current);
+    pushCandidate(queue, seen, firstUrl);
+    pushCandidate(queue, seen, tryDecodeURIComponent(current));
+    pushCandidate(queue, seen, unescapeUrlText(current));
+    pushCandidate(queue, seen, unescapeUrlText(tryDecodeURIComponent(current)));
+    pushJsonUrlCandidates(queue, seen, current);
+
+    if (!/^https?:\/\//i.test(firstUrl)) continue;
+    try {
+      const url = new URL(firstUrl);
+      ['id', 'q', 'url', 'u', 'continue', 'target'].forEach(param => {
+        const rawParam = url.searchParams.get(param);
+        if (rawParam) pushCandidate(queue, seen, tryDecodeURIComponent(rawParam));
+      });
+    } catch {
+      // Ignore malformed URL candidates.
+    }
+  }
+
+  return queue;
+};
+
 const isAllowedDriveUrl = (raw: string): boolean => {
   if (!/^https?:\/\//i.test(raw)) return true;
   try {
@@ -78,7 +159,8 @@ const isAllowedDriveUrl = (raw: string): boolean => {
       host === 'drive.google.com' ||
       host === 'docs.google.com' ||
       host.endsWith('.googleusercontent.com') ||
-      host === 'googleusercontent.com'
+      host === 'googleusercontent.com' ||
+      host === 'drive.usercontent.google.com'
     );
   } catch {
     return false;
@@ -86,10 +168,6 @@ const isAllowedDriveUrl = (raw: string): boolean => {
 };
 
 export const extractDriveFileIdFromLink = (value: string): string => {
-  const raw = firstUrlOrValue(normalizeString(value));
-  if (!raw) return '';
-  if (!isAllowedDriveUrl(raw)) return '';
-
   const patterns = [
     /[?&]id=([a-zA-Z0-9_-]{10,})/,
     /\/file\/d\/([a-zA-Z0-9_-]{10,})/,
@@ -98,12 +176,17 @@ export const extractDriveFileIdFromLink = (value: string): string => {
     /googleusercontent\.com\/d\/([a-zA-Z0-9_-]{10,})/
   ];
 
-  for (const pattern of patterns) {
-    const match = raw.match(pattern);
-    if (match?.[1]) return match[1];
+  for (const candidate of collectDriveLinkCandidates(normalizeString(value))) {
+    const raw = firstUrlOrValue(candidate);
+    if (!raw || !isAllowedDriveUrl(raw)) continue;
+    for (const pattern of patterns) {
+      const match = raw.match(pattern);
+      if (match?.[1]) return match[1];
+    }
+    if (DRIVE_FILE_ID_RE.test(raw)) return raw;
   }
 
-  return DRIVE_FILE_ID_RE.test(raw) ? raw : '';
+  return '';
 };
 
 export const canonicalDriveFileUrl = (fileId: string): string => {

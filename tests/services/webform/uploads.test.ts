@@ -15,6 +15,9 @@ const makeUpload = (name: string, value: string) => ({
 });
 
 describe('UploadService', () => {
+  const stagingIngredientReceiptFolderId = '1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu';
+  const qrExampleFileId = '1nhhILSgLLXn2TKoljGZ9XyGGVstyENlu';
+  const qrWrongFolderFileId = '1g52g7XOLZHIVkBWPPYKgAPZUGwbU0vIQ';
   const originalScriptApp = (global as any).ScriptApp;
   const originalUrlFetchApp = (global as any).UrlFetchApp;
   const originalDrive = (global as any).Drive;
@@ -164,5 +167,260 @@ describe('UploadService', () => {
 
     expect(urls).toBe('https://drive.test/first, https://drive.test/second');
     expect(createFile).toHaveBeenCalledTimes(2);
+  });
+
+  test('accepts captured Drive links from the configured customer Shared Drive', () => {
+    (global as any).DriveApp.getFolderById = jest.fn(() => ({
+      getId: () => 'folder-1',
+      getName: () => 'Uploads',
+      createFile: jest.fn()
+    }));
+    (global as any).Drive = {
+      Files: {
+        get: jest.fn((fileId: string) => {
+          if (fileId === 'folder-1') return { id: 'folder-1', driveId: 'customer-drive-1', parents: [] };
+          if (fileId === 'receipt-file-1') {
+            return {
+              id: 'receipt-file-1',
+              driveId: 'customer-drive-1',
+              parents: [{ id: 'invoices-folder' }],
+              labels: { trashed: false },
+              alternateLink: 'https://drive.google.com/file/d/receipt-file-1/view'
+            };
+          }
+          throw new Error(`Unexpected file id ${fileId}`);
+        })
+      }
+    };
+
+    const service = new UploadService(new MockSpreadsheet() as any);
+    const urls = service.saveFiles([`https://drive.google.com/file/d/receipt-file-1/view`], {
+      destinationFolderId: 'folder-1',
+      linkCapture: {
+        enabled: true,
+        mode: 'driveQr',
+        validation: {
+          requireServerValidation: true,
+          includeUploadDestinationDrive: true,
+          rejectTrashed: true
+        }
+      }
+    } as any);
+
+    expect(urls).toBe('https://drive.google.com/file/d/receipt-file-1/view');
+    expect((global as any).Drive.Files.get).toHaveBeenCalledWith('folder-1', { supportsAllDrives: true });
+    expect((global as any).Drive.Files.get).toHaveBeenCalledWith('receipt-file-1', { supportsAllDrives: true });
+  });
+
+  test('accepts captured Drive links from the configured destination folder without a Shared Drive id', () => {
+    (global as any).DriveApp.getFolderById = jest.fn(() => ({
+      getId: () => 'folder-1',
+      getName: () => 'Uploads',
+      createFile: jest.fn()
+    }));
+    (global as any).Drive = {
+      Files: {
+        get: jest.fn((fileId: string) => {
+          if (fileId === 'folder-1') return { id: 'folder-1', parents: [] };
+          if (fileId === 'receipt-file-1') {
+            return {
+              id: 'receipt-file-1',
+              parents: [{ id: 'folder-1' }],
+              labels: { trashed: false },
+              alternateLink: 'https://drive.google.com/file/d/receipt-file-1/view'
+            };
+          }
+          throw new Error(`Unexpected file id ${fileId}`);
+        })
+      }
+    };
+
+    const service = new UploadService(new MockSpreadsheet() as any);
+    const urls = service.saveFiles([`https://drive.google.com/open?id=receipt-file-1`], {
+      destinationFolderId: 'folder-1',
+      linkCapture: {
+        enabled: true,
+        mode: 'driveQr',
+        validation: {
+          requireServerValidation: true,
+          includeUploadDestinationFolder: true,
+          includeUploadDestinationDrive: true,
+          rejectTrashed: true
+        }
+      }
+    } as any);
+
+    expect(urls).toBe('https://drive.google.com/file/d/receipt-file-1/view');
+  });
+
+  test('accepts encoded redirect QR values that resolve to Drive file links', () => {
+    (global as any).DriveApp.getFolderById = jest.fn(() => ({
+      getId: () => 'folder-1',
+      getName: () => 'Uploads',
+      createFile: jest.fn()
+    }));
+    (global as any).Drive = {
+      Files: {
+        get: jest.fn((fileId: string) => {
+          if (fileId === 'folder-1') return { id: 'folder-1', parents: [] };
+          if (fileId === 'receipt-file-1') {
+            return {
+              id: 'receipt-file-1',
+              parents: [{ id: 'folder-1' }],
+              labels: { trashed: false },
+              alternateLink: 'https://drive.google.com/file/d/receipt-file-1/view'
+            };
+          }
+          throw new Error(`Unexpected file id ${fileId}`);
+        })
+      }
+    };
+
+    const service = new UploadService(new MockSpreadsheet() as any);
+    const qrValue = `https://www.google.com/url?q=${encodeURIComponent('https://drive.google.com/file/d/receipt-file-1/view')}`;
+    const urls = service.saveFiles([qrValue], {
+      destinationFolderId: 'folder-1',
+      linkCapture: {
+        enabled: true,
+        mode: 'driveQr',
+        validation: {
+          requireServerValidation: true,
+          includeUploadDestinationFolder: true,
+          rejectTrashed: true
+        }
+      }
+    } as any);
+
+    expect(urls).toBe('https://drive.google.com/file/d/receipt-file-1/view');
+  });
+
+  test('accepts the checked-in QR example when the Drive file is in the destination folder', () => {
+    (global as any).DriveApp.getFolderById = jest.fn(() => ({
+      getId: () => stagingIngredientReceiptFolderId,
+      getName: () => 'Uploads',
+      createFile: jest.fn()
+    }));
+    (global as any).Drive = {
+      Files: {
+        get: jest.fn((fileId: string) => {
+          if (fileId === stagingIngredientReceiptFolderId) {
+            return { id: stagingIngredientReceiptFolderId, parents: [] };
+          }
+          if (fileId === qrExampleFileId) {
+            return {
+              id: qrExampleFileId,
+              parents: [{ id: stagingIngredientReceiptFolderId }],
+              labels: { trashed: false },
+              alternateLink: `https://drive.google.com/file/d/${qrExampleFileId}/view`
+            };
+          }
+          throw new Error(`Unexpected file id ${fileId}`);
+        })
+      }
+    };
+
+    const service = new UploadService(new MockSpreadsheet() as any);
+    const urls = service.saveFiles([`https://drive.google.com/file/d/${qrExampleFileId}/view`], {
+      destinationFolderId: stagingIngredientReceiptFolderId,
+      linkCapture: {
+        enabled: true,
+        mode: 'driveQr',
+        validation: {
+          requireServerValidation: true,
+          includeUploadDestinationFolder: true,
+          includeUploadDestinationDrive: true,
+          rejectTrashed: true
+        }
+      }
+    } as any);
+
+    expect(urls).toBe(`https://drive.google.com/file/d/${qrExampleFileId}/view`);
+  });
+
+  test('rejects the checked-in wrong-folder QR example when the Drive file is outside the destination folder', () => {
+    (global as any).DriveApp.getFolderById = jest.fn(() => ({
+      getId: () => stagingIngredientReceiptFolderId,
+      getName: () => 'Uploads',
+      createFile: jest.fn()
+    }));
+    (global as any).Drive = {
+      Files: {
+        get: jest.fn((fileId: string) => {
+          if (fileId === stagingIngredientReceiptFolderId) {
+            return { id: stagingIngredientReceiptFolderId, parents: [] };
+          }
+          if (fileId === qrWrongFolderFileId) {
+            return {
+              id: qrWrongFolderFileId,
+              parents: [{ id: 'other-folder' }],
+              labels: { trashed: false },
+              alternateLink: `https://drive.google.com/file/d/${qrWrongFolderFileId}/view`
+            };
+          }
+          if (fileId === 'other-folder') {
+            return { id: 'other-folder', parents: [] };
+          }
+          throw new Error(`Unexpected file id ${fileId}`);
+        })
+      }
+    };
+
+    const service = new UploadService(new MockSpreadsheet() as any);
+    expect(() =>
+      service.saveFiles([`https://drive.google.com/file/d/${qrWrongFolderFileId}/view`], {
+        destinationFolderId: stagingIngredientReceiptFolderId,
+        linkCapture: {
+          enabled: true,
+          mode: 'driveQr',
+          validation: {
+            requireServerValidation: true,
+            includeUploadDestinationFolder: true,
+            includeUploadDestinationDrive: true,
+            rejectTrashed: true
+          }
+        }
+      } as any)
+    ).toThrow(/CK_UPLOAD_LINK_VALIDATION:outOfScope/);
+  });
+
+  test('rejects captured Drive links outside the configured customer Shared Drive', () => {
+    (global as any).DriveApp.getFolderById = jest.fn(() => ({
+      getId: () => 'folder-1',
+      getName: () => 'Uploads',
+      createFile: jest.fn()
+    }));
+    (global as any).Drive = {
+      Files: {
+        get: jest.fn((fileId: string) => {
+          if (fileId === 'folder-1') return { id: 'folder-1', driveId: 'customer-drive-1', parents: [] };
+          if (fileId === 'receipt-file-1') {
+            return {
+              id: 'receipt-file-1',
+              driveId: 'other-drive',
+              parents: [{ id: 'external-folder' }],
+              labels: { trashed: false }
+            };
+          }
+          throw new Error(`Unexpected file id ${fileId}`);
+        })
+      }
+    };
+
+    const service = new UploadService(new MockSpreadsheet() as any);
+
+    expect(() =>
+      service.saveFiles([`https://drive.google.com/file/d/receipt-file-1/view`], {
+        destinationFolderId: 'folder-1',
+        linkCapture: {
+          enabled: true,
+          mode: 'driveQr',
+          validation: {
+            requireServerValidation: true,
+            includeUploadDestinationDrive: true,
+            rejectTrashed: true
+          }
+        }
+      } as any)
+    ).toThrow(/configured customer Drive/);
   });
 });

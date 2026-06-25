@@ -1148,6 +1148,10 @@ components:
           enum: [url, driveFileId]
           description: |
             Duplicate policy for captured links. Use `driveFileId` when the same invoice may be scanned from different Drive URL shapes.
+        validation:
+          $ref: '#/components/schemas/FileUploadLinkCaptureValidationConfig'
+          description: |
+            Optional server-side Drive scope validation. Use this when captured QR/manual links must belong to a customer Drive or folder.
         labels:
           type: object
           properties:
@@ -1165,7 +1169,7 @@ components:
           properties:
             added:
               $ref: '#/components/schemas/LocalizedString'
-              description: Message announced after a link is added.
+              description: Message announced after a link is added. The external scanner also shows this as the green success message after a QR code is detected.
             duplicate:
               $ref: '#/components/schemas/LocalizedString'
               description: Message shown when the same Drive file is already attached.
@@ -1177,6 +1181,72 @@ components:
               description: Message shown when QR camera scanning is unavailable and paste should be used.
       description: |
         Link capture settings for FILE_UPLOAD fields. Captured links are saved through the same queued record mutation lane as uploaded files. In `driveQr` mode, non-Drive content is rejected and `dedupeBy: driveFileId` prevents duplicate references to the same Drive document. Live QR scanning is launched from the external Firebase web asset host so the camera runs in a top-level HTTPS document instead of the Apps Script HTML-service iframe.
+
+    FileUploadLinkCaptureValidationConfig:
+      type: object
+      properties:
+        requireServerValidation:
+          type: boolean
+          description: |
+            When true, Apps Script/Cloud Run must verify captured Drive links before storing them. Use this for customer-specific receipt evidence because client-side QR text validation can be bypassed.
+        allowedSharedDriveIds:
+          type: array
+          items:
+            type: string
+          description: |
+            Shared Drive IDs accepted for captured links. A linked file is accepted when its Drive API metadata `driveId` matches one of these IDs.
+        allowedDriveIds:
+          type: array
+          items:
+            type: string
+          description: |
+            Generic alias for `allowedSharedDriveIds`.
+        allowedFolderIds:
+          type: array
+          items:
+            type: string
+          description: |
+            Folder IDs accepted for captured links. A linked file is accepted when it is inside one of these folders, including nested descendant folders.
+        includeUploadDestinationFolder:
+          type: boolean
+          description: |
+            When true, also accept files under `uploadConfig.destinationFolderId`.
+        includeUploadDestinationDrive:
+          type: boolean
+          description: |
+            When true, resolve `uploadConfig.destinationFolderId` metadata and accept files from the same Shared Drive. This is the recommended setting when each customer has a dedicated Shared Drive.
+        rejectTrashed:
+          type: boolean
+          description: |
+            Reject trashed Drive files. Defaults to true when server validation is required.
+        maxFolderDepth:
+          type: number
+          description: |
+            Maximum number of parent-folder levels to inspect when matching `allowedFolderIds`. Defaults to 8.
+        messages:
+          type: object
+          properties:
+            notDriveFile:
+              $ref: '#/components/schemas/LocalizedString'
+              description: Message shown when the scanned/pasted value is not a supported Google Drive file link.
+            scopeMissing:
+              $ref: '#/components/schemas/LocalizedString'
+              description: Message shown when server validation is enabled but no customer Drive or folder scope can be resolved.
+            notAccessible:
+              $ref: '#/components/schemas/LocalizedString'
+              description: Message shown when the configured backend cannot access the linked Drive file.
+            trashed:
+              $ref: '#/components/schemas/LocalizedString'
+              description: Message shown when the linked Drive file is in the trash.
+            outOfScope:
+              $ref: '#/components/schemas/LocalizedString'
+              description: Message shown when the linked Drive file is accessible but outside the configured customer Drive/folder scope.
+            repositoryRequired:
+              $ref: '#/components/schemas/LocalizedString'
+              description: Message shown when validation is required but the backend handling the save has no Drive file repository.
+      description: |
+        Server-side scope rules for captured Drive links. Configure at least one explicit or derived scope when `requireServerValidation` is true. Prefer `includeUploadDestinationDrive: true` for customer Shared Drives, or `allowedFolderIds` for a customer invoice root folder.
+        Validation failure messages can be customized with `messages`; otherwise the UI uses the built-in `files.linkCapture.validation.*` system strings.
 
     FileUploadUiConfig:
       type: object

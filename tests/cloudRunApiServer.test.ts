@@ -3459,6 +3459,10 @@ describe('GoogleSheetsDataSourceRepository', () => {
 });
 
 describe('GoogleDriveFileRepository', () => {
+  const stagingIngredientReceiptFolderId = '1f_OZ4O7mEjdZ7jdVtYRe8WdpsXqLWufu';
+  const qrExampleFileId = '1nhhILSgLLXn2TKoljGZ9XyGGVstyENlu';
+  const qrWrongFolderFileId = '1g52g7XOLZHIVkBWPPYKgAPZUGwbU0vIQ';
+
   test('normalizes Drive file metadata from Google Drive API', async () => {
     const repository = new GoogleDriveFileRepository({
       driveClient: {
@@ -3483,6 +3487,226 @@ describe('GoogleDriveFileRepository', () => {
       webContentLink: '',
       accessible: true
     });
+  });
+
+  test('accepts captured Drive links from the configured customer Shared Drive', async () => {
+    const getFileMetadata = jest.fn(async fileId => {
+      if (fileId === 'uploads-folder') return { id: 'uploads-folder', driveId: 'customer-drive-1', parents: [] };
+      if (fileId === 'receipt-file-1') {
+        return {
+          id: 'receipt-file-1',
+          driveId: 'customer-drive-1',
+          parents: ['invoices-folder'],
+          trashed: false,
+          webViewLink: 'https://drive.google.com/file/d/receipt-file-1/view'
+        };
+      }
+      throw new Error(`Unexpected file id ${fileId}`);
+    });
+    const repository = new GoogleDriveFileRepository({
+      driveClient: {
+        getFileMetadata
+      }
+    });
+
+    await expect(
+      repository.saveFiles(['https://drive.google.com/file/d/receipt-file-1/view'], {
+        destinationFolderId: 'uploads-folder',
+        linkCapture: {
+          enabled: true,
+          mode: 'driveQr',
+          validation: {
+            requireServerValidation: true,
+            includeUploadDestinationDrive: true,
+            rejectTrashed: true
+          }
+        }
+      })
+    ).resolves.toBe('https://drive.google.com/file/d/receipt-file-1/view');
+    expect(getFileMetadata).toHaveBeenCalledWith(
+      'uploads-folder',
+      'id,name,mimeType,parents,driveId,trashed,webViewLink,webContentLink'
+    );
+    expect(getFileMetadata).toHaveBeenCalledWith(
+      'receipt-file-1',
+      'id,name,mimeType,parents,driveId,trashed,webViewLink,webContentLink'
+    );
+  });
+
+  test('accepts captured Drive links from the configured destination folder without a Shared Drive id', async () => {
+    const getFileMetadata = jest.fn(async fileId => {
+      if (fileId === 'uploads-folder') return { id: 'uploads-folder', parents: [] };
+      if (fileId === 'receipt-file-1') {
+        return {
+          id: 'receipt-file-1',
+          parents: ['uploads-folder'],
+          trashed: false,
+          webViewLink: 'https://drive.google.com/file/d/receipt-file-1/view'
+        };
+      }
+      throw new Error(`Unexpected file id ${fileId}`);
+    });
+    const repository = new GoogleDriveFileRepository({
+      driveClient: {
+        getFileMetadata
+      }
+    });
+
+    await expect(
+      repository.saveFiles(['https://drive.google.com/open?id=receipt-file-1'], {
+        destinationFolderId: 'uploads-folder',
+        linkCapture: {
+          enabled: true,
+          mode: 'driveQr',
+          validation: {
+            requireServerValidation: true,
+            includeUploadDestinationFolder: true,
+            includeUploadDestinationDrive: true,
+            rejectTrashed: true
+          }
+        }
+      })
+    ).resolves.toBe('https://drive.google.com/file/d/receipt-file-1/view');
+  });
+
+  test('accepts encoded redirect QR values that resolve to Drive file links', async () => {
+    const repository = new GoogleDriveFileRepository({
+      driveClient: {
+        getFileMetadata: jest.fn(async fileId => {
+          if (fileId === 'uploads-folder') return { id: 'uploads-folder', parents: [] };
+          if (fileId === 'receipt-file-1') {
+            return {
+              id: 'receipt-file-1',
+              parents: ['uploads-folder'],
+              trashed: false,
+              webViewLink: 'https://drive.google.com/file/d/receipt-file-1/view'
+            };
+          }
+          throw new Error(`Unexpected file id ${fileId}`);
+        })
+      }
+    });
+
+    const qrValue = `https://www.google.com/url?q=${encodeURIComponent('https://drive.google.com/file/d/receipt-file-1/view')}`;
+    await expect(
+      repository.saveFiles([qrValue], {
+        destinationFolderId: 'uploads-folder',
+        linkCapture: {
+          enabled: true,
+          mode: 'driveQr',
+          validation: {
+            requireServerValidation: true,
+            includeUploadDestinationFolder: true,
+            rejectTrashed: true
+          }
+        }
+      })
+    ).resolves.toBe('https://drive.google.com/file/d/receipt-file-1/view');
+  });
+
+  test('accepts the checked-in QR example when the Drive file is in the destination folder', async () => {
+    const repository = new GoogleDriveFileRepository({
+      driveClient: {
+        getFileMetadata: jest.fn(async fileId => {
+          if (fileId === stagingIngredientReceiptFolderId) return { id: stagingIngredientReceiptFolderId, parents: [] };
+          if (fileId === qrExampleFileId) {
+            return {
+              id: qrExampleFileId,
+              parents: [stagingIngredientReceiptFolderId],
+              trashed: false,
+              webViewLink: `https://drive.google.com/file/d/${qrExampleFileId}/view`
+            };
+          }
+          throw new Error(`Unexpected file id ${fileId}`);
+        })
+      }
+    });
+
+    await expect(
+      repository.saveFiles([`https://drive.google.com/file/d/${qrExampleFileId}/view`], {
+        destinationFolderId: stagingIngredientReceiptFolderId,
+        linkCapture: {
+          enabled: true,
+          mode: 'driveQr',
+          validation: {
+            requireServerValidation: true,
+            includeUploadDestinationFolder: true,
+            includeUploadDestinationDrive: true,
+            rejectTrashed: true
+          }
+        }
+      })
+    ).resolves.toBe(`https://drive.google.com/file/d/${qrExampleFileId}/view`);
+  });
+
+  test('rejects the checked-in wrong-folder QR example when the Drive file is outside the destination folder', async () => {
+    const repository = new GoogleDriveFileRepository({
+      driveClient: {
+        getFileMetadata: jest.fn(async fileId => {
+          if (fileId === stagingIngredientReceiptFolderId) return { id: stagingIngredientReceiptFolderId, parents: [] };
+          if (fileId === qrWrongFolderFileId) {
+            return {
+              id: qrWrongFolderFileId,
+              parents: ['other-folder'],
+              trashed: false,
+              webViewLink: `https://drive.google.com/file/d/${qrWrongFolderFileId}/view`
+            };
+          }
+          if (fileId === 'other-folder') return { id: 'other-folder', parents: [] };
+          throw new Error(`Unexpected file id ${fileId}`);
+        })
+      }
+    });
+
+    await expect(
+      repository.saveFiles([`https://drive.google.com/file/d/${qrWrongFolderFileId}/view`], {
+        destinationFolderId: stagingIngredientReceiptFolderId,
+        linkCapture: {
+          enabled: true,
+          mode: 'driveQr',
+          validation: {
+            requireServerValidation: true,
+            includeUploadDestinationFolder: true,
+            includeUploadDestinationDrive: true,
+            rejectTrashed: true
+          }
+        }
+      })
+    ).rejects.toThrow(/CK_UPLOAD_LINK_VALIDATION:outOfScope/);
+  });
+
+  test('rejects captured Drive links outside the configured customer Shared Drive', async () => {
+    const repository = new GoogleDriveFileRepository({
+      driveClient: {
+        getFileMetadata: jest.fn(async fileId => {
+          if (fileId === 'uploads-folder') return { id: 'uploads-folder', driveId: 'customer-drive-1', parents: [] };
+          if (fileId === 'receipt-file-1') {
+            return {
+              id: 'receipt-file-1',
+              driveId: 'other-drive',
+              parents: ['external-folder'],
+              trashed: false
+            };
+          }
+          throw new Error(`Unexpected file id ${fileId}`);
+        })
+      }
+    });
+
+    await expect(
+      repository.saveFiles(['https://drive.google.com/file/d/receipt-file-1/view'], {
+        destinationFolderId: 'uploads-folder',
+        linkCapture: {
+          enabled: true,
+          mode: 'driveQr',
+          validation: {
+            requireServerValidation: true,
+            includeUploadDestinationDrive: true,
+            rejectTrashed: true
+          }
+        }
+      })
+    ).rejects.toThrow(/configured customer Drive/);
   });
 
   test('converts rendered HTML to a PDF artifact through Drive API', async () => {

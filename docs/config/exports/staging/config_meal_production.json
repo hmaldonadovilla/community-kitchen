@@ -6852,6 +6852,32 @@
           "mode": "driveQr",
           "allowManualPaste": false,
           "dedupeBy": "driveFileId",
+          "validation": {
+            "requireServerValidation": true,
+            "includeUploadDestinationDrive": true,
+            "includeUploadDestinationFolder": true,
+            "rejectTrashed": true,
+            "messages": {
+              "notDriveFile": {
+                "en": "Scan a Google Drive ingredient receipt QR code."
+              },
+              "scopeMissing": {
+                "en": "Ingredient receipt validation is not configured correctly."
+              },
+              "notAccessible": {
+                "en": "Ingredient receipt could not be opened in the customer Drive."
+              },
+              "trashed": {
+                "en": "Ingredient receipt is in the trash."
+              },
+              "outOfScope": {
+                "en": "Ingredient receipt must be in the customer Drive."
+              },
+              "repositoryRequired": {
+                "en": "Ingredient receipt validation is not available. Try again later."
+              }
+            }
+          },
           "labels": {
             "scan": {
               "en": "Scan QR"
@@ -6865,7 +6891,7 @@
           },
           "messages": {
             "added": {
-              "en": "Receipt link added."
+              "en": "Ingredient receipt added"
             },
             "duplicate": {
               "en": "This receipt has already been added."
@@ -10504,6 +10530,32 @@
             "mode": "driveQr",
             "allowManualPaste": false,
             "dedupeBy": "driveFileId",
+            "validation": {
+              "requireServerValidation": true,
+              "includeUploadDestinationDrive": true,
+              "includeUploadDestinationFolder": true,
+              "rejectTrashed": true,
+              "messages": {
+                "notDriveFile": {
+                  "en": "Scan a Google Drive ingredient receipt QR code."
+                },
+                "scopeMissing": {
+                  "en": "Ingredient receipt validation is not configured correctly."
+                },
+                "notAccessible": {
+                  "en": "Ingredient receipt could not be opened in the customer Drive."
+                },
+                "trashed": {
+                  "en": "Ingredient receipt is in the trash."
+                },
+                "outOfScope": {
+                  "en": "Ingredient receipt must be in the customer Drive."
+                },
+                "repositoryRequired": {
+                  "en": "Ingredient receipt validation is not available. Try again later."
+                }
+              }
+            },
             "labels": {
               "scan": {
                 "en": "Scan QR"
@@ -10517,7 +10569,7 @@
             },
             "messages": {
               "added": {
-                "en": "Receipt link added."
+                "en": "Ingredient receipt added"
               },
               "duplicate": {
                 "en": "This receipt has already been added."

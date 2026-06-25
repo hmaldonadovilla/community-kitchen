@@ -1585,6 +1585,11 @@ export interface FileUploadLinkCaptureConfig {
    * Duplicate policy for captured links. Defaults to `driveFileId`.
    */
   dedupeBy?: 'url' | 'driveFileId';
+  /**
+   * Optional server-side Drive metadata validation for captured links.
+   * Use this when QR/manual links must belong to a customer Drive or folder.
+   */
+  validation?: FileUploadLinkCaptureValidationConfig;
   labels?: {
     scan?: LocalizedString;
     paste?: LocalizedString;
@@ -1595,6 +1600,53 @@ export interface FileUploadLinkCaptureConfig {
     invalid?: LocalizedString;
     unsupported?: LocalizedString;
     added?: LocalizedString;
+  };
+}
+
+export interface FileUploadLinkCaptureValidationConfig {
+  /**
+   * When true, Apps Script/Cloud Run must verify captured Drive links before
+   * storing them. Client-side URL checks are not considered sufficient.
+   */
+  requireServerValidation?: boolean;
+  /**
+   * Allowed Shared Drive IDs. `allowedDriveIds` is accepted as a generic alias
+   * for runtimes that use Drive API `driveId` metadata.
+   */
+  allowedSharedDriveIds?: string[];
+  allowedDriveIds?: string[];
+  /**
+   * Allowed folder IDs. Files are accepted when any ancestor folder matches.
+   */
+  allowedFolderIds?: string[];
+  /**
+   * Add `uploadConfig.destinationFolderId` to the allowed folder IDs.
+   */
+  includeUploadDestinationFolder?: boolean;
+  /**
+   * Resolve `uploadConfig.destinationFolderId` metadata and allow files from
+   * the same Shared Drive.
+   */
+  includeUploadDestinationDrive?: boolean;
+  /**
+   * Reject trashed Drive files. Defaults to true when validation is required.
+   */
+  rejectTrashed?: boolean;
+  /**
+   * Maximum number of parent-folder levels to inspect when matching folders.
+   */
+  maxFolderDepth?: number;
+  /**
+   * Optional localized messages for server-side Drive link validation failures.
+   * When omitted, the React UI falls back to built-in system strings.
+   */
+  messages?: {
+    notDriveFile?: LocalizedString;
+    scopeMissing?: LocalizedString;
+    notAccessible?: LocalizedString;
+    trashed?: LocalizedString;
+    outOfScope?: LocalizedString;
+    repositoryRequired?: LocalizedString;
   };
 }
 

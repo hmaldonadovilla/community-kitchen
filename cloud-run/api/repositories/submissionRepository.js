@@ -858,7 +858,14 @@ class GoogleSheetsSubmissionRepository {
     return autoIncrementValues;
   }
 
-  fallbackSaveFileUrls(value) {
+  fallbackSaveFileUrls(value, uploadConfig) {
+    const linkCapture = uploadConfig && uploadConfig.linkCapture;
+    const validation = linkCapture && linkCapture.validation;
+    if (validation && validation.requireServerValidation === true) {
+      throw new Error(
+        'CK_UPLOAD_LINK_VALIDATION:repositoryRequired: Receipt link validation requires a configured Drive file repository.'
+      );
+    }
     if (value === undefined || value === null || value === '') return '';
     const collect = raw => {
       if (raw === undefined || raw === null) return [];
@@ -884,7 +891,7 @@ class GoogleSheetsSubmissionRepository {
     if (this.fileRepository && typeof this.fileRepository.saveFiles === 'function') {
       return this.fileRepository.saveFiles(value, uploadConfig, context);
     }
-    return this.fallbackSaveFileUrls(value);
+    return this.fallbackSaveFileUrls(value, uploadConfig);
   }
 
   async applyUploadsToLineItemRows(rows, cfg, context = {}) {

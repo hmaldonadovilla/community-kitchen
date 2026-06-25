@@ -8,7 +8,11 @@ import { resolveUploadWaitMessage, resolveUploadWaitTitle } from '../../../app/u
 import { FileOverlay } from '../../../components/form/overlays/FileOverlay';
 import { describeUploadItem } from '../../../components/form/utils';
 import { resolveExternalQrScannerLaunch } from '../domain/externalQrScanner';
-import { appendCapturedUploadLink, resolveUploadLinkCaptureConfig } from '../domain/linkCapture';
+import {
+  appendCapturedUploadLink,
+  resolveUploadLinkCaptureConfig,
+  shouldRetryDuplicateCapturedUploadLink
+} from '../domain/linkCapture';
 import type {
   FileOverlayState,
   FileUploadOrderedEntryCheckArgs,
@@ -281,6 +285,16 @@ export const FormFileOverlay: React.FC<{
     }
 
     if (result.status === 'duplicate') {
+      if (
+        shouldRetryDuplicateCapturedUploadLink({
+          blockUntilSaved,
+          hasUploadFailure: Boolean(uploadFailures[fieldPath])
+        })
+      ) {
+        onDiagnostic?.('upload.linkCapture.duplicate.retrySave', { fieldPath, source, driveFileId: result.driveFileId });
+        commitImmediateItems(result.items, 'addLink');
+        return true;
+      }
       const message = resolveLinkCaptureText(
         linkCaptureConfig.messages?.duplicate,
         'This Drive link is already added.'
@@ -318,10 +332,16 @@ export const FormFileOverlay: React.FC<{
   const openQrScanner = () => {
     if (!linkCaptureConfig || submitting || readOnly || fileOverlay.saving) return;
     const requestId = createQrScannerRequestId();
+    const scanSuccessMessage = resolveLinkCaptureText(
+      linkCaptureConfig.messages?.added,
+      tSystem('files.linkCapture.scanAdded', language, 'QR code detected. Sent to the form.')
+    );
     const externalScanner = resolveExternalQrScannerLaunch({
       assetBaseUrl: resolveWindowWebAssetConfig()?.baseUrl,
       requestId,
-      targetOrigin: window.location.origin || '*'
+      targetOrigin: window.location.origin || '*',
+      closeOnResult: false,
+      successMessage: scanSuccessMessage
     });
 
     if (!externalScanner) {
@@ -332,14 +352,18 @@ export const FormFileOverlay: React.FC<{
 
     externalQrScanCleanupRef.current?.();
     let cleanup: () => void = () => undefined;
-    const timeoutId = window.setTimeout(() => cleanup(), 5 * 60 * 1000);
+    const timeoutId = window.setTimeout(() => cleanup(), 15 * 60 * 1000);
     const handleMessage = (event: MessageEvent) => {
       if (event.origin !== externalScanner.origin) return;
       const data = (event.data || {}) as QrScannerMessage;
-      if (data.type !== 'ck.qrScanner.result' || data.requestId !== requestId) return;
+      if (data.requestId !== requestId) return;
+      if (data.type === 'ck.qrScanner.closed') {
+        cleanup();
+        return;
+      }
+      if (data.type !== 'ck.qrScanner.result') return;
       const value = data.value?.toString().trim() || '';
       if (!value) return;
-      cleanup();
       addCapturedLink(value, 'scan');
     };
     cleanup = () => {
@@ -375,7 +399,11 @@ export const FormFileOverlay: React.FC<{
     } catch {
       // Some mobile browser windows cannot be focused programmatically after opening.
     }
-    onDiagnostic?.('upload.linkCapture.externalScanner.open', { fieldPath, origin: externalScanner.origin });
+    onDiagnostic?.('upload.linkCapture.externalScanner.open', {
+      fieldPath,
+      origin: externalScanner.origin,
+      closeOnResult: false
+    });
   };
 
   const onClearAll = () => {
