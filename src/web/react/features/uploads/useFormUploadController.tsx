@@ -246,9 +246,11 @@ export const useFormUploadController = (args: {
   }, []);
 
   const uploadFailureMessage = useCallback(
-    (rawMessage?: string | null) =>
+    (rawMessage?: string | null, uploadConfig?: any) =>
       resolveUploadFailureUserMessage({
         rawMessage,
+        uploadConfig,
+        language,
         fallback: tSystem(
           'files.error.saveFailed',
           language,
@@ -264,7 +266,7 @@ export const useFormUploadController = (args: {
 
   const recordUploadFailure = useCallback(
     (target: UploadRetryTarget, rawMessage?: string | null) => {
-      const message = uploadFailureMessage(rawMessage);
+      const message = uploadFailureMessage(rawMessage, target.uploadConfig);
       setUploadFailures(prev => ({
         ...prev,
         [target.fieldPath]: createUploadFailureState({
@@ -328,7 +330,7 @@ export const useFormUploadController = (args: {
             : undefined
         });
         if (!res?.success) {
-          const message = uploadFailureMessage(res?.message);
+          const message = uploadFailureMessage(res?.message, target.uploadConfig);
           setUploadFailures(prev => {
             const existing = prev[fieldPath];
             if (!existing) return prev;
@@ -353,7 +355,7 @@ export const useFormUploadController = (args: {
         }
         onDiagnostic?.('upload.retry.success', { fieldPath, scope: target.scope });
       } catch (err: any) {
-        const message = uploadFailureMessage(err?.message);
+        const message = uploadFailureMessage(err?.message, target.uploadConfig);
         setUploadFailures(prev => {
           const existing = prev[fieldPath];
           if (!existing) return prev;

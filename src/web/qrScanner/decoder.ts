@@ -132,6 +132,30 @@ const buildCropRegions = (sourceWidth: number, sourceHeight: number): CropRegion
   const regions: CropRegion[] = [
     { sx: 0, sy: 0, sw: sourceWidth, sh: sourceHeight, upscale: false }
   ];
+
+  const addRegion = (
+    sxRatio: number,
+    syRatio: number,
+    swRatio: number,
+    shRatio: number,
+    upscale: boolean
+  ): void => {
+    const sx = Math.max(0, sourceWidth * sxRatio);
+    const sy = Math.max(0, sourceHeight * syRatio);
+    const sw = Math.min(sourceWidth - sx, sourceWidth * swRatio);
+    const sh = Math.min(sourceHeight - sy, sourceHeight * shRatio);
+    if (sw < 32 || sh < 32) return;
+    const duplicate = regions.some(
+      region =>
+        Math.abs(region.sx - sx) < 1 &&
+        Math.abs(region.sy - sy) < 1 &&
+        Math.abs(region.sw - sw) < 1 &&
+        Math.abs(region.sh - sh) < 1 &&
+        region.upscale === upscale
+    );
+    if (!duplicate) regions.push({ sx, sy, sw, sh, upscale });
+  };
+
   [0.82, 0.64, 0.48].forEach(ratio => {
     const sw = sourceWidth * ratio;
     const sh = sourceHeight * ratio;
@@ -143,6 +167,23 @@ const buildCropRegions = (sourceWidth: number, sourceHeight: number): CropRegion
       upscale: true
     });
   });
+
+  [
+    [0, 0, 0.5, 0.65],
+    [0.25, 0, 0.5, 0.65],
+    [0.5, 0, 0.5, 0.65],
+    [0, 0.18, 0.5, 0.64],
+    [0.25, 0.18, 0.5, 0.64],
+    [0.5, 0.18, 0.5, 0.64],
+    [0, 0.35, 0.5, 0.65],
+    [0.25, 0.35, 0.5, 0.65],
+    [0.5, 0.35, 0.5, 0.65],
+    [0.55, 0.08, 0.35, 0.55]
+  ].forEach(([sx, sy, sw, sh]) => {
+    addRegion(sx, sy, sw, sh, false);
+    addRegion(sx, sy, sw, sh, true);
+  });
+
   return regions;
 };
 

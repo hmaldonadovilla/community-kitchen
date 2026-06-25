@@ -11,6 +11,176 @@ const splitUrls = value =>
     .map(part => part.trim())
     .filter(Boolean);
 
+const DRIVE_FILE_ID_RE = /^[a-zA-Z0-9_-]{10,}$/;
+const DEFAULT_LINK_VALIDATION_MAX_FOLDER_DEPTH = 8;
+const DRIVE_LINK_VALIDATION_ERROR_PREFIX = 'CK_UPLOAD_LINK_VALIDATION:';
+const LINK_VALIDATION_MESSAGES = {
+  notDriveFile: 'Receipt evidence links must be Google Drive file links.',
+  scopeMissing: 'Receipt link validation is enabled but no allowed customer Drive scope is configured.',
+  notAccessible: 'Receipt evidence link is not accessible from the configured customer Drive.',
+  trashed: 'Receipt evidence link points to a trashed Drive file.',
+  outOfScope: 'Receipt evidence link must point to a file in the configured customer Drive.'
+};
+
+const normalizeString = value => (value === undefined || value === null ? '' : value.toString().trim());
+
+const normalizeStringArray = value =>
+  Array.isArray(value)
+    ? value
+        .map(item => normalizeString(item))
+        .filter(Boolean)
+    : [];
+
+const firstUrlOrValue = raw => {
+  const text = normalizeString(raw);
+  const match = text.match(/https?:\/\/[^\s,]+/i);
+  return (match && match[0] ? match[0] : text).trim();
+};
+
+const tryDecodeURIComponent = raw => {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    return raw;
+  }
+};
+
+const unescapeUrlText = raw =>
+  normalizeString(raw)
+    .replace(/\\\//g, '/')
+    .replace(/\\u0026/gi, '&')
+    .replace(/\\u003d/gi, '=')
+    .replace(/\\u003f/gi, '?')
+    .replace(/&amp;/gi, '&');
+
+const pushCandidate = (queue, seen, raw) => {
+  const value = normalizeString(raw);
+  if (!value || seen.has(value)) return;
+  seen.add(value);
+  queue.push(value);
+};
+
+const pushJsonUrlCandidates = (queue, seen, rawValue) => {
+  const raw = normalizeString(rawValue);
+  if (!raw || (!raw.startsWith('{') && !raw.startsWith('['))) return;
+  try {
+    const parsed = JSON.parse(raw);
+    const visit = (value, depth) => {
+      if (depth > 3 || value === undefined || value === null) return;
+      if (typeof value === 'string' || typeof value === 'number') {
+        pushCandidate(queue, seen, value);
+        return;
+      }
+      if (Array.isArray(value)) {
+        value.forEach(item => visit(item, depth + 1));
+        return;
+      }
+      if (typeof value === 'object') {
+        ['value', 'url', 'href', 'link', 'rawValue', 'raw'].forEach(key => visit(value[key], depth + 1));
+      }
+    };
+    visit(parsed, 0);
+  } catch {
+    // Ignore non-JSON candidates.
+  }
+};
+
+const collectDriveLinkCandidates = rawValue => {
+  const queue = [];
+  const seen = new Set();
+  pushCandidate(queue, seen, rawValue);
+
+  for (let index = 0; index < queue.length && index < 24; index += 1) {
+    const current = queue[index];
+    const firstUrl = firstUrlOrValue(current);
+    pushCandidate(queue, seen, firstUrl);
+    pushCandidate(queue, seen, tryDecodeURIComponent(current));
+    pushCandidate(queue, seen, unescapeUrlText(current));
+    pushCandidate(queue, seen, unescapeUrlText(tryDecodeURIComponent(current)));
+    pushJsonUrlCandidates(queue, seen, current);
+
+    if (!/^https?:\/\//i.test(firstUrl)) continue;
+    try {
+      const url = new URL(firstUrl);
+      ['id', 'q', 'url', 'u', 'continue', 'target'].forEach(param => {
+        const rawParam = url.searchParams.get(param);
+        if (rawParam) pushCandidate(queue, seen, tryDecodeURIComponent(rawParam));
+      });
+    } catch {
+      // Ignore malformed URL candidates.
+    }
+  }
+
+  return queue;
+};
+
+const isAllowedDriveHost = raw => {
+  const value = normalizeString(raw);
+  if (!/^https?:\/\//i.test(value)) return true;
+  try {
+    const host = new URL(value).hostname.toLowerCase();
+    return (
+      host === 'drive.google.com' ||
+      host === 'docs.google.com' ||
+      host === 'googleusercontent.com' ||
+      host === 'drive.usercontent.google.com' ||
+      host.endsWith('.googleusercontent.com')
+    );
+  } catch {
+    return false;
+  }
+};
+
+const extractDriveFileIdForValidation = value => {
+  const patterns = [
+    /[?&]id=([a-zA-Z0-9_-]{10,})/,
+    /\/file\/d\/([a-zA-Z0-9_-]{10,})/,
+    /\/(?:document|spreadsheets|presentation|forms|drawings)\/d\/([a-zA-Z0-9_-]{10,})/,
+    /\/d\/([a-zA-Z0-9_-]{10,})/,
+    /googleusercontent\.com\/d\/([a-zA-Z0-9_-]{10,})/
+  ];
+
+  for (const candidate of collectDriveLinkCandidates(value)) {
+    const raw = firstUrlOrValue(candidate);
+    if (!raw || !isAllowedDriveHost(raw)) continue;
+    for (const pattern of patterns) {
+      const match = raw.match(pattern);
+      if (match && match[1]) return match[1];
+    }
+    if (DRIVE_FILE_ID_RE.test(raw)) return raw;
+  }
+
+  return '';
+};
+
+const linkValidationError = code =>
+  new Error(`${DRIVE_LINK_VALIDATION_ERROR_PREFIX}${code}: ${LINK_VALIDATION_MESSAGES[code] || 'Receipt link validation failed.'}`);
+
+const canonicalDriveUrl = fileId => `https://drive.google.com/open?id=${encodeURIComponent(fileId)}`;
+
+const parentIdsFromMetadata = metadata => {
+  const parents = metadata && Array.isArray(metadata.parents) ? metadata.parents : [];
+  return parents
+    .map(parent => (typeof parent === 'string' ? parent : parent && parent.id))
+    .map(parent => normalizeString(parent))
+    .filter(Boolean);
+};
+
+const metadataDriveId = metadata => normalizeString(metadata && (metadata.driveId || metadata.teamDriveId));
+
+const isMetadataTrashed = metadata => Boolean(metadata && (metadata.trashed === true || (metadata.labels && metadata.labels.trashed === true)));
+
+const metadataUrl = (metadata, fileId) =>
+  normalizeString(metadata && (metadata.webViewLink || metadata.webContentLink || metadata.alternateLink)) || canonicalDriveUrl(fileId);
+
+const resolveLinkValidationConfig = uploadConfig => {
+  const linkCapture = uploadConfig && uploadConfig.linkCapture;
+  if (!linkCapture || linkCapture.enabled === false) return null;
+  const validation = linkCapture.validation;
+  if (!validation || validation.requireServerValidation !== true) return null;
+  return validation;
+};
+
 const normalizeExtensions = uploadConfig =>
   Array.isArray(uploadConfig && uploadConfig.allowedExtensions)
     ? uploadConfig.allowedExtensions
@@ -97,6 +267,7 @@ class GoogleDriveFileRepository {
   constructor(options = {}) {
     this.env = options.env || process.env;
     this.driveClient = options.driveClient || createGoogleDriveClient(options);
+    this.linkValidationMetadataCache = new Map();
   }
 
   async fetchDriveFileMetadata(fileId) {
@@ -247,12 +418,14 @@ class GoogleDriveFileRepository {
 
     for (const file of limitedFiles) {
       if (typeof file === 'string') {
-        urls.push(...splitUrls(file));
+        for (const url of splitUrls(file)) {
+          urls.push(await this.validateCapturedDriveLink(url, uploadConfig, context));
+        }
         continue;
       }
       if (file && typeof file === 'object' && typeof file.url === 'string') {
         const url = file.url.trim();
-        if (url) urls.push(url);
+        if (url) urls.push(await this.validateCapturedDriveLink(url, uploadConfig, context));
         continue;
       }
 
@@ -293,6 +466,111 @@ class GoogleDriveFileRepository {
     }
 
     return dedupeUrls(urls).join(', ');
+  }
+
+  async validateCapturedDriveLink(rawValue, uploadConfig, context = {}) {
+    const validation = resolveLinkValidationConfig(uploadConfig);
+    const raw = normalizeString(rawValue);
+    if (!validation || !raw) return raw;
+
+    const fileId = extractDriveFileIdForValidation(raw);
+    if (!fileId) {
+      throw linkValidationError('notDriveFile');
+    }
+
+    const scope = await this.resolveLinkValidationScope(validation, uploadConfig, context);
+    if (!scope.allowedDriveIds.size && !scope.allowedFolderIds.size) {
+      throw linkValidationError('scopeMissing');
+    }
+
+    const metadata = await this.getLinkValidationMetadata(fileId);
+    if (!metadata) {
+      throw linkValidationError('notAccessible');
+    }
+    if (scope.rejectTrashed && isMetadataTrashed(metadata)) {
+      throw linkValidationError('trashed');
+    }
+
+    const driveId = metadataDriveId(metadata);
+    if (driveId && scope.allowedDriveIds.has(driveId)) {
+      return metadataUrl(metadata, fileId);
+    }
+    if (await this.isInAllowedLinkFolder(metadata, scope)) {
+      return metadataUrl(metadata, fileId);
+    }
+
+    throw linkValidationError('outOfScope');
+  }
+
+  async resolveLinkValidationScope(validation, uploadConfig, context = {}) {
+    const allowedDriveIds = new Set([
+      ...normalizeStringArray(validation.allowedSharedDriveIds),
+      ...normalizeStringArray(validation.allowedDriveIds)
+    ]);
+    const allowedFolderIds = new Set(normalizeStringArray(validation.allowedFolderIds));
+    const wantsDestinationScope =
+      validation.includeUploadDestinationFolder === true || validation.includeUploadDestinationDrive === true;
+    const destinationFolderId = wantsDestinationScope
+      ? await this.resolveUploadFolderId(uploadConfig, context).catch(() => '')
+      : '';
+
+    if (validation.includeUploadDestinationFolder === true && destinationFolderId) {
+      allowedFolderIds.add(destinationFolderId);
+    }
+
+    if (validation.includeUploadDestinationDrive === true && destinationFolderId) {
+      const folderMetadata = await this.getLinkValidationMetadata(destinationFolderId);
+      const destinationDriveId = metadataDriveId(folderMetadata);
+      if (destinationDriveId) allowedDriveIds.add(destinationDriveId);
+    }
+
+    const rawDepth = Number(validation.maxFolderDepth);
+    return {
+      allowedDriveIds,
+      allowedFolderIds,
+      rejectTrashed: validation.rejectTrashed !== false,
+      maxFolderDepth:
+        Number.isFinite(rawDepth) && rawDepth > 0
+          ? Math.floor(rawDepth)
+          : DEFAULT_LINK_VALIDATION_MAX_FOLDER_DEPTH
+    };
+  }
+
+  async isInAllowedLinkFolder(metadata, scope) {
+    if (!scope.allowedFolderIds.size) return false;
+    const queue = parentIdsFromMetadata(metadata).map(id => ({ id, depth: 1 }));
+    const visited = new Set();
+
+    while (queue.length) {
+      const current = queue.shift();
+      if (!current || visited.has(current.id)) continue;
+      visited.add(current.id);
+      if (scope.allowedFolderIds.has(current.id)) return true;
+      if (current.depth >= scope.maxFolderDepth) continue;
+      const parentMetadata = await this.getLinkValidationMetadata(current.id);
+      parentIdsFromMetadata(parentMetadata).forEach(parentId => {
+        if (!visited.has(parentId)) queue.push({ id: parentId, depth: current.depth + 1 });
+      });
+    }
+
+    return false;
+  }
+
+  async getLinkValidationMetadata(fileId) {
+    const id = normalizeString(fileId);
+    if (!id) return null;
+    if (this.linkValidationMetadataCache.has(id)) return this.linkValidationMetadataCache.get(id);
+    let metadata = null;
+    try {
+      metadata = await this.driveClient.getFileMetadata(
+        id,
+        'id,name,mimeType,parents,driveId,trashed,webViewLink,webContentLink'
+      );
+    } catch {
+      metadata = null;
+    }
+    this.linkValidationMetadataCache.set(id, metadata || null);
+    return metadata || null;
   }
 
   async createFile(file, options = {}) {

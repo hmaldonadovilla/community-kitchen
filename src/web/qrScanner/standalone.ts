@@ -1,36 +1,45 @@
-import {
-  createNativeQrDetector,
-  decodeQrFromImageFile,
-  decodeQrFromVideoFrame,
-  isLiveCameraSupported
-} from './decoder';
+import { createNativeQrDetector, decodeQrFromVideoFrame, isLiveCameraSupported } from './decoder';
 
 const params = new URLSearchParams(window.location.search);
 const requestId = params.get('requestId') || '';
 const targetOrigin = params.get('targetOrigin') || '*';
+const closeOnResult = params.get('closeOnResult') === '1';
+const successMessage = params.get('successMessage') || 'QR code detected. Sent to the form.';
 
 const statusNode = document.querySelector<HTMLElement>('[data-role="status"]');
 const video = document.querySelector<HTMLVideoElement>('[data-role="video"]');
-const startButton = document.querySelector<HTMLButtonElement>('[data-action="start"]');
-const photoButton = document.querySelector<HTMLButtonElement>('[data-action="photo"]');
 const closeButton = document.querySelector<HTMLButtonElement>('[data-action="close"]');
-const copyButton = document.querySelector<HTMLButtonElement>('[data-action="copy"]');
-const resultNode = document.querySelector<HTMLElement>('[data-role="result"]');
-const photoInput = document.querySelector<HTMLInputElement>('[data-role="photo-input"]');
 
 let stream: MediaStream | null = null;
 let frameId = 0;
-let lastResult = '';
+let resumeTimer = 0;
+let closing = false;
+let lastSentValue = '';
+let lastSentAt = 0;
+let closePosted = false;
 
-const setStatus = (message: string): void => {
-  if (statusNode) statusNode.textContent = message;
+const scanCanvas = document.createElement('canvas');
+const detector = createNativeQrDetector();
+
+const setStatus = (message: string, tone?: 'success'): void => {
+  if (!statusNode) return;
+  statusNode.textContent = message;
+  statusNode.className = tone === 'success' ? 'status success' : 'status';
 };
 
-const stopCamera = (): void => {
+const stopScanLoop = (): void => {
+  if (resumeTimer) {
+    window.clearTimeout(resumeTimer);
+    resumeTimer = 0;
+  }
   if (frameId) {
     cancelAnimationFrame(frameId);
     frameId = 0;
   }
+};
+
+const stopCamera = (): void => {
+  stopScanLoop();
   if (stream) {
     stream.getTracks().forEach(track => track.stop());
     stream = null;
@@ -38,19 +47,29 @@ const stopCamera = (): void => {
   if (video) video.srcObject = null;
 };
 
-const showResult = (value: string): void => {
-  lastResult = value;
-  if (resultNode) {
-    resultNode.textContent = value;
-    resultNode.hidden = false;
-  }
-  if (copyButton) copyButton.hidden = false;
+const postClosed = (): void => {
+  if (closePosted || !window.opener || window.opener.closed) return;
+  closePosted = true;
+  window.opener.postMessage(
+    {
+      type: 'ck.qrScanner.closed',
+      requestId
+    },
+    targetOrigin === '*' ? '*' : targetOrigin
+  );
+};
+
+const beginScanning = (): void => {
+  if (closing) return;
+  stopScanLoop();
+  setStatus('Point the camera at the QR code.');
+  void scanLoop();
 };
 
 const sendResult = (value: string): void => {
-  stopCamera();
-  showResult(value);
-  setStatus('QR code detected. Returning to the form...');
+  if (closing) return;
+  stopScanLoop();
+  setStatus(closeOnResult ? 'QR code detected. Returning to the form...' : successMessage, closeOnResult ? undefined : 'success');
 
   if (window.opener && !window.opener.closed) {
     window.opener.postMessage(
@@ -61,30 +80,40 @@ const sendResult = (value: string): void => {
       },
       targetOrigin === '*' ? '*' : targetOrigin
     );
-    window.setTimeout(() => window.close(), 700);
-    return;
+    if (closeOnResult) {
+      window.setTimeout(() => window.close(), 700);
+      return;
+    }
   }
 
-  setStatus('QR code detected. Copy the link, return to the form, and paste it.');
+  resumeTimer = window.setTimeout(() => {
+    if (!closing && stream) beginScanning();
+  }, 1400);
 };
 
-const scanLoop = async (canvas: HTMLCanvasElement, detector = createNativeQrDetector()): Promise<void> => {
-  if (!video) return;
-  const value = await decodeQrFromVideoFrame(video, canvas, detector);
+async function scanLoop(): Promise<void> {
+  if (!video || closing) return;
+  const value = await decodeQrFromVideoFrame(video, scanCanvas, detector);
+  if (closing) return;
   if (value) {
-    sendResult(value);
-    return;
+    const now = Date.now();
+    if (value !== lastSentValue || now - lastSentAt > 10000) {
+      lastSentValue = value;
+      lastSentAt = now;
+      sendResult(value);
+      return;
+    }
   }
   frameId = requestAnimationFrame(() => {
-    void scanLoop(canvas, detector);
+    void scanLoop();
   });
-};
+}
 
 const startCamera = async (): Promise<void> => {
   if (!video) return;
-  stopCamera();
+  stopScanLoop();
   if (!isLiveCameraSupported()) {
-    setStatus('Live camera scanning is not available in this browser. Take or choose a QR photo instead.');
+    setStatus('Live camera scanning is not available in this browser.');
     return;
   }
 
@@ -100,50 +129,23 @@ const startCamera = async (): Promise<void> => {
     });
     video.srcObject = stream;
     await video.play();
-    setStatus('Point the camera at the QR code.');
-    void scanLoop(document.createElement('canvas'));
+    beginScanning();
   } catch {
-    setStatus('Could not start the camera. Take or choose a QR photo instead.');
+    setStatus('Could not start the camera.');
   }
 };
-
-const scanPhoto = async (file: File): Promise<void> => {
-  setStatus('Reading QR code from photo...');
-  try {
-    const value = await decodeQrFromImageFile(file, document.createElement('canvas'), createNativeQrDetector());
-    if (value) {
-      sendResult(value);
-      return;
-    }
-    setStatus('No QR code found in that photo. Try a closer, sharper photo or use the live scanner.');
-  } catch {
-    setStatus('Could not read that photo. Try again or paste the Drive link in the form.');
-  }
-};
-
-startButton?.addEventListener('click', () => {
-  void startCamera();
-});
-
-photoButton?.addEventListener('click', () => {
-  photoInput?.click();
-});
-
-photoInput?.addEventListener('change', event => {
-  const input = event.currentTarget as HTMLInputElement;
-  const file = input.files?.[0] || null;
-  input.value = '';
-  if (file) void scanPhoto(file);
-});
-
-copyButton?.addEventListener('click', () => {
-  if (!lastResult || !navigator.clipboard?.writeText) return;
-  void navigator.clipboard.writeText(lastResult).then(() => setStatus('Link copied. Return to the form and paste it.'));
-});
 
 closeButton?.addEventListener('click', () => {
+  closing = true;
+  postClosed();
   stopCamera();
   window.close();
+});
+
+window.addEventListener('pagehide', () => {
+  closing = true;
+  postClosed();
+  stopCamera();
 });
 
 void startCamera();

@@ -3,11 +3,14 @@ import {
   canonicalDriveFileUrl,
   extractDriveFileIdFromLink,
   formatDriveFileDisplayName,
-  normalizeCapturedUploadLink
+  normalizeCapturedUploadLink,
+  shouldRetryDuplicateCapturedUploadLink
 } from '../../../src/web/react/features/uploads/domain/linkCapture';
 
 describe('upload link capture', () => {
   const driveId = '11umQRK-0vNrAGtf4bnVlfyLt8-Zpcc4K';
+  const validFixtureDriveId = '1nhhILSgLLXn2TKoljGZ9XyGGVstyENlu';
+  const wrongFolderFixtureDriveId = '1g52g7XOLZHIVkBWPPYKgAPZUGwbU0vIQ';
   const uploadConfig = {
     maxFiles: 10,
     linkCapture: {
@@ -21,7 +24,26 @@ describe('upload link capture', () => {
     expect(extractDriveFileIdFromLink(`https://drive.google.com/file/d/${driveId}/view?usp=sharing`)).toBe(driveId);
     expect(extractDriveFileIdFromLink(`https://drive.google.com/open?id=${driveId}`)).toBe(driveId);
     expect(extractDriveFileIdFromLink(`https://docs.google.com/document/d/${driveId}/edit`)).toBe(driveId);
+    expect(extractDriveFileIdFromLink(`https://lh3.googleusercontent.com/d/${driveId}=w800`)).toBe(driveId);
+    expect(
+      extractDriveFileIdFromLink(
+        `https://www.google.com/url?q=${encodeURIComponent(`https://drive.google.com/file/d/${driveId}/view?usp=sharing`)}`
+      )
+    ).toBe(driveId);
+    expect(extractDriveFileIdFromLink(`https://drive.google.com/file/d/${validFixtureDriveId}/view`)).toBe(
+      validFixtureDriveId
+    );
+    expect(extractDriveFileIdFromLink(`https://drive.google.com/file/d/${wrongFolderFixtureDriveId}/view`)).toBe(
+      wrongFolderFixtureDriveId
+    );
     expect(extractDriveFileIdFromLink(driveId)).toBe(driveId);
+  });
+
+  it('extracts Drive file ids from escaped scanner payloads', () => {
+    expect(extractDriveFileIdFromLink(`https:\\/\\/drive.google.com\\/file\\/d\\/${driveId}\\/view`)).toBe(driveId);
+    expect(extractDriveFileIdFromLink(JSON.stringify({ value: `https://drive.google.com/file/d/${driveId}/view` }))).toBe(
+      driveId
+    );
   });
 
   it('canonicalizes captured Drive links for storage', () => {
@@ -64,6 +86,12 @@ describe('upload link capture', () => {
     });
     expect(duplicate.status).toBe('duplicate');
     expect(duplicate.items).toEqual(first.items);
+  });
+
+  it('retries a duplicate scan only when a blocking upload has a visible failure', () => {
+    expect(shouldRetryDuplicateCapturedUploadLink({ blockUntilSaved: true, hasUploadFailure: true })).toBe(true);
+    expect(shouldRetryDuplicateCapturedUploadLink({ blockUntilSaved: true, hasUploadFailure: false })).toBe(false);
+    expect(shouldRetryDuplicateCapturedUploadLink({ blockUntilSaved: false, hasUploadFailure: true })).toBe(false);
   });
 
   it('preserves different Drive documents and respects maxFiles', () => {

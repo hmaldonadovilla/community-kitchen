@@ -1,5 +1,6 @@
 import { QuestionConfig } from '../../types';
 import { debugLog } from './debug';
+import { DriveLinkScopeValidator } from './driveLinkValidation';
 import { trashDriveApiFile } from './driveApi';
 
 const DRIVE_MULTIPART_UPLOAD_URL =
@@ -32,6 +33,7 @@ type DriveUploadResult = {
 
 export class UploadService {
   private ss: GoogleAppsScript.Spreadsheet.Spreadsheet;
+  private driveLinkValidator = new DriveLinkScopeValidator();
 
   constructor(ss: GoogleAppsScript.Spreadsheet.Spreadsheet) {
     this.ss = ss;
@@ -77,14 +79,19 @@ export class UploadService {
             .split(',')
             .map(part => part.trim())
             .filter(Boolean)
-            .forEach(url => entries.push({ kind: 'url', url }));
+            .forEach(url =>
+              entries.push({
+                kind: 'url',
+                url: this.driveLinkValidator.validateCapturedLink(url, uploadConfig)
+              })
+            );
         }
         return;
       }
       if (file && typeof file === 'object' && typeof (file as any).url === 'string') {
         const url = ((file as any).url as string).trim();
         if (url) {
-          entries.push({ kind: 'url', url });
+          entries.push({ kind: 'url', url: this.driveLinkValidator.validateCapturedLink(url, uploadConfig) });
           return;
         }
       }
