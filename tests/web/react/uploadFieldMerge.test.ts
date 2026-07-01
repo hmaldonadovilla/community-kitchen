@@ -1,5 +1,6 @@
 import {
   getUploadFileSignature,
+  mergeSavedUploadUrlItems,
   mergeUploadedFieldItems,
   type UploadComparableFile
 } from '../../../src/web/react/app/uploadFieldMerge';
@@ -67,5 +68,48 @@ describe('uploadFieldMerge', () => {
 
   it('builds stable signatures from file identity', () => {
     expect(getUploadFileSignature(fileA)).toBe('first.jpg|5000000|101');
+  });
+
+  it('preserves later QR link additions when an earlier URL-only save completes', () => {
+    const firstQueuedUrl = 'https://drive.google.com/open?id=first';
+    const secondQueuedUrl = 'https://drive.google.com/open?id=second';
+    const firstSavedUrl = 'https://drive.google.com/file/d/first/view?usp=drivesdk';
+
+    const merged = mergeSavedUploadUrlItems({
+      currentItems: [firstQueuedUrl, secondQueuedUrl],
+      hasCurrentValue: true,
+      fallbackItems: [firstQueuedUrl],
+      previousUrls: [firstQueuedUrl],
+      savedUrls: [firstSavedUrl]
+    });
+
+    expect(merged).toEqual([firstSavedUrl, secondQueuedUrl]);
+  });
+
+  it('preserves an explicit URL-only clear while a save is completing', () => {
+    const merged = mergeSavedUploadUrlItems({
+      currentItems: [],
+      hasCurrentValue: true,
+      fallbackItems: ['https://drive.google.com/open?id=first'],
+      previousUrls: ['https://drive.google.com/open?id=first'],
+      savedUrls: ['https://drive.google.com/file/d/first/view?usp=drivesdk']
+    });
+
+    expect(merged).toEqual([]);
+  });
+
+  it('canonicalizes queued URL-only values when no newer local edit exists', () => {
+    const queuedUrl = 'https://drive.google.com/open?id=first';
+    const savedUrl = 'https://drive.google.com/file/d/first/view?usp=drivesdk';
+
+    const merged = mergeSavedUploadUrlItems({
+      currentItems: [queuedUrl],
+      hasCurrentValue: true,
+      fallbackItems: [queuedUrl],
+      previousUrls: [queuedUrl],
+      savedUrls: [savedUrl]
+    });
+
+    expect(merged).toEqual([savedUrl]);
   });
 });

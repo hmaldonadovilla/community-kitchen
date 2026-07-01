@@ -1,6 +1,8 @@
 import {
   clearUploadFailure,
   createUploadFailureState,
+  isUploadFailureRetryable,
+  parseDriveLinkValidationFailure,
   resolveUploadFailureUserMessage,
   setUploadFailureRetrying
 } from '../../../src/web/react/app/uploadFailure';
@@ -29,14 +31,24 @@ describe('uploadFailure', () => {
   });
 
   it('resolves receipt link validation failures through system string fallbacks', () => {
+    const rawMessage =
+      'CK_UPLOAD_LINK_VALIDATION:outOfScope:fileId=1g52g7XOLZHIVkBWPPYKgAPZUGwbU0vIQ: Receipt evidence link must point to a file in the configured customer Drive.';
+    expect(parseDriveLinkValidationFailure(rawMessage)).toEqual({
+      code: 'outOfScope',
+      fileId: '1g52g7XOLZHIVkBWPPYKgAPZUGwbU0vIQ'
+    });
+    expect(isUploadFailureRetryable(rawMessage)).toBe(false);
     expect(
       resolveUploadFailureUserMessage({
         fallback: 'The photos were not saved. Check the connection and try again.',
-        rawMessage:
-          'CK_UPLOAD_LINK_VALIDATION:outOfScope: Receipt evidence link must point to a file in the configured customer Drive.',
+        rawMessage,
         language: 'EN'
       })
     ).toBe('Receipt evidence link must point to a file in the configured customer Drive.');
+  });
+
+  it('keeps ordinary upload failures retryable', () => {
+    expect(isUploadFailureRetryable('Exception: Service timed out')).toBe(true);
   });
 
   it('uses configured receipt link validation messages when present', () => {
