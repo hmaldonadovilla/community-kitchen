@@ -6851,7 +6851,7 @@
           "dedupeBy": "driveFileId",
           "validation": {
             "requireServerValidation": true,
-            "includeUploadDestinationDrive": true,
+            "includeUploadDestinationDrive": false,
             "includeUploadDestinationFolder": true,
             "rejectTrashed": true,
             "messages": {
@@ -6868,7 +6868,7 @@
                 "en": "Ingredient receipt is in the trash."
               },
               "outOfScope": {
-                "en": "Ingredient receipt must be in the customer Drive."
+                "en": "Ingredient receipt must be in the ingredient receipt folder."
               },
               "repositoryRequired": {
                 "en": "Ingredient receipt validation is not available. Try again later."
@@ -10529,7 +10529,7 @@
             "dedupeBy": "driveFileId",
             "validation": {
               "requireServerValidation": true,
-              "includeUploadDestinationDrive": true,
+            "includeUploadDestinationDrive": false,
               "includeUploadDestinationFolder": true,
               "rejectTrashed": true,
               "messages": {
@@ -10546,7 +10546,7 @@
                   "en": "Ingredient receipt is in the trash."
                 },
                 "outOfScope": {
-                  "en": "Ingredient receipt must be in the customer Drive."
+                  "en": "Ingredient receipt must be in the ingredient receipt folder."
                 },
                 "repositoryRequired": {
                   "en": "Ingredient receipt validation is not available. Try again later."

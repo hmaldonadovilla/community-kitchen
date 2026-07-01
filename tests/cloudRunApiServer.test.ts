@@ -3643,10 +3643,13 @@ describe('GoogleDriveFileRepository', () => {
     const repository = new GoogleDriveFileRepository({
       driveClient: {
         getFileMetadata: jest.fn(async fileId => {
-          if (fileId === stagingIngredientReceiptFolderId) return { id: stagingIngredientReceiptFolderId, parents: [] };
+          if (fileId === stagingIngredientReceiptFolderId) {
+            return { id: stagingIngredientReceiptFolderId, driveId: 'customer-drive-1', parents: [] };
+          }
           if (fileId === qrWrongFolderFileId) {
             return {
               id: qrWrongFolderFileId,
+              driveId: 'customer-drive-1',
               parents: ['other-folder'],
               trashed: false,
               webViewLink: `https://drive.google.com/file/d/${qrWrongFolderFileId}/view`
@@ -3667,12 +3670,27 @@ describe('GoogleDriveFileRepository', () => {
           validation: {
             requireServerValidation: true,
             includeUploadDestinationFolder: true,
-            includeUploadDestinationDrive: true,
+            includeUploadDestinationDrive: false,
             rejectTrashed: true
           }
         }
       })
     ).rejects.toThrow(/CK_UPLOAD_LINK_VALIDATION:outOfScope/);
+    await expect(
+      repository.saveFiles([`https://drive.google.com/file/d/${qrWrongFolderFileId}/view`], {
+        destinationFolderId: stagingIngredientReceiptFolderId,
+        linkCapture: {
+          enabled: true,
+          mode: 'driveQr',
+          validation: {
+            requireServerValidation: true,
+            includeUploadDestinationFolder: true,
+            includeUploadDestinationDrive: false,
+            rejectTrashed: true
+          }
+        }
+      })
+    ).rejects.toThrow(new RegExp(`fileId=${qrWrongFolderFileId}`));
   });
 
   test('rejects captured Drive links outside the configured customer Shared Drive', async () => {

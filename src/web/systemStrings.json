@@ -625,6 +625,9 @@
       "scanAdded": {
         "en": "QR code detected. Sent to the form."
       },
+      "invalidItem": {
+        "en": "Invalid QR code, the item will be removed"
+      },
       "validation": {
         "notDriveFile": {
           "en": "Receipt evidence links must be Google Drive file links."

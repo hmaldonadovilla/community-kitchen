@@ -20,16 +20,18 @@ export const LineItemUploadFailureNotice: React.FC<{
   return (
     <div className="ck-upload-failure" role="alert">
       <span>{failure.message}</span>
-      <button
-        type="button"
-        className="ck-upload-failure__retry"
-        disabled={retryDisabled}
-        onClick={() => onRetry?.(fieldPath)}
-      >
-        {failure.retrying
-          ? tSystem('common.loading', language, 'Loading…')
-          : tSystem('files.retrySave', language, 'Try saving photos again')}
-      </button>
+      {onRetry ? (
+        <button
+          type="button"
+          className="ck-upload-failure__retry"
+          disabled={retryDisabled}
+          onClick={() => onRetry(fieldPath)}
+        >
+          {failure.retrying
+            ? tSystem('common.loading', language, 'Loading…')
+            : tSystem('files.retrySave', language, 'Try saving photos again')}
+        </button>
+      ) : null}
     </div>
   );
 };

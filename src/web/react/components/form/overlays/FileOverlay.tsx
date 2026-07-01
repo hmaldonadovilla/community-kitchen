@@ -33,6 +33,7 @@ export type FileOverlayProps = {
   noticeTone?: 'warning' | 'error';
   saveError?: string;
   saveRetrying?: boolean;
+  getItemError?: (item: string | File, index: number) => string;
   linkCapture?: {
     scanLabel: string;
     pasteLabel: string;
@@ -95,6 +96,7 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
   noticeTone = 'warning',
   saveError,
   saveRetrying,
+  getItemError,
   linkCapture,
   onAdd,
   onScanLink,
@@ -359,6 +361,7 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
           {items.length ? (
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
               {items.map((item, idx) => {
+                const itemError = getItemError?.(item, idx) || '';
                 const isExisting = typeof item === 'string';
                 let href: string | undefined;
                 let name: string;
@@ -414,9 +417,10 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       padding: '10px 12px',
-                      border: '1px solid var(--border)',
+                      border: itemError ? '2px solid var(--danger)' : '1px solid var(--border)',
                       borderRadius: 12,
-                      gap: 12
+                      gap: 12,
+                      boxShadow: itemError ? '0 0 0 1px var(--danger)' : undefined
                     }}
                   >
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
@@ -443,16 +447,23 @@ export const FileOverlay: React.FC<FileOverlayProps> = ({
                         <div className="muted">
                           {meta}
                         </div>
+                        {itemError ? (
+                          <div role="alert" style={{ color: 'var(--danger)', fontWeight: 600, marginTop: 4 }}>
+                            {itemError}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => onRemoveAt(idx)}
-                      disabled={locked}
-                      style={withDisabled(buttonStyles.secondary, locked)}
-                    >
-                      {tSystem('lineItems.remove', language, 'Remove')}
-                    </button>
+                    {!itemError ? (
+                      <button
+                        type="button"
+                        onClick={() => onRemoveAt(idx)}
+                        disabled={locked}
+                        style={withDisabled(buttonStyles.secondary, locked)}
+                      >
+                        {tSystem('lineItems.remove', language, 'Remove')}
+                      </button>
+                    ) : null}
                   </li>
                 );
               })}

@@ -257,7 +257,7 @@ import {
   resolveInvalidatedUploadFieldPathsFromDialogUpdates,
   wasUploadFieldInvalidated
 } from './app/uploadFieldInvalidation';
-import { mergeUploadedFieldItems } from './app/uploadFieldMerge';
+import { mergeSavedUploadUrlItems, mergeUploadedFieldItems } from './app/uploadFieldMerge';
 import { resolveUploadBusyOverlayTransition } from './app/uploadBusyOverlay';
 import { resolveUploadBlockUntilSaved } from './app/uploadTransaction';
 import {
@@ -12368,7 +12368,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
                 uploadedFiles: fileItemsAtStart,
                 uploadedUrls
               }) as Array<string | File>)
-            : savedUrls;
+            : (mergeSavedUploadUrlItems({
+                currentItems: completionState.items,
+                hasCurrentValue: completionState.hasValue,
+                fallbackItems: targetItemsAtStart,
+                previousUrls: existingUrlsAtStart,
+                savedUrls
+              }) as Array<string | File>);
           const nextState = applyUploadValueToFormState({
             values: valuesRef.current,
             lineItems: lineItemsRef.current,

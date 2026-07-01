@@ -3,6 +3,19 @@ import React from 'react';
 import { resolveLocalizedString } from '../../../../i18n';
 import { tSystem } from '../../../../systemStrings';
 import type { FieldValue, LangCode, WebQuestionDefinition } from '../../../../types';
+import {
+  isUploadFailureRetryable,
+  parseDriveLinkValidationFailure,
+  resolveUploadFailureUserMessage
+} from '../../../app/uploadFailure';
+import {
+  filterInvalidUploadItems,
+  findUploadItemByDriveFileId,
+  getUploadInvalidItemError,
+  getUploadInvalidItemKey,
+  markUploadInvalidDriveFileId,
+  markUploadInvalidItem
+} from '../../../app/uploadInvalidItems';
 import { resolveUploadBlockUntilSaved } from '../../../app/uploadTransaction';
 import { resolveUploadWaitMessage, resolveUploadWaitTitle } from '../../../app/uploadWaitMessages';
 import { FileOverlay } from '../../../components/form/overlays/FileOverlay';
@@ -23,6 +36,7 @@ import { isQrScannerSupported, QrCodeScannerOverlay } from './QrCodeScannerOverl
 
 type UploadFailureLike = {
   message?: string;
+  rawMessage?: string;
   retrying?: boolean;
 };
 
@@ -77,6 +91,7 @@ export const FormFileOverlay: React.FC<{
     items: Array<string | File>;
     saving: boolean;
     saved?: boolean;
+    preserveNewerDraft?: boolean;
   }) => void;
   dismissFileOverlay: () => void;
   closeFileOverlay: () => void;
@@ -108,6 +123,8 @@ export const FormFileOverlay: React.FC<{
 }) => {
   const [qrScannerOpen, setQrScannerOpen] = React.useState(false);
   const externalQrScanCleanupRef = React.useRef<(() => void) | null>(null);
+  const fileOverlayRef = React.useRef(fileOverlay);
+  fileOverlayRef.current = fileOverlay;
 
   React.useEffect(() => {
     if (!fileOverlay.open) setQrScannerOpen(false);
@@ -168,6 +185,87 @@ export const FormFileOverlay: React.FC<{
     return configured || fallback;
   };
 
+  const resolveLatestOverlayItems = (): Array<string | File> => {
+    const latest = fileOverlayRef.current;
+    if (!latest.open) return items;
+    return latest.draftItems || resolveFileOverlayItems(latest);
+  };
+
+  const latestOverlaySaving = (): boolean => {
+    const latest = fileOverlayRef.current;
+    return Boolean(latest.open && latest.saving);
+  };
+
+  const patchLatestOverlayRef = (patch: Partial<FileOverlayState>): void => {
+    const latest = fileOverlayRef.current;
+    if (!latest.open) return;
+    fileOverlayRef.current = { ...latest, ...patch };
+  };
+
+  const resolveInvalidItems = (): Record<string, string> => fileOverlayRef.current.invalidItemErrors || {};
+
+  const findInvalidCandidateItem = (
+    displayItems: Array<string | File>,
+    requestItems: Array<string | File>,
+    rawMessage?: string | null,
+    fallbackUrl?: string
+  ): string | File | null => {
+    const validationFailure = parseDriveLinkValidationFailure(rawMessage);
+    const invalidFileId = validationFailure?.fileId || '';
+    if (invalidFileId) {
+      return findUploadItemByDriveFileId(displayItems, invalidFileId) || findUploadItemByDriveFileId(requestItems, invalidFileId);
+    }
+    if (fallbackUrl) {
+      const fallbackKey = getUploadInvalidItemKey(fallbackUrl);
+      const match =
+        displayItems.find(item => getUploadInvalidItemKey(item) === fallbackKey) ||
+        requestItems.find(item => getUploadInvalidItemKey(item) === fallbackKey);
+      if (match) return match;
+      return fallbackUrl;
+    }
+    return displayItems[displayItems.length - 1] || requestItems[requestItems.length - 1] || null;
+  };
+
+  const markInvalidUploadItem = (args: {
+    nextItems: Array<string | File>;
+    rawMessage?: string | null;
+    fallbackUrl?: string;
+  }): void => {
+    const displayItems = resolveLatestOverlayItems();
+    const validationFailure = parseDriveLinkValidationFailure(args.rawMessage);
+    const invalidItem = findInvalidCandidateItem(displayItems, args.nextItems, args.rawMessage, args.fallbackUrl);
+    if (!invalidItem && !validationFailure?.fileId) return;
+    const itemMessage = tSystem(
+      'files.linkCapture.invalidItem',
+      language,
+      'Invalid QR code, the item will be removed'
+    );
+    const nextErrors =
+      validationFailure?.fileId && !invalidItem
+        ? markUploadInvalidDriveFileId({
+            errors: resolveInvalidItems(),
+            fileId: validationFailure.fileId,
+            message: itemMessage
+          })
+        : markUploadInvalidItem({
+            errors: resolveInvalidItems(),
+            item: invalidItem as string | File,
+            message: itemMessage
+          });
+    patchLatestOverlayRef({ invalidItemErrors: nextErrors, draftItems: displayItems, saving: false, notice: undefined });
+    setFileOverlay(prev =>
+      prev.open
+        ? {
+            ...prev,
+            draftItems: displayItems,
+            saving: false,
+            notice: undefined,
+            invalidItemErrors: nextErrors
+          }
+        : prev
+    );
+  };
+
   const onAdd = () => {
     if (submitting || readOnly || fileOverlay.saving) return;
     if (isTop) {
@@ -196,8 +294,12 @@ export const FormFileOverlay: React.FC<{
     fileInputsRef.current[fieldPath]?.click();
   };
 
-  const commitImmediateItems = (nextItems: Array<string | File>, action: 'removeOne' | 'removeAll' | 'addLink') => {
-    if (submitting || readOnly || fileOverlay.saving) return;
+  const commitImmediateItems = (
+    nextItems: Array<string | File>,
+    action: 'removeOne' | 'removeAll' | 'removeInvalid' | 'addLink',
+    options?: { invalidCandidateUrl?: string; closeAfterSave?: boolean }
+  ) => {
+    if (submitting || readOnly || (action !== 'addLink' && latestOverlaySaving())) return;
     const waitKind = action === 'addLink' ? 'save' : 'removeSelected';
     const waitTitle = resolveUploadWaitTitle(uploadConfig, language, waitKind);
     const waitMessage = resolveUploadWaitMessage(uploadConfig, language, waitKind);
@@ -210,6 +312,7 @@ export const FormFileOverlay: React.FC<{
       field: isLine ? fileOverlay.field : undefined,
       uploadConfig
     };
+    patchLatestOverlayRef({ draftItems: nextItems, saving: true, notice: undefined });
     setFileOverlay(prev => (prev.open ? { ...prev, draftItems: nextItems, saving: true, notice: undefined } : prev));
     clearUploadFailureForField(fieldPath);
     if (isTop) {
@@ -246,32 +349,96 @@ export const FormFileOverlay: React.FC<{
     void uploadPromise
       .then(res => {
         if (!res?.success) {
-          const message = recordUploadFailure(uploadTarget, res?.message);
+          const validationFailure = parseDriveLinkValidationFailure(res?.message);
+          const message = validationFailure
+            ? resolveUploadFailureUserMessage({
+                rawMessage: res?.message,
+                uploadConfig,
+                language,
+                fallback: tSystem('files.error.saveFailed', language, 'The photos were not saved. Check the connection and try again.')
+              })
+            : recordUploadFailure(uploadTarget, res?.message);
           announceUpload(fieldPath, message);
-          updateFileOverlayAfterImmediateAction({ scope: isTop ? 'top' : 'line', fieldPath, items: nextItems, saving: false });
+          if (validationFailure) {
+            markInvalidUploadItem({
+              nextItems,
+              rawMessage: res?.message,
+              fallbackUrl: options?.invalidCandidateUrl
+            });
+            onDiagnostic?.('upload.linkCapture.validation.itemInvalid', {
+              fieldPath,
+              code: validationFailure.code,
+              driveFileId: validationFailure.fileId || null
+            });
+            return;
+          }
+          updateFileOverlayAfterImmediateAction({
+            scope: isTop ? 'top' : 'line',
+            fieldPath,
+            items: nextItems,
+            saving: false,
+            preserveNewerDraft: action === 'addLink'
+          });
           return;
         }
         const savedItems = Array.isArray(res.items) ? res.items : nextItems.filter((item): item is string => typeof item === 'string');
         clearUploadFailureForField(fieldPath);
         announceUpload(fieldPath, tSystem('files.uploaded', language, 'Added'));
-        updateFileOverlayAfterImmediateAction({ scope: isTop ? 'top' : 'line', fieldPath, items: savedItems, saving: false, saved: true });
+        updateFileOverlayAfterImmediateAction({
+          scope: isTop ? 'top' : 'line',
+          fieldPath,
+          items: savedItems,
+          saving: false,
+          saved: true,
+          preserveNewerDraft: action === 'addLink'
+        });
         onDiagnostic?.('upload.overlay.immediateCommit.success', {
           fieldPath,
           scope: isTop ? 'top' : 'line',
           action,
           total: savedItems.length
         });
+        if (options?.closeAfterSave) {
+          dismissFileOverlay();
+        }
       })
       .catch((err: any) => {
-        const message = recordUploadFailure(uploadTarget, err?.message);
+        const validationFailure = parseDriveLinkValidationFailure(err?.message);
+        const message = validationFailure
+          ? resolveUploadFailureUserMessage({
+              rawMessage: err?.message,
+              uploadConfig,
+              language,
+              fallback: tSystem('files.error.saveFailed', language, 'The photos were not saved. Check the connection and try again.')
+            })
+          : recordUploadFailure(uploadTarget, err?.message);
         announceUpload(fieldPath, message);
-        updateFileOverlayAfterImmediateAction({ scope: isTop ? 'top' : 'line', fieldPath, items: nextItems, saving: false });
+        if (validationFailure) {
+          markInvalidUploadItem({
+            nextItems,
+            rawMessage: err?.message,
+            fallbackUrl: options?.invalidCandidateUrl
+          });
+          onDiagnostic?.('upload.linkCapture.validation.itemInvalid', {
+            fieldPath,
+            code: validationFailure.code,
+            driveFileId: validationFailure.fileId || null
+          });
+          return;
+        }
+        updateFileOverlayAfterImmediateAction({
+          scope: isTop ? 'top' : 'line',
+          fieldPath,
+          items: nextItems,
+          saving: false,
+          preserveNewerDraft: action === 'addLink'
+        });
       });
   };
 
   const addCapturedLink = (rawValue: string, source: 'scan' | 'paste'): boolean => {
-    if (!linkCaptureConfig || submitting || readOnly || fileOverlay.saving) return false;
-    const result = appendCapturedUploadLink({ existing: items, rawValue, uploadConfig });
+    if (!linkCaptureConfig || submitting || readOnly || (source !== 'scan' && latestOverlaySaving())) return false;
+    const result = appendCapturedUploadLink({ existing: resolveLatestOverlayItems(), rawValue, uploadConfig });
 
     if (result.status === 'invalid') {
       const message = resolveLinkCaptureText(
@@ -322,9 +489,10 @@ export const FormFileOverlay: React.FC<{
     onDiagnostic?.('upload.linkCapture.added', { fieldPath, source, driveFileId: result.driveFileId });
 
     if (blockUntilSaved) {
-      commitImmediateItems(result.items, 'addLink');
+      commitImmediateItems(result.items, 'addLink', { invalidCandidateUrl: result.url });
     } else {
-      setFileOverlay(prev => (prev.open ? { ...prev, draftItems: result.items, notice: undefined } : prev));
+      patchLatestOverlayRef({ draftItems: result.items, notice: undefined, invalidItemErrors: undefined });
+      setFileOverlay(prev => (prev.open ? { ...prev, draftItems: result.items, notice: undefined, invalidItemErrors: undefined } : prev));
     }
     return true;
   };
@@ -394,11 +562,6 @@ export const FormFileOverlay: React.FC<{
       return;
     }
 
-    try {
-      scannerWindow.focus();
-    } catch {
-      // Some mobile browser windows cannot be focused programmatically after opening.
-    }
     onDiagnostic?.('upload.linkCapture.externalScanner.open', {
       fieldPath,
       origin: externalScanner.origin,
@@ -412,7 +575,8 @@ export const FormFileOverlay: React.FC<{
       commitImmediateItems([], 'removeAll');
       return;
     }
-    setFileOverlay(prev => (prev.open ? { ...prev, draftItems: [], notice: undefined } : prev));
+    patchLatestOverlayRef({ draftItems: [], notice: undefined, invalidItemErrors: undefined });
+    setFileOverlay(prev => (prev.open ? { ...prev, draftItems: [], notice: undefined, invalidItemErrors: undefined } : prev));
     clearUploadFailureForField(fieldPath);
     announceUpload(fieldPath, tSystem('files.clearAll', language, 'Remove all'));
     onDiagnostic?.('upload.overlay.clear', { fieldPath });
@@ -426,7 +590,11 @@ export const FormFileOverlay: React.FC<{
       commitImmediateItems(nextItems, 'removeOne');
       return;
     }
-    setFileOverlay(prev => (prev.open ? { ...prev, draftItems: nextItems, notice: undefined } : prev));
+    const removedKey = removed ? getUploadInvalidItemKey(removed as any) : '';
+    const nextErrors = { ...resolveInvalidItems() };
+    if (removedKey) delete nextErrors[removedKey];
+    patchLatestOverlayRef({ draftItems: nextItems, notice: undefined, invalidItemErrors: nextErrors });
+    setFileOverlay(prev => (prev.open ? { ...prev, draftItems: nextItems, notice: undefined, invalidItemErrors: nextErrors } : prev));
     clearUploadFailureForField(fieldPath);
     announceUpload(
       fieldPath,
@@ -435,6 +603,38 @@ export const FormFileOverlay: React.FC<{
         : tSystem('lineItems.remove', language, 'Remove')
     );
     onDiagnostic?.('upload.overlay.remove', { fieldPath, removed: describeUploadItem(removed as any), remaining: nextItems.length });
+  };
+
+  const closeWithInvalidCleanup = () => {
+    const invalidErrors = resolveInvalidItems();
+    const latestItems = resolveLatestOverlayItems();
+    const validItems = filterInvalidUploadItems(latestItems, invalidErrors);
+    if (validItems.length !== latestItems.length) {
+      clearUploadFailureForField(fieldPath);
+      patchLatestOverlayRef({ draftItems: validItems, invalidItemErrors: undefined, notice: undefined });
+      setFileOverlay(prev =>
+        prev.open
+          ? {
+              ...prev,
+              draftItems: validItems,
+              invalidItemErrors: undefined,
+              notice: undefined
+            }
+          : prev
+      );
+      if (blockUntilSaved) {
+        commitImmediateItems(validItems, 'removeInvalid', { closeAfterSave: true });
+        return;
+      }
+      if (isTop) {
+        handleFileFieldChange(fileOverlay.question!, validItems);
+      } else {
+        handleLineFieldChange(fileOverlay.group!, fileOverlay.rowId as string, fileOverlay.field, validItems as unknown as FieldValue);
+      }
+      dismissFileOverlay();
+      return;
+    }
+    closeFileOverlay();
   };
 
   const onSave = async () => {
@@ -535,6 +735,7 @@ export const FormFileOverlay: React.FC<{
         noticeTone={fileOverlay.notice?.tone}
         saveError={uploadFailures[fieldPath]?.message}
         saveRetrying={uploadFailures[fieldPath]?.retrying}
+        getItemError={(item) => getUploadInvalidItemError(fileOverlay.invalidItemErrors, item)}
         linkCapture={
           linkCaptureConfig && linkCaptureLabels
             ? {
@@ -548,10 +749,14 @@ export const FormFileOverlay: React.FC<{
         onScanLink={linkCaptureConfig ? openQrScanner : undefined}
         onAddLink={linkCaptureConfig ? value => addCapturedLink(value, 'paste') : undefined}
         onSave={blockUntilSaved ? undefined : onSave}
-        onRetrySave={uploadFailures[fieldPath] ? () => retryUploadFailure(fieldPath) : undefined}
+        onRetrySave={
+          uploadFailures[fieldPath] && isUploadFailureRetryable(uploadFailures[fieldPath]?.rawMessage)
+            ? () => retryUploadFailure(fieldPath)
+            : undefined
+        }
         onClearAll={onClearAll}
         onRemoveAt={onRemoveAt}
-        onClose={closeFileOverlay}
+        onClose={closeWithInvalidCleanup}
       />
       <QrCodeScannerOverlay
         open={qrScannerOpen}

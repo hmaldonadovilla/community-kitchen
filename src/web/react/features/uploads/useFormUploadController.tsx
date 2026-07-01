@@ -3,9 +3,17 @@ import React, { useCallback, useRef, useState } from 'react';
 import { resolveLocalizedString } from '../../../i18n';
 import { tSystem } from '../../../systemStrings';
 import type { FieldValue, LangCode, WebQuestionDefinition } from '../../../types';
-import { clearUploadFailure, createUploadFailureState, resolveUploadFailureUserMessage, setUploadFailureRetrying, type UploadFailureMap } from '../../app/uploadFailure';
+import {
+  clearUploadFailure,
+  createUploadFailureState,
+  isUploadFailureRetryable,
+  resolveUploadFailureUserMessage,
+  setUploadFailureRetrying,
+  type UploadFailureMap
+} from '../../app/uploadFailure';
 import { resolveUploadBlockUntilSaved } from '../../app/uploadTransaction';
 import { resolveUploadWaitMessage, resolveUploadWaitTitle } from '../../app/uploadWaitMessages';
+import type { UploadInvalidItemErrors } from '../../app/uploadInvalidItems';
 import type { LineItemState } from '../../types';
 import { applyUploadConstraints, toUploadItems } from '../../components/form/utils';
 import { LineItemUploadFailureNotice } from '../lineItems/components/LineItemUploadFailureNotice';
@@ -23,6 +31,7 @@ export interface FileOverlayState {
   originalSignature?: string;
   saving?: boolean;
   notice?: { message: string; tone: 'warning' | 'error' };
+  invalidItemErrors?: UploadInvalidItemErrors;
 }
 
 export type UploadRetryTarget = {
@@ -191,7 +200,8 @@ export const useFormUploadController = (args: {
         draftItems,
         originalSignature: fileItemsSignature(draftItems),
         saving: false,
-        notice: undefined
+        notice: undefined,
+        invalidItemErrors: undefined
       });
       onDiagnostic?.('upload.overlay.open', { scope: next.scope, title: next.title });
     },
@@ -393,7 +403,11 @@ export const useFormUploadController = (args: {
         fieldPath={fieldPath}
         failure={uploadFailures[fieldPath]}
         disabled={disabled}
-        onRetry={onUploadFiles ? retryUploadFailure : undefined}
+        onRetry={
+          onUploadFiles && isUploadFailureRetryable(uploadFailures[fieldPath]?.rawMessage)
+            ? retryUploadFailure
+            : undefined
+        }
       />
     ),
     [language, onUploadFiles, retryUploadFailure, uploadFailures]
@@ -450,6 +464,7 @@ export const useFormUploadController = (args: {
           ...prev,
           draftItems: items,
           saving: blockUntilSaved && !errorMessage && accepted > 0 ? true : prev.saving,
+          invalidItemErrors: undefined,
           notice: constraintMessage
             ? { message: constraintMessage, tone: errorMessage || warningKind === 'maxFilesPartial' ? 'error' : 'warning' }
             : undefined
@@ -492,7 +507,14 @@ export const useFormUploadController = (args: {
   );
 
   const updateFileOverlayAfterImmediateAction = useCallback(
-    (updateArgs: { scope: 'top' | 'line'; fieldPath: string; items: Array<string | File>; saving: boolean; saved?: boolean }) => {
+    (updateArgs: {
+      scope: 'top' | 'line';
+      fieldPath: string;
+      items: Array<string | File>;
+      saving: boolean;
+      saved?: boolean;
+      preserveNewerDraft?: boolean;
+    }) => {
       setFileOverlay(prev => {
         if (!prev.open) return prev;
         const prevFieldPath =
@@ -502,11 +524,23 @@ export const useFormUploadController = (args: {
               ? prev.fieldPath || ''
               : '';
         if (prev.scope !== updateArgs.scope || prevFieldPath !== updateArgs.fieldPath) return prev;
+        const prevItems = prev.draftItems || [];
+        const hasNewerDraft =
+          updateArgs.preserveNewerDraft &&
+          prevItems.length > updateArgs.items.length &&
+          fileItemsSignature(prevItems) !== fileItemsSignature(updateArgs.items);
+        if (hasNewerDraft) {
+          return {
+            ...prev,
+            saving: prev.saving || updateArgs.saving
+          };
+        }
         return {
           ...prev,
           draftItems: updateArgs.items,
           originalSignature: updateArgs.saved ? fileItemsSignature(updateArgs.items) : prev.originalSignature,
-          saving: updateArgs.saving
+          saving: updateArgs.saving,
+          invalidItemErrors: updateArgs.saved ? undefined : prev.invalidItemErrors
         };
       });
     },

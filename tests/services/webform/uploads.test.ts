@@ -337,6 +337,61 @@ describe('UploadService', () => {
     expect(urls).toBe(`https://drive.google.com/file/d/${qrExampleFileId}/view`);
   });
 
+  test('accepts scanned Drive URLs in the Apps Script runtime without a URL constructor', () => {
+    const originalUrl = (global as any).URL;
+    (global as any).URL = undefined;
+    try {
+      (global as any).DriveApp.getFolderById = jest.fn(() => ({
+        getId: () => stagingIngredientReceiptFolderId,
+        getName: () => 'Uploads',
+        createFile: jest.fn()
+      }));
+      (global as any).Drive = {
+        Files: {
+          get: jest.fn((fileId: string) => {
+            if (fileId === stagingIngredientReceiptFolderId) {
+              return { id: stagingIngredientReceiptFolderId, parents: [] };
+            }
+            if (fileId === qrExampleFileId) {
+              return {
+                id: qrExampleFileId,
+                parents: [{ id: stagingIngredientReceiptFolderId }],
+                labels: { trashed: false },
+                alternateLink: `https://drive.google.com/file/d/${qrExampleFileId}/view`
+              };
+            }
+            throw new Error(`Unexpected file id ${fileId}`);
+          })
+        }
+      };
+
+      const service = new UploadService(new MockSpreadsheet() as any);
+      const redirectedQrUrl = `https://www.google.com/url?q=${encodeURIComponent(
+        `https://drive.google.com/file/d/${qrExampleFileId}/view`
+      )}`;
+      const urls = service.saveFiles(
+        [`https://drive.google.com/open?id=${qrExampleFileId}`, redirectedQrUrl],
+        {
+          destinationFolderId: stagingIngredientReceiptFolderId,
+          linkCapture: {
+            enabled: true,
+            mode: 'driveQr',
+            validation: {
+              requireServerValidation: true,
+              includeUploadDestinationFolder: true,
+              includeUploadDestinationDrive: true,
+              rejectTrashed: true
+            }
+          }
+        } as any
+      );
+
+      expect(urls).toBe(`https://drive.google.com/file/d/${qrExampleFileId}/view`);
+    } finally {
+      (global as any).URL = originalUrl;
+    }
+  });
+
   test('rejects the checked-in wrong-folder QR example when the Drive file is outside the destination folder', () => {
     (global as any).DriveApp.getFolderById = jest.fn(() => ({
       getId: () => stagingIngredientReceiptFolderId,
@@ -347,11 +402,12 @@ describe('UploadService', () => {
       Files: {
         get: jest.fn((fileId: string) => {
           if (fileId === stagingIngredientReceiptFolderId) {
-            return { id: stagingIngredientReceiptFolderId, parents: [] };
+            return { id: stagingIngredientReceiptFolderId, driveId: 'customer-drive-1', parents: [] };
           }
           if (fileId === qrWrongFolderFileId) {
             return {
               id: qrWrongFolderFileId,
+              driveId: 'customer-drive-1',
               parents: [{ id: 'other-folder' }],
               labels: { trashed: false },
               alternateLink: `https://drive.google.com/file/d/${qrWrongFolderFileId}/view`
@@ -375,12 +431,27 @@ describe('UploadService', () => {
           validation: {
             requireServerValidation: true,
             includeUploadDestinationFolder: true,
-            includeUploadDestinationDrive: true,
+            includeUploadDestinationDrive: false,
             rejectTrashed: true
           }
         }
       } as any)
     ).toThrow(/CK_UPLOAD_LINK_VALIDATION:outOfScope/);
+    expect(() =>
+      service.saveFiles([`https://drive.google.com/file/d/${qrWrongFolderFileId}/view`], {
+        destinationFolderId: stagingIngredientReceiptFolderId,
+        linkCapture: {
+          enabled: true,
+          mode: 'driveQr',
+          validation: {
+            requireServerValidation: true,
+            includeUploadDestinationFolder: true,
+            includeUploadDestinationDrive: false,
+            rejectTrashed: true
+          }
+        }
+      } as any)
+    ).toThrow(new RegExp(`fileId=${qrWrongFolderFileId}`));
   });
 
   test('rejects captured Drive links outside the configured customer Shared Drive', () => {

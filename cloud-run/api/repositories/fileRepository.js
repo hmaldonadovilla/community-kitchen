@@ -45,6 +45,38 @@ const tryDecodeURIComponent = raw => {
   }
 };
 
+const tryDecodeUrlComponent = raw => tryDecodeURIComponent(normalizeString(raw).replace(/\+/g, ' '));
+
+const extractUrlHost = rawValue => {
+  const raw = normalizeString(rawValue);
+  const match = /^https?:\/\/([^/?#\s]+)/i.exec(raw);
+  const authority = (match && match[1] ? match[1] : '').trim();
+  if (!authority) return '';
+  const withoutCredentials = authority.includes('@') ? authority.slice(authority.lastIndexOf('@') + 1) : authority;
+  return withoutCredentials.replace(/:\d+$/, '').toLowerCase();
+};
+
+const extractUrlParamValues = (rawValue, paramNames) => {
+  const raw = normalizeString(rawValue);
+  const questionIndex = raw.indexOf('?');
+  if (questionIndex < 0) return [];
+  const hashIndex = raw.indexOf('#', questionIndex + 1);
+  const query = raw.slice(questionIndex + 1, hashIndex >= 0 ? hashIndex : undefined);
+  if (!query) return [];
+  const wanted = new Set(paramNames.map(param => param.toLowerCase()));
+  const values = [];
+  query.split('&').forEach(part => {
+    if (!part) return;
+    const equalsIndex = part.indexOf('=');
+    const rawKey = equalsIndex >= 0 ? part.slice(0, equalsIndex) : part;
+    const rawValuePart = equalsIndex >= 0 ? part.slice(equalsIndex + 1) : '';
+    const key = tryDecodeUrlComponent(rawKey).toLowerCase();
+    if (!wanted.has(key) || !rawValuePart) return;
+    values.push(tryDecodeUrlComponent(rawValuePart));
+  });
+  return values;
+};
+
 const unescapeUrlText = raw =>
   normalizeString(raw)
     .replace(/\\\//g, '/')
@@ -100,15 +132,9 @@ const collectDriveLinkCandidates = rawValue => {
     pushJsonUrlCandidates(queue, seen, current);
 
     if (!/^https?:\/\//i.test(firstUrl)) continue;
-    try {
-      const url = new URL(firstUrl);
-      ['id', 'q', 'url', 'u', 'continue', 'target'].forEach(param => {
-        const rawParam = url.searchParams.get(param);
-        if (rawParam) pushCandidate(queue, seen, tryDecodeURIComponent(rawParam));
-      });
-    } catch {
-      // Ignore malformed URL candidates.
-    }
+    extractUrlParamValues(firstUrl, ['id', 'q', 'url', 'u', 'continue', 'target']).forEach(rawParam => {
+      pushCandidate(queue, seen, rawParam);
+    });
   }
 
   return queue;
@@ -117,18 +143,14 @@ const collectDriveLinkCandidates = rawValue => {
 const isAllowedDriveHost = raw => {
   const value = normalizeString(raw);
   if (!/^https?:\/\//i.test(value)) return true;
-  try {
-    const host = new URL(value).hostname.toLowerCase();
-    return (
-      host === 'drive.google.com' ||
-      host === 'docs.google.com' ||
-      host === 'googleusercontent.com' ||
-      host === 'drive.usercontent.google.com' ||
-      host.endsWith('.googleusercontent.com')
-    );
-  } catch {
-    return false;
-  }
+  const host = extractUrlHost(value);
+  return (
+    host === 'drive.google.com' ||
+    host === 'docs.google.com' ||
+    host === 'googleusercontent.com' ||
+    host === 'drive.usercontent.google.com' ||
+    host.endsWith('.googleusercontent.com')
+  );
 };
 
 const extractDriveFileIdForValidation = value => {
@@ -153,8 +175,12 @@ const extractDriveFileIdForValidation = value => {
   return '';
 };
 
-const linkValidationError = code =>
-  new Error(`${DRIVE_LINK_VALIDATION_ERROR_PREFIX}${code}: ${LINK_VALIDATION_MESSAGES[code] || 'Receipt link validation failed.'}`);
+const linkValidationError = (code, fileId) => {
+  const fileIdPart = fileId ? `fileId=${fileId}: ` : '';
+  return new Error(
+    `${DRIVE_LINK_VALIDATION_ERROR_PREFIX}${code}: ${fileIdPart}${LINK_VALIDATION_MESSAGES[code] || 'Receipt link validation failed.'}`
+  );
+};
 
 const canonicalDriveUrl = fileId => `https://drive.google.com/open?id=${encodeURIComponent(fileId)}`;
 
@@ -485,10 +511,10 @@ class GoogleDriveFileRepository {
 
     const metadata = await this.getLinkValidationMetadata(fileId);
     if (!metadata) {
-      throw linkValidationError('notAccessible');
+      throw linkValidationError('notAccessible', fileId);
     }
     if (scope.rejectTrashed && isMetadataTrashed(metadata)) {
-      throw linkValidationError('trashed');
+      throw linkValidationError('trashed', fileId);
     }
 
     const driveId = metadataDriveId(metadata);
@@ -499,7 +525,7 @@ class GoogleDriveFileRepository {
       return metadataUrl(metadata, fileId);
     }
 
-    throw linkValidationError('outOfScope');
+    throw linkValidationError('outOfScope', fileId);
   }
 
   async resolveLinkValidationScope(validation, uploadConfig, context = {}) {

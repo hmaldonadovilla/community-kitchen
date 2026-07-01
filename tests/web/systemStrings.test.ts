@@ -22,6 +22,10 @@ describe('systemStrings', () => {
     expect(tSystem('navigation.waitPhotos', 'EN', '')).toContain('files');
   });
 
+  test('invalid QR upload item copy explains automatic removal', () => {
+    expect(tSystem('files.linkCapture.invalidItem', 'EN', '')).toBe('Invalid QR code, the item will be removed');
+  });
+
   test('navigation wait messages distinguish app opening from returning home', () => {
     expect(tSystem('navigation.waitForms', 'EN', '')).toBe('Please wait while we open the app. This may take a few seconds.');
     expect(tSystem('navigation.waitHome', 'EN', '')).toBe(

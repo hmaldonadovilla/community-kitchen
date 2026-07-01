@@ -59,6 +59,23 @@ const postClosed = (): void => {
   );
 };
 
+const closeScannerWindow = (): void => {
+  const tryClose = (): void => {
+    try {
+      window.close();
+    } catch {
+      // Ignore browsers that block scripted tab close.
+    }
+  };
+  tryClose();
+  window.setTimeout(tryClose, 80);
+  window.setTimeout(() => {
+    if (document.visibilityState === 'visible') {
+      setStatus('Scanner closed. Return to the form tab.');
+    }
+  }, 500);
+};
+
 const beginScanning = (): void => {
   if (closing) return;
   stopScanLoop();
@@ -81,7 +98,7 @@ const sendResult = (value: string): void => {
       targetOrigin === '*' ? '*' : targetOrigin
     );
     if (closeOnResult) {
-      window.setTimeout(() => window.close(), 700);
+      window.setTimeout(closeScannerWindow, 700);
       return;
     }
   }
@@ -139,7 +156,7 @@ closeButton?.addEventListener('click', () => {
   closing = true;
   postClosed();
   stopCamera();
-  window.close();
+  closeScannerWindow();
 });
 
 window.addEventListener('pagehide', () => {

@@ -19,7 +19,7 @@ export type UploadFailureMap<TTarget extends UploadFailureTargetBase = UploadFai
   UploadFailureState<TTarget>
 >;
 
-type DriveLinkValidationCode =
+export type DriveLinkValidationCode =
   | 'notDriveFile'
   | 'scopeMissing'
   | 'notAccessible'
@@ -65,19 +65,32 @@ const LEGACY_DRIVE_LINK_VALIDATION_MESSAGES: Array<{ pattern: RegExp; code: Driv
   { pattern: /^Receipt link validation requires a configured Drive file repository\./i, code: 'repositoryRequired' }
 ];
 
-export const parseDriveLinkValidationFailureCode = (rawMessage?: string | null): DriveLinkValidationCode | null => {
+export type DriveLinkValidationFailure = {
+  code: DriveLinkValidationCode;
+  fileId?: string;
+};
+
+export const parseDriveLinkValidationFailure = (rawMessage?: string | null): DriveLinkValidationFailure | null => {
   const raw = (rawMessage || '').toString().trim();
   if (!raw) return null;
   if (raw.startsWith(DRIVE_LINK_VALIDATION_ERROR_PREFIX)) {
-    const code = raw
-      .slice(DRIVE_LINK_VALIDATION_ERROR_PREFIX.length)
-      .split(':')[0]
-      .trim() as DriveLinkValidationCode;
-    return Object.prototype.hasOwnProperty.call(DRIVE_LINK_VALIDATION_SYSTEM_KEYS, code) ? code : null;
+    const body = raw.slice(DRIVE_LINK_VALIDATION_ERROR_PREFIX.length);
+    const parts = body.split(':').map(part => part.trim());
+    const code = parts[0] as DriveLinkValidationCode;
+    if (!Object.prototype.hasOwnProperty.call(DRIVE_LINK_VALIDATION_SYSTEM_KEYS, code)) return null;
+    const fileIdPart = parts.find(part => /^fileId=/i.test(part));
+    const fileId = fileIdPart ? fileIdPart.replace(/^fileId=/i, '').trim() : '';
+    return fileId ? { code, fileId } : { code };
   }
   const legacy = LEGACY_DRIVE_LINK_VALIDATION_MESSAGES.find(entry => entry.pattern.test(raw));
-  return legacy?.code || null;
+  return legacy?.code ? { code: legacy.code } : null;
 };
+
+export const parseDriveLinkValidationFailureCode = (rawMessage?: string | null): DriveLinkValidationCode | null =>
+  parseDriveLinkValidationFailure(rawMessage)?.code || null;
+
+export const isUploadFailureRetryable = (rawMessage?: string | null): boolean =>
+  !parseDriveLinkValidationFailureCode(rawMessage);
 
 const resolveConfiguredDriveLinkValidationMessage = (args: {
   code: DriveLinkValidationCode;
