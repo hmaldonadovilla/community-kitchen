@@ -2,6 +2,8 @@ const {
   syncGuidedStepUtilisationDraft
 } = require('../../cloud-run/api/services/guidedUtilisationDraftSync');
 
+export {};
+
 const createDeferred = () => {
   let resolve!: (value: any) => void;
   const promise = new Promise<any>(next => {
