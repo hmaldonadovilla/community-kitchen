@@ -24,6 +24,7 @@ import {
 } from './followup/docRenderer';
 import { renderHtmlFromHtmlTemplate } from './followup/htmlRenderer';
 import { renderMarkdownFromTemplate } from './followup/markdownRenderer';
+import { validateMealProductionFollowupActionReadiness } from './followup/mealProductionFollowupGuard';
 import { hydrateMealProductionPrepIngredientsFromLeftovers } from './followup/mealProductionLeftoverIngredients';
 
 const TEMPLATE_HYDRATED_MARKER = '__ckMealProductionTemplateHydrated';
@@ -85,6 +86,15 @@ export class FollowupService {
     const validationErrors = validateFollowupRequirements(questions, context.record);
     if (validationErrors.length) {
       return { success: false, message: `Validation failed: ${validationErrors.join('; ')}` };
+    }
+    const readinessErrors = validateMealProductionFollowupActionReadiness({
+      form,
+      questions,
+      record: context.record,
+      action: normalizedAction
+    });
+    if (readinessErrors.length) {
+      return { success: false, message: `Validation failed: ${readinessErrors.join('; ')}` };
     }
     switch (normalizedAction) {
       case 'CREATE_PDF':
