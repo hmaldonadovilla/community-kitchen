@@ -6859,19 +6859,19 @@
             "rejectTrashed": true,
             "messages": {
               "notDriveFile": {
-                "en": "Scan a Google Drive ingredient receipt QR code."
+                "en": "Invalid QR code."
               },
               "scopeMissing": {
                 "en": "Ingredient receipt validation is not configured correctly."
               },
               "notAccessible": {
-                "en": "Ingredient receipt could not be opened in the customer Drive."
+                "en": "Ingredient receipt could not be opened."
               },
               "trashed": {
                 "en": "Ingredient receipt is in the trash."
               },
               "outOfScope": {
-                "en": "Ingredient receipt must be in the ingredient receipt folder."
+                "en": "Invalid QR code."
               },
               "repositoryRequired": {
                 "en": "Ingredient receipt validation is not available. Try again later."
@@ -10537,19 +10537,19 @@
               "rejectTrashed": true,
               "messages": {
                 "notDriveFile": {
-                  "en": "Scan a Google Drive ingredient receipt QR code."
+                  "en": "Invalid QR code."
                 },
                 "scopeMissing": {
                   "en": "Ingredient receipt validation is not configured correctly."
                 },
                 "notAccessible": {
-                  "en": "Ingredient receipt could not be opened in the customer Drive."
+                  "en": "Ingredient receipt could not be opened."
                 },
                 "trashed": {
                   "en": "Ingredient receipt is in the trash."
                 },
                 "outOfScope": {
-                  "en": "Ingredient receipt must be in the ingredient receipt folder."
+                  "en": "Invalid QR code."
                 },
                 "repositoryRequired": {
                   "en": "Ingredient receipt validation is not available. Try again later."
