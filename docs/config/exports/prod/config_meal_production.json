@@ -6888,7 +6888,7 @@
               "en": "This receipt has already been added."
             },
             "invalid": {
-              "en": "Scan or paste a Google Drive receipt link."
+              "en": "Invalid QR code."
             },
             "unsupported": {
               "en": "QR scanning is not available in this browser. Paste the Drive link instead."
@@ -10566,7 +10566,7 @@
                 "en": "This receipt has already been added."
               },
               "invalid": {
-                "en": "Scan or paste a Google Drive receipt link."
+                "en": "Invalid QR code."
               },
               "unsupported": {
                 "en": "QR scanning is not available in this browser. Paste the Drive link instead."
