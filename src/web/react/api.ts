@@ -10,6 +10,8 @@ import {
   BankUtilisationMutationRequest,
   BankUtilisationMutationResult,
   PaginatedResult,
+  QrScanSessionLaunchRequest,
+  QrScanSessionLaunchResult,
   TemplateIdMap,
   WebFormDefinition,
   WebFormSubmission
@@ -1674,6 +1676,19 @@ export const runQueuedFollowupEmailJobsApi = (options?: { limit?: number }): Pro
 
 export const uploadFilesApi = (files: any, uploadConfig?: any): Promise<UploadFilesResult> =>
   invokeDriveUploadTransport<UploadFilesResult>('uploadFiles', files, uploadConfig);
+
+/**
+ * Creates the short-lived, field-scoped QR session in Apps Script. This call is
+ * intentionally made only after the scanner window has opened so it cannot
+ * delay camera startup or cause the browser to block the popup.
+ */
+export const createQrScanSessionLaunchApi = (
+  request: QrScanSessionLaunchRequest
+): Promise<QrScanSessionLaunchResult> => runAppsScript<QrScanSessionLaunchResult>('createQrScanSessionLaunch', request);
+
+/** Executes an authenticated QR-session command through the originating Apps Script page. */
+export const qrScannerSessionRpcApi = <T = unknown,>(request: unknown): Promise<T> =>
+  runAppsScript<T>('qrScannerSessionRpc', request);
 
 export const renderDocTemplateApi = (payload: SubmissionPayload, buttonId: string): Promise<RenderDocTemplateResult> =>
   invokeDriveArtifactTransport<RenderDocTemplateResult>('renderDocTemplate', payload, buttonId);

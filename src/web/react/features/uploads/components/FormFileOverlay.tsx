@@ -20,19 +20,26 @@ import { resolveUploadBlockUntilSaved } from '../../../app/uploadTransaction';
 import { resolveUploadWaitMessage, resolveUploadWaitTitle } from '../../../app/uploadWaitMessages';
 import { FileOverlay } from '../../../components/form/overlays/FileOverlay';
 import { describeUploadItem } from '../../../components/form/utils';
-import { resolveExternalQrScannerLaunch } from '../domain/externalQrScanner';
 import {
   appendCapturedUploadLink,
   resolveUploadLinkCaptureConfig,
   shouldRetryDuplicateCapturedUploadLink
 } from '../domain/linkCapture';
+import { matchesExternalQrScannerOverlayTarget } from '../domain/externalQrScanner';
+import { useExternalQrScannerSession } from '../hooks/useExternalQrScannerSession';
+import type {
+  ApplyQrScannerCommittedUpdate,
+  BeginQrScannerInteraction,
+  EndQrScannerInteraction,
+  PrepareQrScannerLaunch,
+  QrScannerCommittedUpdate
+} from '../qrScannerTypes';
 import type {
   FileOverlayState,
   FileUploadOrderedEntryCheckArgs,
   UploadFilesHandler,
   UploadRetryTarget
 } from '../useFormUploadController';
-import { isQrScannerSupported, QrCodeScannerOverlay } from './QrCodeScannerOverlay';
 
 type UploadFailureLike = {
   message?: string;
@@ -45,22 +52,18 @@ type WebAssetConfig = {
   baseUrl?: string | null;
 };
 
-type QrScannerMessage = {
-  type?: unknown;
-  requestId?: unknown;
-  value?: unknown;
-};
-
 const resolveWindowWebAssetConfig = (): WebAssetConfig | null => {
   if (typeof window === 'undefined') return null;
   return ((window as unknown as { __CK_WEB_ASSET__?: WebAssetConfig }).__CK_WEB_ASSET__ || null);
 };
 
-const createQrScannerRequestId = (): string => {
-  const cryptoApi = typeof crypto !== 'undefined' ? crypto : null;
-  if (cryptoApi && typeof cryptoApi.randomUUID === 'function') return cryptoApi.randomUUID();
-  return `qr-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-};
+const fileOverlayMatchesQrScannerUpdate = (
+  state: FileOverlayState,
+  update: Pick<QrScannerCommittedUpdate, 'fieldId' | 'fieldPath'>
+): boolean => matchesExternalQrScannerOverlayTarget(
+  { open: state.open, scope: state.scope, fieldId: state.question?.id },
+  update
+);
 
 export const FormFileOverlay: React.FC<{
   fileOverlay: FileOverlayState;
@@ -97,6 +100,10 @@ export const FormFileOverlay: React.FC<{
   closeFileOverlay: () => void;
   retryUploadFailure: (fieldPath: string) => void | Promise<void>;
   onUploadFiles?: UploadFilesHandler;
+  prepareQrScannerLaunch?: PrepareQrScannerLaunch;
+  onQrScannerSessionReady?: BeginQrScannerInteraction;
+  onQrScannerSessionEnd?: EndQrScannerInteraction;
+  onQrScannerCommitted?: ApplyQrScannerCommittedUpdate;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
 }> = ({
   fileOverlay,
@@ -119,24 +126,79 @@ export const FormFileOverlay: React.FC<{
   closeFileOverlay,
   retryUploadFailure,
   onUploadFiles,
+  prepareQrScannerLaunch,
+  onQrScannerSessionReady,
+  onQrScannerSessionEnd,
+  onQrScannerCommitted,
   onDiagnostic
 }) => {
-  const [qrScannerOpen, setQrScannerOpen] = React.useState(false);
-  const externalQrScanCleanupRef = React.useRef<(() => void) | null>(null);
   const fileOverlayRef = React.useRef(fileOverlay);
   fileOverlayRef.current = fileOverlay;
 
-  React.useEffect(() => {
-    if (!fileOverlay.open) setQrScannerOpen(false);
-  }, [fileOverlay.open]);
-
-  React.useEffect(
-    () => () => {
-      externalQrScanCleanupRef.current?.();
-      externalQrScanCleanupRef.current = null;
+  const scannerIsTop = fileOverlay.scope === 'top' && !!fileOverlay.question;
+  const scannerFieldId = scannerIsTop ? (fileOverlay.question!.id || '') : '';
+  const scannerFieldPath = scannerIsTop ? scannerFieldId : (fileOverlay.fieldPath || '');
+  const scannerUploadConfig: any = scannerIsTop
+    ? (fileOverlay.question as any)?.uploadConfig || {}
+    : (fileOverlay.field as any)?.uploadConfig || {};
+  const scannerLinkCaptureConfig = resolveUploadLinkCaptureConfig(scannerUploadConfig);
+  const scannerInstruction = scannerLinkCaptureConfig?.instruction
+    ? resolveLocalizedString(scannerLinkCaptureConfig.instruction as any, language, '')
+    : '';
+  const externalQrScanner = useExternalQrScannerSession({
+    assetBaseUrl: resolveWindowWebAssetConfig()?.baseUrl,
+    enabled:
+      fileOverlay.open &&
+      scannerIsTop &&
+      Boolean(scannerLinkCaptureConfig) &&
+      !submitting &&
+      !(fileOverlay.question as any)?.readOnly &&
+      !fileOverlay.saving,
+    fieldId: scannerFieldId,
+    fieldPath: scannerFieldPath,
+    instruction: scannerInstruction,
+    hideCloseOnIos: scannerLinkCaptureConfig?.hideCloseOnIos !== false,
+    prepareSession: prepareQrScannerLaunch,
+    onSessionReady: onQrScannerSessionReady,
+    onSessionEnd: onQrScannerSessionEnd,
+    onCommitted: update => {
+      onQrScannerCommitted?.(update);
+      const nextItems = update.links;
+      const latest = fileOverlayRef.current;
+      if (fileOverlayMatchesQrScannerUpdate(latest, update)) {
+        fileOverlayRef.current = {
+          ...latest,
+          draftItems: nextItems,
+          originalSignature: fileItemsSignature(nextItems),
+          saving: false,
+          notice: undefined,
+          invalidItemErrors: undefined
+        };
+      }
+      setFileOverlay(prev =>
+        fileOverlayMatchesQrScannerUpdate(prev, update)
+          ? {
+              ...prev,
+              draftItems: nextItems,
+              originalSignature: fileItemsSignature(nextItems),
+              saving: false,
+              notice: undefined,
+              invalidItemErrors: undefined
+            }
+          : prev
+      );
+      clearUploadFailureForField(update.fieldPath);
+      announceUpload(
+        update.fieldPath,
+        update.linkedCount === 1 ? '1 receipt added.' : `${update.linkedCount} receipts added.`
+      );
     },
-    []
-  );
+    onUnavailable: message => {
+      setFileOverlay(prev => (prev.open ? { ...prev, notice: { tone: 'warning', message } } : prev));
+      announceUpload(scannerFieldPath, message);
+    },
+    onDiagnostic
+  });
 
   if (!fileOverlay.open) return null;
   if (typeof document === 'undefined') return null;
@@ -178,7 +240,7 @@ export const FormFileOverlay: React.FC<{
   const blockUntilSaved = resolveUploadBlockUntilSaved(uploadConfig);
   const maxed = uploadConfig?.maxFiles ? items.length >= uploadConfig.maxFiles : false;
   const linkCaptureConfig = resolveUploadLinkCaptureConfig(uploadConfig);
-  const qrScanSupported = isQrScannerSupported();
+  const qrScanSupported = externalQrScanner.available;
 
   const resolveLinkCaptureText = (raw: unknown, fallback: string): string => {
     const configured = raw ? resolveLocalizedString(raw as any, language, '') : '';
@@ -499,74 +561,7 @@ export const FormFileOverlay: React.FC<{
 
   const openQrScanner = () => {
     if (!linkCaptureConfig || submitting || readOnly || fileOverlay.saving) return;
-    const requestId = createQrScannerRequestId();
-    const scanSuccessMessage = resolveLinkCaptureText(
-      linkCaptureConfig.messages?.added,
-      tSystem('files.linkCapture.scanAdded', language, 'QR code detected. Sent to the form.')
-    );
-    const externalScanner = resolveExternalQrScannerLaunch({
-      assetBaseUrl: resolveWindowWebAssetConfig()?.baseUrl,
-      requestId,
-      targetOrigin: window.location.origin || '*',
-      closeOnResult: false,
-      successMessage: scanSuccessMessage
-    });
-
-    if (!externalScanner) {
-      onDiagnostic?.('upload.linkCapture.externalScanner.unavailable', { fieldPath });
-      setQrScannerOpen(true);
-      return;
-    }
-
-    externalQrScanCleanupRef.current?.();
-    let cleanup: () => void = () => undefined;
-    const timeoutId = window.setTimeout(() => cleanup(), 15 * 60 * 1000);
-    const handleMessage = (event: MessageEvent) => {
-      if (event.origin !== externalScanner.origin) return;
-      const data = (event.data || {}) as QrScannerMessage;
-      if (data.requestId !== requestId) return;
-      if (data.type === 'ck.qrScanner.closed') {
-        cleanup();
-        return;
-      }
-      if (data.type !== 'ck.qrScanner.result') return;
-      const value = data.value?.toString().trim() || '';
-      if (!value) return;
-      addCapturedLink(value, 'scan');
-    };
-    cleanup = () => {
-      window.clearTimeout(timeoutId);
-      window.removeEventListener('message', handleMessage);
-      if (externalQrScanCleanupRef.current === cleanup) {
-        externalQrScanCleanupRef.current = null;
-      }
-    };
-    window.addEventListener('message', handleMessage);
-    externalQrScanCleanupRef.current = cleanup;
-
-    const scannerWindow = window.open(externalScanner.url, 'ckReceiptQrScanner', 'popup,width=480,height=720');
-    if (!scannerWindow) {
-      cleanup();
-      onDiagnostic?.('upload.linkCapture.externalScanner.blocked', { fieldPath });
-      setFileOverlay(prev =>
-        prev.open
-          ? {
-              ...prev,
-              notice: {
-                tone: 'warning',
-                message: tSystem('files.linkCapture.popupBlocked', language, 'Could not open the scanner window. Paste the Drive link instead.')
-              }
-            }
-          : prev
-      );
-      return;
-    }
-
-    onDiagnostic?.('upload.linkCapture.externalScanner.open', {
-      fieldPath,
-      origin: externalScanner.origin,
-      closeOnResult: false
-    });
+    externalQrScanner.openScanner();
   };
 
   const onClearAll = () => {
@@ -713,14 +708,13 @@ export const FormFileOverlay: React.FC<{
         pasteSubmitLabel: 'Add link',
         unsupportedMessage: resolveLinkCaptureText(
           linkCaptureConfig.messages?.unsupported,
-          'QR scanning is not available in this browser. Paste the Drive link instead.'
+          'QR scanning is not available in this environment.'
         )
       }
     : null;
 
   return (
-    <>
-      <FileOverlay
+    <FileOverlay
         open={fileOverlay.open}
         language={language}
         title={title}
@@ -757,17 +751,6 @@ export const FormFileOverlay: React.FC<{
         onClearAll={onClearAll}
         onRemoveAt={onRemoveAt}
         onClose={closeWithInvalidCleanup}
-      />
-      <QrCodeScannerOverlay
-        open={qrScannerOpen}
-        language={language}
-        unsupportedMessage={linkCaptureLabels?.unsupportedMessage}
-        onDetected={value => {
-          setQrScannerOpen(false);
-          addCapturedLink(value, 'scan');
-        }}
-        onClose={() => setQrScannerOpen(false)}
-      />
-    </>
+    />
   );
 };

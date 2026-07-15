@@ -397,17 +397,15 @@ import {
   type UploadedFieldValueOverride
 } from './features/uploads/domain/uploadedFieldOverrides';
 import {
+  useQrScannerAppIntegration,
+  type QrScannerSubmissionMeta
+} from './features/uploads/hooks/useQrScannerAppIntegration';
+import {
   matchesStatusTransition,
   resolveStatusTransitionValue
 } from '../../domain/statusTransitions';
 
-type SubmissionMeta = {
-  id?: string;
-  createdAt?: string;
-  updatedAt?: string;
-  dataVersion?: number;
-  status?: string | null;
-};
+type SubmissionMeta = QrScannerSubmissionMeta;
 
 type DraftSavePhase = 'idle' | 'dirty' | 'saving' | 'saved' | 'error' | 'paused';
 
@@ -9428,6 +9426,40 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   );
   ensureDraftRecordIdActionRef.current = ensureDraftRecordId;
 
+  const {
+    prepareQrScannerLaunch,
+    handleQrScannerSessionReady,
+    handleQrScannerSessionEnd,
+    applyQrScannerCommittedUpdate
+  } = useQrScannerAppIntegration({
+    formKey,
+    languageRef,
+    ensureDraftRecordId,
+    flushPendingDraftSave: flushPendingDraftSaveForAction,
+    logEvent,
+    resolveLogMessage,
+    resolveUiErrorMessage,
+    setAutoSaveHoldFromUi,
+    scheduleLatestAutoSave,
+    autoSaveDirtyRef,
+    autoSaveQueuedRef,
+    autoSaveTimerRef,
+    selectedRecordIdRef,
+    selectedRecordSnapshotRef,
+    lastSubmissionMetaRef,
+    valuesRef,
+    lineItemsRef,
+    uploadedFieldValueOverridesRef,
+    recordDataVersionRef,
+    optimisticClientDataVersionRef,
+    setValues,
+    setSelectedRecordSnapshot,
+    setLastSubmissionMeta,
+    rememberAutoSaveSeenState,
+    upsertListCacheRow,
+    markRecordFreshnessServerTouch
+  });
+
   const applyFollowupBatchResults = useCallback(
     (args: { recordId: string; actions: string[]; batch: FollowupBatchResponse; reason: string; sessionId?: number | null }) => {
       const followupErrors: string[] = [];
@@ -14708,6 +14740,10 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         runSelectionEffects={runSelectionEffects}
         selectionEffectAsyncPendingCount={selectionEffectAsyncPendingCount}
         uploadFieldUrls={uploadFieldUrls}
+        prepareQrScannerLaunch={prepareQrScannerLaunch}
+        onQrScannerSessionReady={handleQrScannerSessionReady}
+        onQrScannerSessionEnd={handleQrScannerSessionEnd}
+        onQrScannerCommitted={applyQrScannerCommittedUpdate}
         handleCustomButton={handleCustomButton}
         handleReportButtonPointerDown={handleReportButtonPointerDown}
         reportOverlay={reportOverlay}

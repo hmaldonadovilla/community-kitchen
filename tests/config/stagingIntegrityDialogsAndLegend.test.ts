@@ -73,6 +73,32 @@ describe('staging integrity dialogs and list legend config', () => {
     });
   });
 
+  test('meal production receipt scanner keeps the mobile session contract in both config projections', () => {
+    const cfg = readConfig('config_meal_production.json');
+    [cfg.questions || [], cfg.definition?.questions || []].forEach(questions => {
+      const uploadConfig = findQuestion(questions, 'ING_EVD')?.uploadConfig;
+      expect(uploadConfig?.maxFiles).toBe(10);
+      expect(uploadConfig?.linkCapture).toEqual(
+        expect.objectContaining({
+          enabled: true,
+          mode: 'driveQr',
+          allowManualPaste: false,
+          dedupeBy: 'driveFileId',
+          instruction: {
+            en: 'Point the camera at each QR code on the ingredient receipts.'
+          },
+          sessionTtlMinutes: 15,
+          hideCloseOnIos: true,
+          validation: expect.objectContaining({
+            requireServerValidation: true,
+            includeUploadDestinationFolder: true,
+            rejectTrashed: true
+          })
+        })
+      );
+    });
+  });
+
   test('recipes list legend keeps required action icons and valid layout config', () => {
     const cfg = readConfig('config_recipes.json');
 

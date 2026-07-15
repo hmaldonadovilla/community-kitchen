@@ -93,6 +93,12 @@ import { useFormVisibilityResolvers } from './form/useFormVisibilityResolvers';
 import { LineItemGroupOverlayPortal } from '../features/lineItems/components/LineItemGroupOverlayPortal';
 import { SubgroupOverlayPortal } from '../features/lineItems/components/SubgroupOverlayPortal';
 import { FormFileOverlay } from '../features/uploads/components/FormFileOverlay';
+import type {
+  ApplyQrScannerCommittedUpdate,
+  BeginQrScannerInteraction,
+  EndQrScannerInteraction,
+  PrepareQrScannerLaunch
+} from '../features/uploads/qrScannerTypes';
 import {
   useFormUploadController,
   type FileUploadOrderedEntryCheckArgs
@@ -329,6 +335,10 @@ interface FormViewProps {
     busyTitle?: string;
     busyMessage?: string;
   }) => Promise<{ success: boolean; message?: string; items?: string[]; value?: string }>;
+  prepareQrScannerLaunch?: PrepareQrScannerLaunch;
+  onQrScannerSessionReady?: BeginQrScannerInteraction;
+  onQrScannerSessionEnd?: EndQrScannerInteraction;
+  onQrScannerCommitted?: ApplyQrScannerCommittedUpdate;
   /**
    * Optional handler for BUTTON fields (Doc template preview / report rendering).
    */
@@ -471,6 +481,10 @@ const FormView: React.FC<FormViewProps> = ({
   onSelectionEffect,
   selectionEffectAsyncPendingCount = 0,
   onUploadFiles,
+  prepareQrScannerLaunch,
+  onQrScannerSessionReady,
+  onQrScannerSessionEnd,
+  onQrScannerCommitted,
   onReportButton,
   onReportButtonPointerDown,
   reportBusy,
@@ -5564,6 +5578,10 @@ const FormView: React.FC<FormViewProps> = ({
       closeFileOverlay={closeFileOverlay}
       retryUploadFailure={retryUploadFailure}
       onUploadFiles={onUploadFiles}
+      prepareQrScannerLaunch={prepareQrScannerLaunch}
+      onQrScannerSessionReady={onQrScannerSessionReady}
+      onQrScannerSessionEnd={onQrScannerSessionEnd}
+      onQrScannerCommitted={onQrScannerCommitted}
       onDiagnostic={onDiagnostic}
     />
   );

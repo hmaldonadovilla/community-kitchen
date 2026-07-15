@@ -4,6 +4,17 @@ type ExecutionDocumentLockState = {
   depth: number;
 };
 
+type SharedDocumentLock = {
+  tryLock?: (timeoutMs: number) => boolean;
+  waitLock?: (timeoutMs: number) => void;
+  releaseLock: () => void;
+};
+
+export type SharedDocumentLockOptions = {
+  /** Explicit test injection. Passing null is the only supported lockless mode. */
+  lock?: SharedDocumentLock | null;
+};
+
 export const DOCUMENT_LOCK_BUSY_MESSAGE = 'Could not acquire the record save lock. Please retry.';
 
 const getExecutionDocumentLockState = (): ExecutionDocumentLockState => {
@@ -23,7 +34,8 @@ export const withSharedDocumentLock = <T>(
   _label: string,
   timeoutMs: number,
   fn: () => T,
-  busyMessage = DOCUMENT_LOCK_BUSY_MESSAGE
+  busyMessage = DOCUMENT_LOCK_BUSY_MESSAGE,
+  options: SharedDocumentLockOptions = {}
 ): T => {
   const state = getExecutionDocumentLockState();
   if (state.depth > 0) {
@@ -35,33 +47,63 @@ export const withSharedDocumentLock = <T>(
     }
   }
 
-  const lock = (() => {
+  const resolveRuntimeLock = (): SharedDocumentLock | null => {
     try {
-      return typeof LockService !== 'undefined' && (LockService as any).getDocumentLock
+      if (typeof LockService === 'undefined') return null;
+      const documentLock = (LockService as any).getDocumentLock
         ? (LockService as any).getDocumentLock()
         : null;
+      if (
+        documentLock &&
+        typeof documentLock.releaseLock === 'function' &&
+        (typeof documentLock.tryLock === 'function' || typeof documentLock.waitLock === 'function')
+      ) {
+        return documentLock;
+      }
+      const scriptLock = (LockService as any).getScriptLock ? (LockService as any).getScriptLock() : null;
+      if (
+        scriptLock &&
+        typeof scriptLock.releaseLock === 'function' &&
+        (typeof scriptLock.tryLock === 'function' || typeof scriptLock.waitLock === 'function')
+      ) {
+        return scriptLock;
+      }
+      return null;
     } catch {
       return null;
     }
-  })();
+  };
+  const hasInjectedLock = Object.prototype.hasOwnProperty.call(options, 'lock');
+  const lock = hasInjectedLock ? options.lock || null : resolveRuntimeLock();
+  if (!lock && !(hasInjectedLock && options.lock === null)) {
+    throw new Error(busyMessage);
+  }
 
   let hasLock = false;
   try {
-    if (lock && typeof lock.tryLock === 'function') {
-      hasLock = !!lock.tryLock(timeoutMs);
-      if (!hasLock) {
-        throw new Error(busyMessage);
+    try {
+      if (lock && typeof lock.tryLock === 'function') {
+        hasLock = !!lock.tryLock(timeoutMs);
+        if (!hasLock) {
+          throw new Error(busyMessage);
+        }
+      } else if (lock && typeof lock.waitLock === 'function') {
+        lock.waitLock(timeoutMs);
+        hasLock = true;
       }
-    } else if (lock && typeof lock.waitLock === 'function') {
-      lock.waitLock(timeoutMs);
-      hasLock = true;
+    } catch {
+      throw new Error(busyMessage);
     }
     state.depth = 1;
     return fn();
   } finally {
     state.depth = 0;
     if (lock && hasLock && typeof lock.releaseLock === 'function') {
-      lock.releaseLock();
+      try {
+        lock.releaseLock();
+      } catch {
+        // The operation result remains authoritative; Apps Script locks expire automatically.
+      }
     }
   }
 };

@@ -3079,6 +3079,33 @@ export class WebFormService {
     return this.hydrateFetchedSubmissionIfNeeded(formKey, this.listing.fetchSubmissionById(form, questions, id));
   }
 
+  public appendQrScannerUploadLinks(request: {
+    formKey: string;
+    recordId: string;
+    fieldId: string;
+    links: string[];
+    expectedDataVersion: number;
+  }): {
+    success: boolean;
+    code?: 'RECORD_CHANGED' | 'NOT_FOUND' | 'CONFIGURATION_ERROR' | 'LIMIT_REACHED' | 'TEMPORARY_ERROR';
+    message: string;
+    appendedCount?: number;
+    dataVersion?: number;
+    fieldValue?: string;
+    links?: string[];
+    idempotent?: boolean;
+  } {
+    const { form, questions } = this.getFormContext(request.formKey);
+    return this.submissions.appendQrScannerUploadLinks({
+      form,
+      questions,
+      recordId: request.recordId,
+      fieldId: request.fieldId,
+      links: request.links,
+      expectedDataVersion: request.expectedDataVersion
+    });
+  }
+
   public fetchSubmissionByRowNumber(formKey: string, rowNumber: number): WebFormSubmission | null {
     const { form, questions } = this.getFormContextLite(formKey);
     return this.hydrateFetchedSubmissionIfNeeded(formKey, this.listing.fetchSubmissionByRowNumber(form, questions, rowNumber));

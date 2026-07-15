@@ -1148,6 +1148,22 @@ components:
           enum: [url, driveFileId]
           description: |
             Duplicate policy for captured links. Use `driveFileId` when the same invoice may be scanned from different Drive URL shapes.
+        instruction:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Optional localized, field-specific sentence shown above the live camera.
+            Keep it concise and explain which QR codes the user should present to the camera.
+        sessionTtlMinutes:
+          type: integer
+          minimum: 1
+          maximum: 30
+          description: |
+            Optional lifetime of the authoritative Apps Script scan session. Defaults to 15 minutes and is capped at 30 minutes.
+        hideCloseOnIos:
+          type: boolean
+          description: |
+            When true, hide only the scanner page's Close action on iOS and rely on the browser's native X control.
+            Android and desktop keep the page-owned Close action. The native browser control cannot be hidden by the page.
         validation:
           $ref: '#/components/schemas/FileUploadLinkCaptureValidationConfig'
           description: |
@@ -1180,7 +1196,7 @@ components:
               $ref: '#/components/schemas/LocalizedString'
               description: Message shown when QR camera scanning is unavailable and paste should be used.
       description: |
-        Link capture settings for FILE_UPLOAD fields. Captured links are saved through the same queued record mutation lane as uploaded files. In `driveQr` mode, non-Drive content is rejected and `dedupeBy: driveFileId` prevents duplicate references to the same Drive document. Live QR scanning is launched from the external Firebase web asset host so the camera runs in a top-level HTTPS document instead of the Apps Script HTML-service iframe.
+        Link capture settings for FILE_UPLOAD fields. In `driveQr` mode, non-Drive content is rejected and `dedupeBy: driveFileId` prevents duplicate references to the same Drive document. The continuous scanner opens immediately from the external Firebase web asset host so the camera runs in a top-level HTTPS document while the originating form stays loaded. Apps Script resolves the authoritative field configuration and validates each candidate. Finish revalidates and appends accepted links once through a field-scoped idempotent commit; Cancel or closing before Finish does not change the record. This scanner flow uses Firebase Hosting and Apps Script only and does not require Cloud Run.
 
     FileUploadLinkCaptureValidationConfig:
       type: object
@@ -1188,7 +1204,7 @@ components:
         requireServerValidation:
           type: boolean
           description: |
-            When true, Apps Script/Cloud Run must verify captured Drive links before storing them. Use this for customer-specific receipt evidence because client-side QR text validation can be bypassed.
+            When true, Apps Script must verify captured Drive links before storing them. Use this for customer-specific receipt evidence because client-side QR text validation can be bypassed.
         allowedSharedDriveIds:
           type: array
           items:
@@ -1245,7 +1261,7 @@ components:
               $ref: '#/components/schemas/LocalizedString'
               description: Message shown when validation is required but the backend handling the save has no Drive file repository.
       description: |
-        Server-side scope rules for captured Drive links. Configure at least one explicit or derived scope when `requireServerValidation` is true. Prefer `includeUploadDestinationDrive: true` for customer Shared Drives, or `allowedFolderIds` for a customer invoice root folder.
+        Apps Script scope rules for captured Drive links. Configure at least one explicit or derived scope when `requireServerValidation` is true. Prefer `includeUploadDestinationDrive: true` for customer Shared Drives, or `allowedFolderIds` for a customer invoice root folder.
         Validation failure messages can be customized with `messages`; otherwise the UI uses the built-in `files.linkCapture.validation.*` system strings.
 
     FileUploadUiConfig:

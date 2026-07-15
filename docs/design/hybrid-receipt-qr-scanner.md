@@ -12,7 +12,7 @@ The implementation uses Firebase Hosting for the scanner page and Apps Script fo
 2. The application opens the Firebase scanner synchronously so the browser does not block the new tab. The scanner requests camera permission immediately.
 3. The originating form prepares a saved record and an expiring, field-scoped Apps Script session in parallel.
 4. QR values detected before the session is ready are kept in a bounded local queue and shown as waiting for verification.
-5. When the session launch is ready, the origin sends it only to the exact scanner window and Firebase origin. The scanner redeems the one-time launch token and submits queued and subsequent values for authoritative validation.
+5. The retained origin redeems the one-time launch token and submits queued and subsequent values to Apps Script. The scanner receives only bounded setup and result messages; it never receives Apps Script credentials.
 6. The scanner shows a configured instruction, the camera, and one row per scanned receipt with checking, accepted, duplicate, rejected, or retryable feedback.
 7. **Finish and add receipts** revalidates accepted files and performs one idempotent, field-scoped Apps Script append. **Cancel** writes nothing.
 8. The scanner notifies the retained origin tab. The origin updates its local record and file overlay from the committed session result without navigating or reloading the application.
@@ -21,8 +21,8 @@ The implementation uses Firebase Hosting for the scanner page and Apps Script fo
 ## Security and data integrity
 
 - The launch session is created from authoritative form configuration and a saved record version.
-- The Firebase scanner receives a one-time launch token, then uses a derived scoped access token.
-- Scanner-to-Apps-Script calls use the nonce-bound iframe bridge and an explicit RPC allowlist.
+- The retained origin redeems the one-time launch token and keeps the derived scoped access token in memory.
+- Apps Script calls remain in its own trusted iframe through `google.script.run` and an explicit RPC allowlist; the Firebase scanner cannot invoke them directly.
 - QR parsing accepts only explicit HTTPS Google Drive or Docs file URL shapes.
 - Apps Script checks access, trash state, configured file types, folder/shared-drive scope, duplicates, and maximum file count.
 - Finish revalidates every accepted file and appends only the target upload field under the shared document lock.
@@ -44,7 +44,7 @@ Existing labels and validation messages continue to be configuration-driven. Mea
 
 ## Failure and recovery behavior
 
-- If session preparation fails, the camera remains available but queued scans are not accepted; the scanner displays the server error and offers retry or cancel.
+- If session preparation fails, the scanner stops the camera and tells the user to return to the form and open a fresh session. No candidate can be committed from a partially prepared session.
 - If the opener is temporarily suspended, the scanner session and checked candidates remain in Apps Script. The origin reconciles on `message`, `focus`, and `pageshow`.
 - If the opener was discarded, no unsafe client-side save is attempted. The committed field remains authoritative and the normal record reload shows it.
 - Closing the native browser surface before Finish leaves an expiring session and does not mutate the record.
@@ -52,7 +52,7 @@ Existing labels and validation messages continue to be configuration-driven. Mea
 
 ## Implementation slices
 
-1. Port the Apps Script session, validation, bridge, and field-scoped commit modules while retaining the existing `linkCapture` configuration model.
+1. Port the Apps Script session, validation, whitelisted origin-side RPC dispatcher, and field-scoped commit modules while retaining the existing `linkCapture` configuration model.
 2. Replace the static scanner page with the continuous result-list UI and a waiting-for-launch bootstrap state.
 3. Open the scanner immediately from the file overlay, prepare the session asynchronously, and add strict two-way window messaging.
 4. Reconcile a successful field commit into the retained form state without a top-level navigation.

@@ -6849,6 +6849,11 @@
           "mode": "driveQr",
           "allowManualPaste": false,
           "dedupeBy": "driveFileId",
+          "instruction": {
+            "en": "Point the camera at each QR code on the ingredient receipts."
+          },
+          "sessionTtlMinutes": 15,
+          "hideCloseOnIos": true,
           "validation": {
             "requireServerValidation": true,
             "includeUploadDestinationDrive": false,
@@ -6897,7 +6902,7 @@
               "en": "Scan or paste a Google Drive receipt link."
             },
             "unsupported": {
-              "en": "QR scanning is not available in this browser. Paste the Drive link instead."
+              "en": "QR scanning is not available in this environment."
             }
           }
         },
@@ -10527,6 +10532,11 @@
             "mode": "driveQr",
             "allowManualPaste": false,
             "dedupeBy": "driveFileId",
+            "instruction": {
+              "en": "Point the camera at each QR code on the ingredient receipts."
+            },
+            "sessionTtlMinutes": 15,
+            "hideCloseOnIos": true,
             "validation": {
               "requireServerValidation": true,
             "includeUploadDestinationDrive": false,
@@ -10575,7 +10585,7 @@
                 "en": "Scan or paste a Google Drive receipt link."
               },
               "unsupported": {
-                "en": "QR scanning is not available in this browser. Paste the Drive link instead."
+                "en": "QR scanning is not available in this environment."
               }
             }
           },

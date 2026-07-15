@@ -6,6 +6,12 @@ import FormView from '../FormView';
 import ListView from '../ListView';
 import { AppRecordLoadingPlaceholder } from './AppRecordLoadingPlaceholder';
 import { SummaryView } from './SummaryView';
+import type {
+  ApplyQrScannerCommittedUpdate,
+  BeginQrScannerInteraction,
+  EndQrScannerInteraction,
+  PrepareQrScannerLaunch
+} from '../../features/uploads/qrScannerTypes';
 
 interface AppMainViewsProps {
   view: View;
@@ -47,6 +53,10 @@ interface AppMainViewsProps {
   runSelectionEffects: any;
   selectionEffectAsyncPendingCount: number;
   uploadFieldUrls: any;
+  prepareQrScannerLaunch?: PrepareQrScannerLaunch;
+  onQrScannerSessionReady?: BeginQrScannerInteraction;
+  onQrScannerSessionEnd?: EndQrScannerInteraction;
+  onQrScannerCommitted?: ApplyQrScannerCommittedUpdate;
   handleCustomButton: any;
   handleReportButtonPointerDown: any;
   reportOverlay: any;
@@ -132,6 +142,10 @@ export const AppMainViews: React.FC<AppMainViewsProps> = ({
   runSelectionEffects,
   selectionEffectAsyncPendingCount,
   uploadFieldUrls,
+  prepareQrScannerLaunch,
+  onQrScannerSessionReady,
+  onQrScannerSessionEnd,
+  onQrScannerCommitted,
   handleCustomButton,
   handleReportButtonPointerDown,
   reportOverlay,
@@ -223,6 +237,10 @@ export const AppMainViews: React.FC<AppMainViewsProps> = ({
         onSelectionEffect={runSelectionEffects}
         selectionEffectAsyncPendingCount={selectionEffectAsyncPendingCount}
         onUploadFiles={uploadFieldUrls}
+        prepareQrScannerLaunch={prepareQrScannerLaunch}
+        onQrScannerSessionReady={onQrScannerSessionReady}
+        onQrScannerSessionEnd={onQrScannerSessionEnd}
+        onQrScannerCommitted={onQrScannerCommitted}
         onReportButton={handleCustomButton}
         onReportButtonPointerDown={handleReportButtonPointerDown}
         reportBusy={reportOverlay.pdfPhase === 'rendering'}

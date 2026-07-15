@@ -22,6 +22,11 @@ import {
 import { normalizeToIsoDate } from './followup/utils';
 import { matchesStatusTransition, resolveStatusTransitionValue } from '../../domain/statusTransitions';
 import { DOCUMENT_LOCK_BUSY_MESSAGE, withSharedDocumentLock } from './documentLock';
+import {
+  canonicalizeQrScannerCommitLinks,
+  dedupeUploadLinksByFileId,
+  uploadLinkIdentity
+} from './qrScannerAppsScript/domain';
 
 const AUTO_INCREMENT_PROPERTY_PREFIX = 'CK_AUTO_';
 
@@ -696,6 +701,194 @@ export class SubmissionService {
         success: false,
         message: (err?.message || DOCUMENT_LOCK_BUSY_MESSAGE).toString(),
         meta: {}
+      };
+    }
+  }
+
+  /**
+   * Appends Drive links that were authorised by the QR scanner to one upload
+   * field without rewriting unrelated form values.
+   */
+  appendQrScannerUploadLinks(args: {
+    form: FormConfig;
+    questions: QuestionConfig[];
+    recordId: string;
+    fieldId: string;
+    links: string[];
+    expectedDataVersion: number;
+  }): {
+    success: boolean;
+    code?: 'RECORD_CHANGED' | 'NOT_FOUND' | 'CONFIGURATION_ERROR' | 'LIMIT_REACHED' | 'TEMPORARY_ERROR';
+    message: string;
+    appendedCount?: number;
+    dataVersion?: number;
+    fieldValue?: string;
+    links?: string[];
+    idempotent?: boolean;
+  } {
+    const recordId = (args.recordId || '').toString().trim();
+    const fieldId = (args.fieldId || '').toString().trim();
+    const rawRequestedLinks = Array.isArray(args.links)
+      ? args.links.map(link => (link || '').toString().trim()).filter(Boolean)
+      : [];
+    const requestedLinks = canonicalizeQrScannerCommitLinks(rawRequestedLinks);
+    const field = args.questions.find(
+      question => question && question.type === 'FILE_UPLOAD' && question.status === 'Active' && question.id === fieldId
+    );
+    if (!recordId || !fieldId || !field || !requestedLinks) {
+      return { success: false, code: 'CONFIGURATION_ERROR', message: 'QR scanner target is not configured.' };
+    }
+
+    try {
+      return withSharedDocumentLock('submissions.appendQrScannerUploadLinks', 8000, () => {
+        const destinationName = args.form.destinationTab || `${args.form.title} Responses`;
+        const { sheet, headers, columns } = this.ensureDestination(destinationName, args.questions);
+        const fieldColumn = columns.fields[fieldId];
+        if (!fieldColumn || !columns.recordId || !columns.dataVersion) {
+          return { success: false, code: 'CONFIGURATION_ERROR', message: 'QR scanner target column is unavailable.' };
+        }
+
+        let rowNumber = -1;
+        try {
+          const indexSheet = this.ss.getSheetByName(getRecordIndexSheetName(destinationName));
+          if (indexSheet) rowNumber = findRowNumberInRecordIndex(indexSheet, recordId);
+        } catch {
+          rowNumber = -1;
+        }
+        if (rowNumber < 2) rowNumber = this.findRowIndexById(sheet, columns, recordId);
+        if (rowNumber < 2) {
+          return { success: false, code: 'NOT_FOUND', message: 'Target record not found.' };
+        }
+
+        let before = this.normalizeRowValues(
+          sheet.getRange(rowNumber, 1, 1, headers.length).getValues()[0] || [],
+          headers.length
+        );
+        if ((before[columns.recordId - 1] || '').toString().trim() !== recordId) {
+          rowNumber = this.findRowIndexById(sheet, columns, recordId);
+          if (rowNumber < 2) {
+            return { success: false, code: 'NOT_FOUND', message: 'Target record not found.' };
+          }
+          before = this.normalizeRowValues(
+            sheet.getRange(rowNumber, 1, 1, headers.length).getValues()[0] || [],
+            headers.length
+          );
+          if ((before[columns.recordId - 1] || '').toString().trim() !== recordId) {
+            return { success: false, code: 'NOT_FOUND', message: 'Target record not found.' };
+          }
+        }
+
+        const existingLinks = dedupeUploadLinksByFileId(before[fieldColumn - 1]);
+        const existingIdentities = new Set(existingLinks.map(uploadLinkIdentity));
+        const additions = requestedLinks.filter(link => !existingIdentities.has(uploadLinkIdentity(link)));
+        const currentVersion = Number(before[columns.dataVersion - 1]);
+        const normalizedVersion = Number.isSafeInteger(currentVersion) && currentVersion >= 1 ? currentVersion : 0;
+        const existingFieldValue = existingLinks.join(', ');
+
+        if (!additions.length) {
+          return {
+            success: true,
+            message: 'QR scanner links were already attached.',
+            appendedCount: 0,
+            dataVersion: normalizedVersion || undefined,
+            fieldValue: existingFieldValue,
+            links: existingLinks,
+            idempotent: true
+          };
+        }
+        if (!Number.isSafeInteger(args.expectedDataVersion) || args.expectedDataVersion !== normalizedVersion) {
+          return {
+            success: false,
+            code: 'RECORD_CHANGED',
+            message: 'The record changed before QR scanner links were attached.',
+            dataVersion: normalizedVersion || undefined,
+            fieldValue: existingFieldValue,
+            links: existingLinks
+          };
+        }
+
+        const configuredMaxFiles = Number(field.uploadConfig?.maxFiles);
+        const maxFiles = Number.isFinite(configuredMaxFiles) && configuredMaxFiles > 0
+          ? Math.floor(configuredMaxFiles)
+          : 0;
+        if (maxFiles && existingLinks.length + additions.length > maxFiles) {
+          return {
+            success: false,
+            code: 'LIMIT_REACHED',
+            message: 'The upload field has reached its maximum number of files.',
+            dataVersion: normalizedVersion || undefined,
+            fieldValue: existingFieldValue,
+            links: existingLinks
+          };
+        }
+
+        const now = new Date();
+        const after = before.slice();
+        const mergedLinks = [...existingLinks, ...additions];
+        const nextVersion = normalizedVersion + 1;
+        after[fieldColumn - 1] = mergedLinks.join(', ');
+        after[columns.dataVersion - 1] = nextVersion;
+        if (columns.updatedAt) after[columns.updatedAt - 1] = now;
+        this.writeRowAtomicDelta(sheet, rowNumber, before, after);
+        try {
+          if (typeof SpreadsheetApp !== 'undefined' && typeof (SpreadsheetApp as any).flush === 'function') {
+            (SpreadsheetApp as any).flush();
+          }
+        } catch {
+          // setValues completed successfully; flushing is an optimisation, not part of the commit contract.
+        }
+
+        try {
+          const etag = this.cacheManager.bumpSheetEtag(sheet, columns, 'qrScanner.appendUploadLinks');
+          const cachedRecord = this.buildSubmissionRecord(args.form.configSheet, args.questions, columns, after, recordId);
+          if (cachedRecord) this.cacheManager.cacheRecord(args.form.configSheet, etag, cachedRecord);
+        } catch {
+          // The response sheet is authoritative; cache refresh is best effort after a durable write.
+        }
+
+        try {
+          const indexSheet = this.ss.getSheetByName(getRecordIndexSheetName(destinationName));
+          if (indexSheet) {
+            const createdAtIso = columns.createdAt ? this.asIso(after[columns.createdAt - 1]) : '';
+            indexSheet.getRange(rowNumber, 1, 1, 5).setValues([
+              [recordId, rowNumber, nextVersion, now.toISOString(), createdAtIso || '']
+            ]);
+          }
+        } catch {
+          // The response sheet remains authoritative; index repair is best effort.
+        }
+
+        try {
+          this.writeAuditRows({
+            form: args.form,
+            questions: args.questions,
+            columns,
+            destinationName,
+            recordId,
+            beforeRowValues: before,
+            afterRowValues: after,
+            changedAt: now,
+            auditAction: 'qrScanner.commit'
+          });
+        } catch {
+          // Audit infrastructure must not make an otherwise durable commit fail.
+        }
+
+        return {
+          success: true,
+          message: 'QR scanner links attached.',
+          appendedCount: additions.length,
+          dataVersion: nextVersion,
+          fieldValue: mergedLinks.join(', '),
+          links: mergedLinks,
+          idempotent: false
+        };
+      }, DOCUMENT_LOCK_BUSY_MESSAGE);
+    } catch {
+      return {
+        success: false,
+        code: 'TEMPORARY_ERROR',
+        message: 'The QR scanner commit is temporarily busy.'
       };
     }
   }
@@ -1644,7 +1837,7 @@ export class SubmissionService {
             const updatedAt = updatedAtCol ? this.asIso(sheet.getRange(hintedRow, updatedAtCol, 1, 1).getValues()[0][0]) : undefined;
             return { success: true, id, rowNumber: hintedRow, dataVersion, updatedAt };
           }
-        } catch (_) {
+        } catch {
           // ignore hint mismatch
         }
       }
@@ -1667,7 +1860,7 @@ export class SubmissionService {
             }
           }
         }
-      } catch (_) {
+      } catch {
         // ignore
       }
 

@@ -5,6 +5,8 @@ import {
   GuidedStepUtilisationDraftSyncRequest,
   BankUtilisationPlanRequest,
   BankUtilisationMutationRequest,
+  QrScanSessionLaunchRequest,
+  QrScanSessionLaunchResult,
   WebFormDefinition,
   WebFormSubmission
 } from './types';
@@ -12,6 +14,8 @@ import { bumpTemplateCacheEpoch } from './services/webform/followup/templateCach
 import { renderReactBundle } from './services/webform/bundles';
 import { getUiEnvTag } from './services/webform/envTag';
 import { ServerTimingRecorder, shouldEnableServerTiming } from './services/webform/serverTiming';
+import { prepareQrScanSessionLaunch } from './services/webform/qrScanLaunch';
+import { createQrScannerSessionDispatcher } from './services/webform/qrScannerAppsScript/facade';
 
 const isTruthyParam = (raw: any): boolean => {
   if (raw === undefined || raw === null) return false;
@@ -197,6 +201,19 @@ export function fetchFormConfig(formKey?: string): any {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const service = new WebFormService(ss);
   return service.fetchFormConfig(formKey);
+}
+
+export function createQrScanSessionLaunch(request: QrScanSessionLaunchRequest): QrScanSessionLaunchResult {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return prepareQrScanSessionLaunch(service, request);
+}
+
+/** Whitelisted session RPC used by the retained originating form tab. */
+export function qrScannerSessionRpc(request: unknown): any {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const service = new WebFormService(ss);
+  return createQrScannerSessionDispatcher(service)(request);
 }
 
 export function fetchFormCatalog(): any {

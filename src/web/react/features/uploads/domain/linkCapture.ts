@@ -6,6 +6,10 @@ export type UploadLinkCaptureConfig = {
   mode?: UploadLinkCaptureMode;
   allowManualPaste?: boolean;
   dedupeBy?: UploadLinkCaptureDedupeBy;
+  instruction?: unknown;
+  sessionTtlMinutes?: number;
+  hideCloseOnIos?: boolean;
+  validation?: Record<string, unknown>;
   labels?: {
     scan?: unknown;
     paste?: unknown;

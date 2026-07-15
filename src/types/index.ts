@@ -1586,6 +1586,19 @@ export interface FileUploadLinkCaptureConfig {
    */
   dedupeBy?: 'url' | 'driveFileId';
   /**
+   * Field-specific sentence shown above the continuous scanner camera.
+   */
+  instruction?: LocalizedString;
+  /**
+   * Lifetime of the authoritative scan session. Apps Script bounds the value.
+   */
+  sessionTtlMinutes?: number;
+  /**
+   * Hide only the scanner page's own Close action on iOS. The native browser
+   * close control is not owned by the page.
+   */
+  hideCloseOnIos?: boolean;
+  /**
    * Optional server-side Drive metadata validation for captured links.
    * Use this when QR/manual links must belong to a customer Drive or folder.
    */
@@ -1649,6 +1662,49 @@ export interface FileUploadLinkCaptureValidationConfig {
     repositoryRequired?: LocalizedString;
   };
 }
+
+export interface QrScanSessionReturnContext {
+  app?: string;
+  page?: string;
+  stepId?: string;
+  overlay?: 'files';
+}
+
+export interface QrScanSessionLaunchRequest {
+  formKey: string;
+  recordId: string;
+  fieldId: string;
+  expectedDataVersion?: number;
+  language?: 'EN' | 'FR' | 'NL';
+  returnContext?: QrScanSessionReturnContext;
+}
+
+export type QrScanSessionLaunchErrorCode =
+  | 'INVALID_REQUEST'
+  | 'FORM_NOT_FOUND'
+  | 'RECORD_NOT_FOUND'
+  | 'FIELD_NOT_FOUND'
+  | 'FIELD_NOT_SUPPORTED'
+  | 'SCANNER_DISABLED'
+  | 'RECORD_CHANGED'
+  | 'SERVICE_NOT_CONFIGURED'
+  | 'SERVICE_UNAVAILABLE'
+  | 'SERVICE_REJECTED'
+  | 'INVALID_SERVICE_RESPONSE';
+
+export type QrScanSessionLaunchResult =
+  | {
+      success: true;
+      sessionId: string;
+      launchUrl: string;
+      expiresAt: string;
+    }
+  | {
+      success: false;
+      code: QrScanSessionLaunchErrorCode;
+      message: string;
+      retryable?: boolean;
+    };
 
 export interface FileUploadErrorMessages {
   minFiles?: LocalizedString;
