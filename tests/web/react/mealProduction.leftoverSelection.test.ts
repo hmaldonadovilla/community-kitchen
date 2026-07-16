@@ -569,20 +569,26 @@ describe('meal production leftover selection config', () => {
     );
 
     expect(profileSubGroup?.fields).toEqual(
-      expect.arrayContaining(['PREP_TYPE', 'PREP_QTY', 'RECIPE', 'RECIPE_SOURCE_ID', 'RECIPE_SOURCE_UPDATED_AT'])
+      expect.arrayContaining(['PREP_TYPE', 'RECIPE', 'RECIPE_SOURCE_ID', 'RECIPE_SOURCE_UPDATED_AT'])
     );
+    expect(profileSubGroup?.fields || []).not.toContain('PREP_QTY');
+    expect(profileSubGroup?.fieldValues).toEqual({
+      PREP_QTY: '$parent.ORD_QTY'
+    });
   });
 
-  it('sets delivered portions from ordered portions when duplicating a closed meal production record', () => {
+  it('sets delivered and to-cook portions from ordered portions when duplicating a closed meal production record', () => {
     const exported = getExport();
     const profileGroup = exported.form?.copyCurrentRecordProfile?.lineItems?.find(
       (entry: any) => entry?.groupId === 'MP_MEALS_REQUEST'
     );
 
     expect(profileGroup?.fields).toEqual(expect.arrayContaining(['MEAL_TYPE', 'ORD_QTY']));
+    expect(profileGroup?.fields || []).not.toContain('MP_TO_COOK');
     expect(profileGroup?.fields || []).not.toContain('FINAL_QTY');
     expect(profileGroup?.fieldValues).toEqual({
-      FINAL_QTY: '$row.ORD_QTY'
+      FINAL_QTY: '$row.ORD_QTY',
+      MP_TO_COOK: '$row.ORD_QTY'
     });
   });
 

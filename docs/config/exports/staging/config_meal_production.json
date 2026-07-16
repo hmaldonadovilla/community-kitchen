@@ -762,11 +762,13 @@
               "groupId": "MP_TYPE_LI",
               "fields": [
                 "PREP_TYPE",
-                "PREP_QTY",
                 "RECIPE",
                 "RECIPE_SOURCE_ID",
                 "RECIPE_SOURCE_UPDATED_AT"
               ],
+              "fieldValues": {
+                "PREP_QTY": "$parent.ORD_QTY"
+              },
               "includeWhen": {
                 "all": [
                   {
@@ -784,7 +786,8 @@
             }
           ],
           "fieldValues": {
-            "FINAL_QTY": "$row.ORD_QTY"
+            "FINAL_QTY": "$row.ORD_QTY",
+            "MP_TO_COOK": "$row.ORD_QTY"
           }
         }
       ]
@@ -11997,11 +12000,13 @@
               "groupId": "MP_TYPE_LI",
               "fields": [
                 "PREP_TYPE",
-                "PREP_QTY",
                 "RECIPE",
                 "RECIPE_SOURCE_ID",
                 "RECIPE_SOURCE_UPDATED_AT"
               ],
+              "fieldValues": {
+                "PREP_QTY": "$parent.ORD_QTY"
+              },
               "includeWhen": {
                 "all": [
                   {
@@ -12019,7 +12024,8 @@
             }
           ],
           "fieldValues": {
-            "FINAL_QTY": "$row.ORD_QTY"
+            "FINAL_QTY": "$row.ORD_QTY",
+            "MP_TO_COOK": "$row.ORD_QTY"
           }
         }
       ]
