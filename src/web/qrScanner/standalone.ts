@@ -23,7 +23,7 @@ import {
 type StatusTone = 'neutral' | 'success' | 'error';
 
 const params = new URLSearchParams(window.location.search);
-const openerWindow = window.opener;
+let openerWindow = window.opener;
 const requestId = (params.get('requestId') || '').trim();
 const provisionalInstruction = (params.get('instruction') || '').trim().slice(0, 300);
 const targetOrigin = (() => {
@@ -48,11 +48,13 @@ const cancelButton = document.querySelector<HTMLButtonElement>('[data-action="ca
 let stream: MediaStream | null = null;
 let frameId = 0;
 let resumeTimer = 0;
+let finishRetryTimer = 0;
 let idSequence = 0;
 let closing = false;
 let finishRequested = false;
 let commitInFlight = false;
 let commitRequestId = '';
+let finishRequestedAt = 0;
 let setupReceived = false;
 let connectionFailed = false;
 let closedPosted = false;
@@ -66,6 +68,8 @@ const scanFingerprints = new Map<string, string>();
 
 const scanCanvas = document.createElement('canvas');
 const detector = createNativeQrDetector();
+const FINISH_RETRY_INTERVAL_MS = 900;
+const FINISH_RETRY_TIMEOUT_MS = 60_000;
 
 const scannerPlatform = {
   userAgent: navigator.userAgent,
@@ -181,6 +185,12 @@ const stopScanLoop = (): void => {
   }
 };
 
+const stopFinishRetry = (): void => {
+  if (!finishRetryTimer) return;
+  window.clearTimeout(finishRetryTimer);
+  finishRetryTimer = 0;
+};
+
 const stopCamera = (): void => {
   stopScanLoop();
   if (stream) {
@@ -193,6 +203,7 @@ const stopCamera = (): void => {
 
 function failScannerConnection(message: string): void {
   connectionFailed = true;
+  stopFinishRetry();
   candidates = failCheckingCandidates(
     candidates,
     'This receipt was not checked. Return to the form and open the scanner again.'
@@ -328,9 +339,10 @@ const handleCandidate = (message: QrScannerCandidateMessage): void => {
 };
 
 const handleOpenerMessage = (event: MessageEvent): void => {
-  if (!openerWindow || event.source !== openerWindow || event.origin !== targetOrigin) return;
+  if (event.origin !== targetOrigin || !event.source) return;
   const message = parseQrScannerFromOpenerMessage(event.data, requestId);
   if (!message) return;
+  if (event.source !== openerWindow) openerWindow = event.source as Window;
 
   switch (message.type) {
     case QR_SCANNER_MESSAGE_TYPES.setup:
@@ -354,6 +366,7 @@ const handleOpenerMessage = (event: MessageEvent): void => {
         stopScanLoop();
         setStatus(message.message || 'Adding checked receipts...');
       } else if (message.status === 'committed') {
+        stopFinishRetry();
         commitInFlight = false;
         closing = true;
         stopCamera();
@@ -368,6 +381,7 @@ const handleOpenerMessage = (event: MessageEvent): void => {
           window.setTimeout(closeScannerWindow, 350);
         }
       } else {
+        stopFinishRetry();
         commitInFlight = false;
         finishRequested = false;
         setStatus(message.message || 'The receipts could not be added. Try again.', 'error');
@@ -376,6 +390,7 @@ const handleOpenerMessage = (event: MessageEvent): void => {
       renderCandidates();
       break;
     case QR_SCANNER_MESSAGE_TYPES.cancelled:
+      stopFinishRetry();
       closing = true;
       stopCamera();
       setStatus(
@@ -386,6 +401,7 @@ const handleOpenerMessage = (event: MessageEvent): void => {
       closeScannerWindow();
       break;
     case QR_SCANNER_MESSAGE_TYPES.error:
+      stopFinishRetry();
       commitInFlight = false;
       finishRequested = false;
       failScannerConnection(`${message.message} Return to the form and open the scanner again.`);
@@ -393,6 +409,23 @@ const handleOpenerMessage = (event: MessageEvent): void => {
     default:
       break;
   }
+};
+
+const postFinishRequest = (): void => {
+  if (!finishRequested || closing || connectionFailed || !commitRequestId) return;
+  if (Date.now() - finishRequestedAt >= FINISH_RETRY_TIMEOUT_MS) {
+    stopFinishRetry();
+    stopCamera();
+    setStatus('Adding receipts is taking longer than expected. Use the browser X to return to the form and check the receipt list.');
+    return;
+  }
+  try {
+    openerWindow?.postMessage(buildQrScannerFinishMessage(requestId, commitRequestId), targetOrigin);
+  } catch {
+    // Retry the same idempotent request while the iOS browser surface settles.
+  }
+  stopFinishRetry();
+  finishRetryTimer = window.setTimeout(postFinishRequest, commitInFlight ? 1500 : FINISH_RETRY_INTERVAL_MS);
 };
 
 finishButton?.addEventListener('click', () => {
@@ -405,17 +438,14 @@ finishButton?.addEventListener('click', () => {
   // Reuse the same id after an uncertain commit response so Apps Script can
   // reconcile a write that may already be durable.
   commitRequestId = retainScannerCommitRequestId(commitRequestId, () => createMessageId('commit'));
-  const posted = postToOpener(buildQrScannerFinishMessage(requestId, commitRequestId));
-  if (!posted) {
-    finishRequested = false;
-    beginScanning();
-    renderCandidates();
-  }
+  finishRequestedAt = Date.now();
+  postFinishRequest();
 });
 
 cancelButton?.addEventListener('click', () => {
   if (closing || commitInFlight) return;
   closing = true;
+  stopFinishRetry();
   postToOpener(buildQrScannerCancelMessage(requestId));
   stopCamera();
   closeScannerWindow();
@@ -423,8 +453,17 @@ cancelButton?.addEventListener('click', () => {
 
 window.addEventListener('message', handleOpenerMessage);
 window.addEventListener('pagehide', () => {
+  if (finishRequested && commitRequestId && !connectionFailed) {
+    try {
+      openerWindow?.postMessage(buildQrScannerFinishMessage(requestId, commitRequestId), targetOrigin);
+    } catch {
+      // The retained origin reconciles a commit that was already received.
+    }
+  } else {
+    postClosed();
+  }
   closing = true;
-  postClosed();
+  stopFinishRetry();
   stopCamera();
 });
 

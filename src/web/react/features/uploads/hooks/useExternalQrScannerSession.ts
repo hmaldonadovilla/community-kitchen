@@ -9,6 +9,8 @@ import {
   buildQrScannerSetupMessage,
   parseQrScannerToOpenerMessage,
   QR_SCANNER_MESSAGE_TYPES,
+  type QrScannerCandidateMessage,
+  type QrScannerCommitMessage,
   type QrScannerScanMessage
 } from '../../../../qrScanner/openerProtocol';
 import { resolveExternalQrScannerLaunch } from '../domain/externalQrScanner';
@@ -34,6 +36,7 @@ import {
 const SCANNER_WINDOW_NAME = 'ckReceiptQrScanner';
 const MAX_PENDING_SCANS = 20;
 const SESSION_WINDOW_TIMEOUT_MS = 20 * 60 * 1000;
+const TERMINAL_RESPONSE_GRACE_MS = 60 * 1000;
 
 type ActiveScannerCleanup = (reason: 'replaced' | 'unmounted') => void;
 
@@ -174,7 +177,9 @@ export const useExternalQrScannerSession = (args: {
     let reconcileWhenReady = false;
     let reconcilePromise: Promise<void> | null = null;
     let scanChain: Promise<void> = Promise.resolve();
+    let terminalCommitMessage: QrScannerCommitMessage | null = null;
     const pendingScanIds = new Set<string>();
+    const candidateMessages = new Map<string, QrScannerCandidateMessage>();
 
     const post = (message: unknown): boolean => {
       if (ended || !scannerWindow) return false;
@@ -201,7 +206,12 @@ export const useExternalQrScannerSession = (args: {
     } | null = null;
 
     const sendSetup = (): void => {
-      if (!scannerReady || !sessionState) return;
+      if (!scannerReady) return;
+      if (terminalCommitMessage) {
+        post(terminalCommitMessage);
+        return;
+      }
+      if (!sessionState) return;
       post(
         buildQrScannerSetupMessage(requestId, {
           instruction: sessionState.session.instruction || launchTarget.instruction,
@@ -210,6 +220,7 @@ export const useExternalQrScannerSession = (args: {
           hideCloseOnIos: launchTarget.hideCloseOnIos
         })
       );
+      candidateMessages.forEach(message => post(message));
     };
 
     let startSessionPreparation = (): void => undefined;
@@ -259,13 +270,16 @@ export const useExternalQrScannerSession = (args: {
             scanId: message.scanId,
             rawValue: message.value
           });
-          const delivered = post(candidateMessage(requestId, message.scanId, result));
+          if (sessionState) sessionState = { ...sessionState, session: result.session };
+          const response = candidateMessage(requestId, message.scanId, result);
+          candidateMessages.set(message.scanId, response);
+          const posted = post(response);
           latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.candidate', {
             fieldPath: launchTarget.fieldPath,
             scanId: message.scanId,
             code: result.candidate.code,
             status: result.candidate.status,
-            delivered
+            posted
           });
         })
         .catch(error => {
@@ -322,18 +336,22 @@ export const useExternalQrScannerSession = (args: {
       source: 'commit' | 'resume' | 'cancelRace'
     ): void => {
       applyCommittedUpdate(result);
-      if (!ended) {
-        post(
-          buildQrScannerCommitMessage(requestId, {
-            status: 'committed',
-            linkedCount: result.linkedCount,
-            message: result.linkedCount === 1 ? '1 receipt added.' : `${result.linkedCount} receipts added.`
-          })
-        );
-      }
+      terminalCommitMessage ||= buildQrScannerCommitMessage(requestId, {
+        status: 'committed',
+        linkedCount: result.linkedCount,
+        message: result.linkedCount === 1 ? '1 receipt added.' : `${result.linkedCount} receipts added.`
+      });
+      if (!ended) post(terminalCommitMessage);
       commitInFlight = false;
-      ended = true;
-      removeListeners();
+      if (!ended) {
+        window.removeEventListener('focus', handleResume);
+        window.removeEventListener('pageshow', handleResume);
+        if (timeoutId) window.clearTimeout(timeoutId);
+        timeoutId = window.setTimeout(() => {
+          ended = true;
+          removeListeners();
+        }, TERMINAL_RESPONSE_GRACE_MS);
+      }
       latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.committed', {
         fieldPath: launchTarget.fieldPath,
         linkedCount: result.linkedCount,
@@ -353,7 +371,7 @@ export const useExternalQrScannerSession = (args: {
     };
 
     async function reconcileSession(source: 'resume' | 'commitFailure'): Promise<void> {
-      if (ended) return;
+      if (ended || terminalCommitMessage) return;
       if (!sessionState) {
         reconcileWhenReady = true;
         return;
@@ -450,6 +468,11 @@ export const useExternalQrScannerSession = (args: {
 
     const endWithoutCommit = (reason: 'cancelled' | 'closed' | 'failed', notifyScanner: boolean): void => {
       if (ended || commitInFlight) return;
+      if (terminalCommitMessage) {
+        ended = true;
+        removeListeners();
+        return;
+      }
       if (notifyScanner) post(buildQrScannerCancelledMessage(requestId, 'Scan cancelled.'));
       ended = true;
       removeListeners();
@@ -461,10 +484,27 @@ export const useExternalQrScannerSession = (args: {
     };
 
     const handleFinish = (commitRequestId: string): void => {
-      if (ended || commitInFlight) return;
+      latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.finishReceived', {
+        fieldPath: launchTarget.fieldPath,
+        commitRequestId,
+        duplicate: commitInFlight || Boolean(terminalCommitMessage)
+      });
+      if (ended) return;
+      if (terminalCommitMessage) {
+        post(terminalCommitMessage);
+        return;
+      }
+      if (commitInFlight) {
+        post(buildQrScannerCommitMessage(requestId, { status: 'committing', message: 'Adding checked receipts...' }));
+        return;
+      }
       stableCommitRequestId ||= commitRequestId;
       commitInFlight = true;
       post(buildQrScannerCommitMessage(requestId, { status: 'committing', message: 'Adding checked receipts...' }));
+      latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.commitStart', {
+        fieldPath: launchTarget.fieldPath,
+        commitRequestId: stableCommitRequestId
+      });
       void (async () => {
         try {
           await scanChain;
@@ -499,15 +539,26 @@ export const useExternalQrScannerSession = (args: {
     }
 
     function handleMessage(event: MessageEvent): void {
-      if (!scannerWindow || event.source !== scannerWindow || event.origin !== scannerLaunch.origin) return;
+      if (event.origin !== scannerLaunch.origin || !event.source) return;
       const message = parseQrScannerToOpenerMessage(event.data, requestId);
       if (!message) return;
+      if (event.source !== scannerWindow) {
+        scannerWindow = event.source as Window;
+        latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.peerRebound', {
+          fieldPath: launchTarget.fieldPath,
+          messageType: message.type
+        });
+      }
       switch (message.type) {
         case QR_SCANNER_MESSAGE_TYPES.ready:
           scannerReady = true;
           sendSetup();
           break;
         case QR_SCANNER_MESSAGE_TYPES.scan:
+          if (terminalCommitMessage) {
+            post(terminalCommitMessage);
+            return;
+          }
           scannerReady = true;
           sendSetup();
           enqueueScan(message);

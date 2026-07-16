@@ -248,28 +248,65 @@ describe('external QR scanner session hook', () => {
     expect(order).toEqual(['open', 'prepare']);
   });
 
-  test('accepts scanner messages only from the exact popup, origin and request', async () => {
+  test('rebinds to a replacement scanner peer only after matching origin and request', async () => {
     const harness = createHarness();
     expect(harness.hook.openScanner()).toBe(true);
     await flushPromises();
     const requestId = harness.requestId();
     const validScan = buildQrScannerScanMessage(requestId, 'scan-valid', 'https://drive.google.com/file/d/file-valid/view');
+    const replacementPopup = {
+      closed: false,
+      postMessage: jest.fn()
+    } as unknown as Window;
 
     harness.dispatch(validScan, {
-      source: { closed: false, postMessage: jest.fn() } as unknown as Window,
+      source: replacementPopup,
+      origin: 'https://evil.example.test'
+    });
+    harness.dispatch(buildQrScannerScanMessage('wrong-request', 'scan-wrong', 'value'), {
+      source: replacementPopup,
       origin: 'https://scanner.example.test'
     });
-    harness.dispatch(validScan, { origin: 'https://evil.example.test' });
-    harness.dispatch(buildQrScannerScanMessage('wrong-request', 'scan-wrong', 'value'));
     expect(mockAddQrScannerCandidate).not.toHaveBeenCalled();
+    expect(replacementPopup.postMessage).not.toHaveBeenCalled();
 
-    harness.dispatch(validScan);
+    harness.dispatch(validScan, {
+      source: replacementPopup,
+      origin: 'https://scanner.example.test'
+    });
     await flushPromises();
     expect(mockAddQrScannerCandidate).toHaveBeenCalledTimes(1);
     expect(mockAddQrScannerCandidate).toHaveBeenCalledWith(redeemedSession.credentials, {
       scanId: 'scan-valid',
       rawValue: 'https://drive.google.com/file/d/file-valid/view'
     });
+    expect(replacementPopup.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: QR_SCANNER_MESSAGE_TYPES.candidate,
+        scanId: 'scan-valid',
+        status: 'accepted'
+      }),
+      'https://scanner.example.test'
+    );
+
+    harness.dispatch(buildQrScannerFinishMessage(requestId, 'replacement-commit-request'), {
+      source: replacementPopup,
+      origin: 'https://scanner.example.test'
+    });
+    await flushPromises();
+
+    expect(mockCommitQrScannerSession).toHaveBeenCalledTimes(1);
+    expect(mockCommitQrScannerSession).toHaveBeenCalledWith(
+      redeemedSession.credentials,
+      'replacement-commit-request'
+    );
+    expect(replacementPopup.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: QR_SCANNER_MESSAGE_TYPES.commit,
+        status: 'committed'
+      }),
+      'https://scanner.example.test'
+    );
   });
 
   test('queues early scans until the session is ready and checks candidates sequentially', async () => {
@@ -360,6 +397,87 @@ describe('external QR scanner session hook', () => {
     });
     expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('committed');
     expect(mockCancelQrScannerSession).not.toHaveBeenCalled();
+  });
+
+  test('acknowledges duplicate Finish while the commit RPC remains pending without committing twice', async () => {
+    const commitDeferred = deferred<{
+      status: 'COMPLETED';
+      result: {
+        linkedCount: number;
+        skippedCount: number;
+        recordId: string;
+        dataVersion: number;
+        fieldValue: string;
+        links: string[];
+        summaryCode: 'COMMITTED';
+      };
+      session: typeof redeemedSession.session;
+    }>();
+    mockCommitQrScannerSession.mockReset().mockReturnValueOnce(commitDeferred.promise);
+    const harness = createHarness();
+    expect(harness.hook.openScanner()).toBe(true);
+    await flushPromises();
+    const finish = buildQrScannerFinishMessage(harness.requestId(), 'pending-commit-request');
+
+    harness.dispatch(finish);
+    await flushPromises();
+    expect(mockCommitQrScannerSession).toHaveBeenCalledTimes(1);
+
+    harness.dispatch(finish);
+    await flushPromises();
+
+    expect(mockCommitQrScannerSession).toHaveBeenCalledTimes(1);
+    expect(mockCommitQrScannerSession).toHaveBeenCalledWith(
+      redeemedSession.credentials,
+      'pending-commit-request'
+    );
+    const committingMessages = (harness.popup.postMessage as jest.Mock).mock.calls.filter(
+      ([message]) =>
+        message?.type === QR_SCANNER_MESSAGE_TYPES.commit &&
+        message?.status === 'committing'
+    );
+    expect(committingMessages).toHaveLength(2);
+
+    commitDeferred.resolve({
+      status: 'COMPLETED',
+      result: {
+        linkedCount: 1,
+        skippedCount: 0,
+        recordId: 'record-1',
+        dataVersion: 8,
+        fieldValue: 'https://drive.google.com/file/d/file-1/view',
+        links: ['https://drive.google.com/file/d/file-1/view'],
+        summaryCode: 'COMMITTED'
+      },
+      session: { ...redeemedSession.session, status: 'COMPLETED' }
+    });
+    await flushPromises();
+
+    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('committed');
+  });
+
+  test('replays the committed response to repeated Finish during terminal grace without another mutation', async () => {
+    const harness = createHarness();
+    expect(harness.hook.openScanner()).toBe(true);
+    await flushPromises();
+    const finish = buildQrScannerFinishMessage(harness.requestId(), 'terminal-commit-request');
+
+    harness.dispatch(finish);
+    await flushPromises();
+    harness.dispatch(finish);
+    await flushPromises();
+
+    expect(mockCommitQrScannerSession).toHaveBeenCalledTimes(1);
+    expect(mockCancelQrScannerSession).not.toHaveBeenCalled();
+    expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(1);
+    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledTimes(1);
+    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('committed');
+    const committedMessages = (harness.popup.postMessage as jest.Mock).mock.calls.filter(
+      ([message]) =>
+        message?.type === QR_SCANNER_MESSAGE_TYPES.commit &&
+        message?.status === 'committed'
+    );
+    expect(committedMessages).toHaveLength(2);
   });
 
   test('reconciles a completed session on focus into the immutable launch field', async () => {

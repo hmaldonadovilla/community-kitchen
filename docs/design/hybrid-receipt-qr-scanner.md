@@ -27,7 +27,7 @@ The implementation uses Firebase Hosting for the scanner page and Apps Script fo
 - Apps Script checks access, trash state, configured file types, folder/shared-drive scope, duplicates, and maximum file count.
 - Finish revalidates every accepted file and appends only the target upload field under the shared document lock.
 - A stable commit request ID makes retries idempotent.
-- Origin messages require the configured Firebase origin, matching request ID, and the exact `Window` reference opened by the form.
+- Origin messages require the configured Firebase origin and a matching cryptographically random request ID. A valid message may rebind the peer `WindowProxy` because iOS can present a different proxy object for the same browser-owned scanner surface after suspension.
 - Raw rejected QR payloads and Drive scope identifiers are not logged.
 
 ## Configuration
@@ -47,8 +47,10 @@ Existing labels and validation messages continue to be configuration-driven. Mea
 
 - If session preparation fails, the scanner stops the camera and tells the user to return to the form and open a fresh session. No candidate can be committed from a partially prepared session.
 - If the opener is temporarily suspended, the scanner session and checked candidates remain in Apps Script. The origin reconciles on `message`, `focus`, and `pageshow`.
+- Finish uses one stable idempotency key and is retried until the form acknowledges that commit processing has started or completed. A transiently dropped iOS cross-window event therefore cannot silently turn Finish into Cancel.
+- Once Apps Script commits, the origin retains the terminal response briefly and resends it when the scanner repeats Finish or reconnects. The originating overlay is updated before the success response is sent.
 - If the opener was discarded, no unsafe client-side save is attempted. The committed field remains authoritative and the normal record reload shows it.
-- Closing the native browser surface before Finish leaves an expiring session and does not mutate the record.
+- Closing the native browser surface before Finish leaves an expiring session and does not mutate the record. Closing it after Finish repeats the same Finish request instead of cancelling the accepted session.
 - On iOS, closing the native browser surface after a confirmed Finish returns to the already-updated form without a scripted close or navigation.
 - A lost commit response is reconciled with the same commit request ID.
 
