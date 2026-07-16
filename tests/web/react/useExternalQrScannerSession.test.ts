@@ -49,6 +49,8 @@ import {
 import { useExternalQrScannerSession } from '../../../src/web/react/features/uploads/hooks/useExternalQrScannerSession';
 
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+const originalDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
+const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
 const originalCrypto = Object.getOwnPropertyDescriptor(globalThis, 'crypto');
 
 const successfulLaunch = {
@@ -101,8 +103,12 @@ type HookArgs = Parameters<typeof useExternalQrScannerSession>[0];
 const createHarness = (options?: {
   args?: Partial<HookArgs>;
   open?: (url: string, target: string, features: string) => Window | null;
+  platform?: { userAgent: string; platform: string; maxTouchPoints: number };
 }) => {
   const eventListeners = new Map<string, Set<(event: any) => void>>();
+  const documentListeners = new Map<string, Set<(event: any) => void>>();
+  const timers = new Map<number, { listener: TimerHandler; delay: number }>();
+  let timerSequence = 100;
   const popup = {
     closed: false,
     postMessage: jest.fn()
@@ -119,12 +125,38 @@ const createHarness = (options?: {
     removeEventListener: jest.fn((type: string, listener: (event: any) => void) => {
       eventListeners.get(type)?.delete(listener);
     }),
-    setTimeout: jest.fn(() => 101),
-    clearTimeout: jest.fn(),
+    setTimeout: jest.fn((listener: TimerHandler, delay = 0) => {
+      timerSequence += 1;
+      timers.set(timerSequence, { listener, delay });
+      return timerSequence;
+    }),
+    clearTimeout: jest.fn((timerId: number) => {
+      timers.delete(timerId);
+    }),
     setInterval: jest.fn(() => 202),
     clearInterval: jest.fn()
   };
   Object.defineProperty(globalThis, 'window', { configurable: true, value: fakeWindow });
+  const fakeDocument = {
+    visibilityState: 'visible',
+    addEventListener: jest.fn((type: string, listener: (event: any) => void) => {
+      const listeners = documentListeners.get(type) || new Set<(event: any) => void>();
+      listeners.add(listener);
+      documentListeners.set(type, listeners);
+    }),
+    removeEventListener: jest.fn((type: string, listener: (event: any) => void) => {
+      documentListeners.get(type)?.delete(listener);
+    })
+  };
+  Object.defineProperty(globalThis, 'document', { configurable: true, value: fakeDocument });
+  Object.defineProperty(globalThis, 'navigator', {
+    configurable: true,
+    value: options?.platform || {
+      userAgent: 'Mozilla/5.0 (X11; Linux x86_64)',
+      platform: 'Linux x86_64',
+      maxTouchPoints: 0
+    }
+  });
 
   const prepareSession = options?.args?.prepareSession || jest.fn(async () => successfulLaunch);
   const callbacks = {
@@ -141,6 +173,7 @@ const createHarness = (options?: {
     fieldPath: 'ING_EVD',
     instruction: 'Configured instruction',
     hideCloseOnIos: true,
+    commitOnReturnOnIos: false,
     prepareSession,
     ...callbacks,
     ...options?.args
@@ -167,11 +200,34 @@ const createHarness = (options?: {
     } as MessageEvent;
     eventListeners.get('message')?.forEach(listener => listener(messageEvent));
   };
-  const dispatchWindowEvent = (type: 'focus' | 'pageshow'): void => {
+  const dispatchWindowEvent = (type: 'focus' | 'pageshow' | 'blur'): void => {
     eventListeners.get(type)?.forEach(listener => listener({ type }));
   };
+  const dispatchVisibility = (visibilityState: 'hidden' | 'visible'): void => {
+    fakeDocument.visibilityState = visibilityState;
+    documentListeners.get('visibilitychange')?.forEach(listener => listener({ type: 'visibilitychange' }));
+  };
+  const runTimersWithDelay = (delay: number): void => {
+    [...timers.entries()].forEach(([timerId, timer]) => {
+      if (timer.delay !== delay) return;
+      timers.delete(timerId);
+      if (typeof timer.listener === 'function') timer.listener();
+    });
+  };
 
-  return { hook, popup, openMock, prepareSession, callbacks, requestId, dispatch, dispatchWindowEvent, render };
+  return {
+    hook,
+    popup,
+    openMock,
+    prepareSession,
+    callbacks,
+    requestId,
+    dispatch,
+    dispatchWindowEvent,
+    dispatchVisibility,
+    runTimersWithDelay,
+    render
+  };
 };
 
 describe('external QR scanner session hook', () => {
@@ -221,6 +277,10 @@ describe('external QR scanner session hook', () => {
     await flushPromises();
     if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
     else Reflect.deleteProperty(globalThis, 'window');
+    if (originalDocument) Object.defineProperty(globalThis, 'document', originalDocument);
+    else Reflect.deleteProperty(globalThis, 'document');
+    if (originalNavigator) Object.defineProperty(globalThis, 'navigator', originalNavigator);
+    else Reflect.deleteProperty(globalThis, 'navigator');
     if (originalCrypto) Object.defineProperty(globalThis, 'crypto', originalCrypto);
     else Reflect.deleteProperty(globalThis, 'crypto');
   });
@@ -367,6 +427,259 @@ describe('external QR scanner session hook', () => {
     expect(mockCommitQrScannerSession).toHaveBeenCalledWith(redeemedSession.credentials, 'mobile-commit-request');
     expect(mockCancelQrScannerSession).not.toHaveBeenCalled();
     expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('committed');
+  });
+
+  test('commits an authorised iOS batch when the native scanner returns without Finish', async () => {
+    mockGetQrScannerSession.mockResolvedValue({
+      session: {
+        ...redeemedSession.session,
+        status: 'ACTIVE',
+        counts: { authorised: 1 },
+        candidates: [{ status: 'AUTHORISED' }]
+      }
+    });
+    const harness = createHarness({
+      args: { commitOnReturnOnIos: true },
+      platform: {
+        userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_4 like Mac OS X)',
+        platform: 'iPhone',
+        maxTouchPoints: 5
+      }
+    });
+    expect(harness.hook.openScanner()).toBe(true);
+    await flushPromises();
+
+    harness.dispatchWindowEvent('focus');
+    await flushPromises();
+    expect(mockGetQrScannerSession).not.toHaveBeenCalled();
+
+    harness.dispatchVisibility('hidden');
+    harness.dispatchVisibility('visible');
+    harness.dispatchWindowEvent('focus');
+    await flushPromises();
+
+    expect(mockGetQrScannerSession).toHaveBeenCalledTimes(1);
+    expect(mockCommitQrScannerSession).toHaveBeenCalledTimes(1);
+    expect(mockCommitQrScannerSession).toHaveBeenCalledWith(
+      redeemedSession.credentials,
+      expect.any(String)
+    );
+    expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(1);
+    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('committed');
+    expect(mockCancelQrScannerSession).not.toHaveBeenCalled();
+    expect(harness.callbacks.onDiagnostic).toHaveBeenCalledWith(
+      'upload.linkCapture.externalScanner.nativeReturnCommitStart',
+      expect.objectContaining({ fieldPath: 'ING_EVD' })
+    );
+  });
+
+  test('waits for a pending iOS scan before committing on native return', async () => {
+    const pendingCandidate = deferred<ReturnType<typeof candidateResult>>();
+    mockAddQrScannerCandidate.mockReset().mockReturnValueOnce(pendingCandidate.promise);
+    mockGetQrScannerSession.mockResolvedValue({
+      session: {
+        ...redeemedSession.session,
+        status: 'ACTIVE',
+        counts: { authorised: 1 },
+        candidates: [{ status: 'AUTHORISED' }]
+      }
+    });
+    const harness = createHarness({
+      args: { commitOnReturnOnIos: true },
+      platform: {
+        userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_4 like Mac OS X)',
+        platform: 'iPhone',
+        maxTouchPoints: 5
+      }
+    });
+    expect(harness.hook.openScanner()).toBe(true);
+    await flushPromises();
+
+    harness.dispatch(
+      buildQrScannerScanMessage(harness.requestId(), 'scan-pending', 'https://drive.google.com/file/d/file-pending/view')
+    );
+    await flushPromises();
+    expect(mockAddQrScannerCandidate).toHaveBeenCalledTimes(1);
+
+    harness.dispatchVisibility('hidden');
+    harness.dispatchVisibility('visible');
+    await flushPromises();
+    expect(mockGetQrScannerSession).not.toHaveBeenCalled();
+    expect(mockCommitQrScannerSession).not.toHaveBeenCalled();
+
+    pendingCandidate.resolve(candidateResult('scan-pending'));
+    await flushPromises();
+
+    expect(mockGetQrScannerSession).toHaveBeenCalledTimes(1);
+    expect(mockCommitQrScannerSession).toHaveBeenCalledTimes(1);
+    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('committed');
+  });
+
+  test('does not cancel an empty iOS session after an ambiguous blur and focus', async () => {
+    mockGetQrScannerSession.mockResolvedValue({
+      session: {
+        ...redeemedSession.session,
+        status: 'ACTIVE',
+        counts: { authorised: 0 },
+        candidates: []
+      }
+    });
+    const harness = createHarness({
+      args: { commitOnReturnOnIos: true },
+      platform: {
+        userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_4 like Mac OS X)',
+        platform: 'iPhone',
+        maxTouchPoints: 5
+      }
+    });
+    expect(harness.hook.openScanner()).toBe(true);
+    await flushPromises();
+
+    harness.dispatchWindowEvent('blur');
+    harness.dispatchWindowEvent('focus');
+    await flushPromises();
+
+    expect(mockCommitQrScannerSession).not.toHaveBeenCalled();
+    expect(mockCancelQrScannerSession).not.toHaveBeenCalled();
+
+    harness.dispatchVisibility('hidden');
+    harness.dispatchVisibility('visible');
+    await flushPromises();
+
+    expect(mockCancelQrScannerSession).toHaveBeenCalledTimes(1);
+    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('closed');
+  });
+
+  test('retries an iOS native-return commit with one stable request ID', async () => {
+    const { QrScannerSessionError } = jest.requireActual(
+      '../../../src/web/react/features/uploads/services/qrScannerSessionClient'
+    ) as typeof import('../../../src/web/react/features/uploads/services/qrScannerSessionClient');
+    mockGetQrScannerSession.mockResolvedValue({
+      session: {
+        ...redeemedSession.session,
+        status: 'ACTIVE',
+        counts: { authorised: 1 },
+        candidates: [{ status: 'AUTHORISED' }]
+      }
+    });
+    mockCommitQrScannerSession.mockRejectedValueOnce(
+      new QrScannerSessionError('TEMPORARY_ERROR', 'The commit response was lost.', true)
+    );
+    const harness = createHarness({
+      args: { commitOnReturnOnIos: true },
+      platform: {
+        userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_4 like Mac OS X)',
+        platform: 'iPhone',
+        maxTouchPoints: 5
+      }
+    });
+    expect(harness.hook.openScanner()).toBe(true);
+    await flushPromises();
+
+    harness.dispatchVisibility('hidden');
+    harness.dispatchVisibility('visible');
+    await flushPromises();
+    expect(mockCommitQrScannerSession).toHaveBeenCalledTimes(1);
+
+    harness.runTimersWithDelay(1200);
+    await flushPromises();
+
+    expect(mockCommitQrScannerSession).toHaveBeenCalledTimes(2);
+    expect(mockCommitQrScannerSession.mock.calls[0][1]).toBe(mockCommitQrScannerSession.mock.calls[1][1]);
+    expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(1);
+    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('committed');
+  });
+
+  test('continues retrying the stable iOS commit while the server reports COMMITTING', async () => {
+    const { QrScannerSessionError } = jest.requireActual(
+      '../../../src/web/react/features/uploads/services/qrScannerSessionClient'
+    ) as typeof import('../../../src/web/react/features/uploads/services/qrScannerSessionClient');
+    mockGetQrScannerSession
+      .mockResolvedValueOnce({
+        session: {
+          ...redeemedSession.session,
+          status: 'ACTIVE',
+          counts: { authorised: 1 },
+          candidates: [{ status: 'AUTHORISED' }]
+        }
+      })
+      .mockResolvedValue({
+        session: {
+          ...redeemedSession.session,
+          status: 'COMMITTING',
+          counts: { authorised: 1 },
+          candidates: [{ status: 'AUTHORISED' }]
+        }
+      });
+    mockCommitQrScannerSession
+      .mockRejectedValueOnce(new QrScannerSessionError('TEMPORARY_ERROR', 'The first response was lost.', true))
+      .mockRejectedValueOnce(new QrScannerSessionError('TEMPORARY_ERROR', 'Commit is still running.', true));
+    const harness = createHarness({
+      args: { commitOnReturnOnIos: true },
+      platform: {
+        userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_4 like Mac OS X)',
+        platform: 'iPhone',
+        maxTouchPoints: 5
+      }
+    });
+    expect(harness.hook.openScanner()).toBe(true);
+    await flushPromises();
+
+    harness.dispatchVisibility('hidden');
+    harness.dispatchVisibility('visible');
+    await flushPromises();
+    expect(mockCommitQrScannerSession).toHaveBeenCalledTimes(1);
+
+    harness.runTimersWithDelay(1200);
+    await flushPromises();
+    expect(mockCommitQrScannerSession).toHaveBeenCalledTimes(2);
+
+    harness.runTimersWithDelay(2400);
+    await flushPromises();
+
+    expect(mockCommitQrScannerSession).toHaveBeenCalledTimes(3);
+    const requestIds = mockCommitQrScannerSession.mock.calls.map(call => call[1]);
+    expect(new Set(requestIds).size).toBe(1);
+    expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(1);
+    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('committed');
+  });
+
+  test('retries a transient iOS native-return session read', async () => {
+    const { QrScannerSessionError } = jest.requireActual(
+      '../../../src/web/react/features/uploads/services/qrScannerSessionClient'
+    ) as typeof import('../../../src/web/react/features/uploads/services/qrScannerSessionClient');
+    mockGetQrScannerSession
+      .mockRejectedValueOnce(new QrScannerSessionError('TEMPORARY_ERROR', 'Session read failed.', true))
+      .mockResolvedValue({
+        session: {
+          ...redeemedSession.session,
+          status: 'ACTIVE',
+          counts: { authorised: 1 },
+          candidates: [{ status: 'AUTHORISED' }]
+        }
+      });
+    const harness = createHarness({
+      args: { commitOnReturnOnIos: true },
+      platform: {
+        userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_4 like Mac OS X)',
+        platform: 'iPhone',
+        maxTouchPoints: 5
+      }
+    });
+    expect(harness.hook.openScanner()).toBe(true);
+    await flushPromises();
+
+    harness.dispatchVisibility('hidden');
+    harness.dispatchVisibility('visible');
+    await flushPromises();
+    expect(mockGetQrScannerSession).toHaveBeenCalledTimes(1);
+
+    harness.runTimersWithDelay(1200);
+    await flushPromises();
+
+    expect(mockGetQrScannerSession).toHaveBeenCalledTimes(2);
+    expect(mockCommitQrScannerSession).toHaveBeenCalledTimes(1);
+    expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(1);
   });
 
   test('commits Finish once and applies the authoritative field update', async () => {

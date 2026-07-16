@@ -13,7 +13,9 @@ import {
   type QrScannerCommitMessage,
   type QrScannerScanMessage
 } from '../../../../qrScanner/openerProtocol';
+import { isIosLikeScannerPlatform } from '../../../../qrScanner/platform';
 import { resolveExternalQrScannerLaunch } from '../domain/externalQrScanner';
+import { resolveNativeQrScannerReturnAction } from '../domain/qrScannerReturn';
 import type {
   ApplyQrScannerCommittedUpdate,
   BeginQrScannerInteraction,
@@ -37,6 +39,8 @@ const SCANNER_WINDOW_NAME = 'ckReceiptQrScanner';
 const MAX_PENDING_SCANS = 20;
 const SESSION_WINDOW_TIMEOUT_MS = 20 * 60 * 1000;
 const TERMINAL_RESPONSE_GRACE_MS = 60 * 1000;
+const NATIVE_RETURN_RETRY_DELAY_MS = 1200;
+const NATIVE_RETURN_MAX_RETRIES = 3;
 
 type ActiveScannerCleanup = (reason: 'replaced' | 'unmounted') => void;
 
@@ -110,6 +114,7 @@ export const useExternalQrScannerSession = (args: {
   fieldPath: string;
   instruction?: string;
   hideCloseOnIos?: boolean;
+  commitOnReturnOnIos?: boolean;
   prepareSession?: PrepareQrScannerLaunch;
   onSessionReady?: BeginQrScannerInteraction;
   onSessionEnd?: EndQrScannerInteraction;
@@ -151,7 +156,8 @@ export const useExternalQrScannerSession = (args: {
       requestId,
       targetOrigin: window.location.origin,
       instruction: current.instruction,
-      hideCloseOnIos: current.hideCloseOnIos !== false
+      hideCloseOnIos: current.hideCloseOnIos !== false,
+      commitOnReturnOnIos: current.commitOnReturnOnIos === true
     });
     if (!external) {
       current.onDiagnostic?.('upload.linkCapture.externalScanner.unavailable', { fieldPath: current.fieldPath });
@@ -164,8 +170,19 @@ export const useExternalQrScannerSession = (args: {
       fieldPath: current.fieldPath,
       instruction: current.instruction,
       hideCloseOnIos: current.hideCloseOnIos !== false,
+      commitOnReturnOnIos: current.commitOnReturnOnIos === true,
       prepareSession: current.prepareSession
     };
+    const browserNavigator = typeof navigator === 'undefined' ? null : navigator;
+    const nativeReturnCommitEnabled = Boolean(
+      launchTarget.commitOnReturnOnIos &&
+      browserNavigator &&
+      isIosLikeScannerPlatform({
+        userAgent: browserNavigator.userAgent,
+        platform: browserNavigator.platform,
+        maxTouchPoints: browserNavigator.maxTouchPoints
+      })
+    );
 
     let scannerWindow: Window | null = null;
     let ended = false;
@@ -176,6 +193,10 @@ export const useExternalQrScannerSession = (args: {
     let committedUpdateApplied = false;
     let reconcileWhenReady = false;
     let reconcilePromise: Promise<void> | null = null;
+    let nativeReturnArmed = false;
+    let nativeReturnHiddenObserved = false;
+    let nativeReturnRetryTimer = 0;
+    let nativeReturnRetryCount = 0;
     let scanChain: Promise<void> = Promise.resolve();
     let terminalCommitMessage: QrScannerCommitMessage | null = null;
     const pendingScanIds = new Set<string>();
@@ -217,7 +238,8 @@ export const useExternalQrScannerSession = (args: {
           instruction: sessionState.session.instruction || launchTarget.instruction,
           maxFiles: sessionState.session.maxFiles,
           existingCount: sessionState.session.existingCount,
-          hideCloseOnIos: launchTarget.hideCloseOnIos
+          hideCloseOnIos: launchTarget.hideCloseOnIos,
+          commitOnReturnOnIos: launchTarget.commitOnReturnOnIos
         })
       );
       candidateMessages.forEach(message => post(message));
@@ -306,7 +328,10 @@ export const useExternalQrScannerSession = (args: {
       window.removeEventListener('message', handleMessage);
       window.removeEventListener('focus', handleResume);
       window.removeEventListener('pageshow', handleResume);
+      window.removeEventListener('blur', handleOriginAway);
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', handleVisibilityChange);
       if (timeoutId) window.clearTimeout(timeoutId);
+      if (nativeReturnRetryTimer) window.clearTimeout(nativeReturnRetryTimer);
       if (activeCleanupRef.current === cleanup) activeCleanupRef.current = null;
     };
 
@@ -336,6 +361,10 @@ export const useExternalQrScannerSession = (args: {
       source: 'commit' | 'resume' | 'cancelRace'
     ): void => {
       applyCommittedUpdate(result);
+      if (nativeReturnRetryTimer) {
+        window.clearTimeout(nativeReturnRetryTimer);
+        nativeReturnRetryTimer = 0;
+      }
       terminalCommitMessage ||= buildQrScannerCommitMessage(requestId, {
         status: 'committed',
         linkedCount: result.linkedCount,
@@ -346,6 +375,8 @@ export const useExternalQrScannerSession = (args: {
       if (!ended) {
         window.removeEventListener('focus', handleResume);
         window.removeEventListener('pageshow', handleResume);
+        window.removeEventListener('blur', handleOriginAway);
+        if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', handleVisibilityChange);
         if (timeoutId) window.clearTimeout(timeoutId);
         timeoutId = window.setTimeout(() => {
           ended = true;
@@ -370,6 +401,22 @@ export const useExternalQrScannerSession = (args: {
       finishHold('failed');
     };
 
+    const scheduleNativeReturnRetry = (failure: { code: string; retryable: boolean }): boolean => {
+      if (!failure.retryable || nativeReturnRetryCount >= NATIVE_RETURN_MAX_RETRIES || ended) return false;
+      nativeReturnRetryCount += 1;
+      if (nativeReturnRetryTimer) window.clearTimeout(nativeReturnRetryTimer);
+      nativeReturnRetryTimer = window.setTimeout(() => {
+        nativeReturnRetryTimer = 0;
+        void reconcileSession('resume');
+      }, NATIVE_RETURN_RETRY_DELAY_MS * nativeReturnRetryCount);
+      latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.nativeReturnRetry', {
+        fieldPath: launchTarget.fieldPath,
+        code: failure.code,
+        attempt: nativeReturnRetryCount
+      });
+      return true;
+    };
+
     async function reconcileSession(source: 'resume' | 'commitFailure'): Promise<void> {
       if (ended || terminalCommitMessage) return;
       if (!sessionState) {
@@ -381,6 +428,10 @@ export const useExternalQrScannerSession = (args: {
 
       const run = (async () => {
         try {
+          if (source === 'resume' && nativeReturnCommitEnabled && nativeReturnArmed) {
+            await scanChain;
+            if (ended) return;
+          }
           const snapshot = await getQrScannerSession(sessionState!.credentials);
           if (ended) return;
           sessionState = { ...sessionState!, session: snapshot.session };
@@ -409,6 +460,36 @@ export const useExternalQrScannerSession = (args: {
             });
             return;
           }
+          const nativeReturnAction =
+            source === 'resume' && nativeReturnCommitEnabled && nativeReturnArmed
+              ? resolveNativeQrScannerReturnAction(snapshot.session, {
+                  allowEmptyCancel: nativeReturnHiddenObserved
+                })
+              : 'none';
+          if (nativeReturnAction === 'commit') {
+            stableCommitRequestId ||= createSecureRequestId();
+            if (commitInFlight) return;
+            commitInFlight = true;
+            latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.nativeReturnCommitStart', {
+              fieldPath: launchTarget.fieldPath,
+              commitRequestId: stableCommitRequestId
+            });
+            try {
+              const committed = await commitQrScannerSession(sessionState!.credentials, stableCommitRequestId);
+              if (!ended) completeCommittedSession(committed.result, 'resume');
+            } catch (error) {
+              commitInFlight = false;
+              throw error;
+            }
+            return;
+          }
+          if (nativeReturnAction === 'cancel') {
+            latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.nativeReturnEmpty', {
+              fieldPath: launchTarget.fieldPath
+            });
+            endWithoutCommit('closed', false);
+            return;
+          }
           if (
             snapshot.session.status === 'COMMITTING' &&
             stableCommitRequestId
@@ -427,6 +508,7 @@ export const useExternalQrScannerSession = (args: {
                 retryable: failure.retryable,
                 source
               });
+              if (source === 'resume' && nativeReturnCommitEnabled && nativeReturnArmed) throw error;
             }
           }
         } catch (error) {
@@ -434,6 +516,13 @@ export const useExternalQrScannerSession = (args: {
           const failure = errorDetails(error);
           if (['SESSION_EXPIRED', 'SESSION_NOT_ACTIVE', 'INVALID_CREDENTIAL', 'NOT_FOUND'].includes(failure.code)) {
             failTerminalSession(failure);
+            return;
+          }
+          if (source === 'resume' && nativeReturnCommitEnabled && nativeReturnArmed) {
+            if (scheduleNativeReturnRetry(failure)) return;
+            const message = failure.message || 'The scanned receipts could not be added. Refresh the record and try again.';
+            latestRef.current.onUnavailable?.(message);
+            failTerminalSession({ code: failure.code, message });
             return;
           }
           latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.reconcileFailed', {
@@ -535,7 +624,24 @@ export const useExternalQrScannerSession = (args: {
     };
 
     function handleResume(): void {
+      if (nativeReturnCommitEnabled) {
+        if (!nativeReturnArmed) return;
+        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      }
       void reconcileSession('resume');
+    }
+
+    function handleOriginAway(): void {
+      if (nativeReturnCommitEnabled && !ended) nativeReturnArmed = true;
+    }
+
+    function handleVisibilityChange(): void {
+      if (document.visibilityState === 'hidden') {
+        nativeReturnHiddenObserved = true;
+        handleOriginAway();
+        return;
+      }
+      handleResume();
     }
 
     function handleMessage(event: MessageEvent): void {
@@ -570,7 +676,13 @@ export const useExternalQrScannerSession = (args: {
           endWithoutCommit('cancelled', true);
           break;
         case QR_SCANNER_MESSAGE_TYPES.closed:
-          endWithoutCommit('closed', false);
+          if (nativeReturnCommitEnabled) {
+            nativeReturnArmed = true;
+            nativeReturnHiddenObserved = true;
+            handleResume();
+          } else {
+            endWithoutCommit('closed', false);
+          }
           break;
         default:
           break;
@@ -598,6 +710,8 @@ export const useExternalQrScannerSession = (args: {
     window.addEventListener('message', handleMessage);
     window.addEventListener('focus', handleResume);
     window.addEventListener('pageshow', handleResume);
+    window.addEventListener('blur', handleOriginAway);
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', handleVisibilityChange);
     scannerWindow = window.open(scannerLaunch.url, SCANNER_WINDOW_NAME, 'popup,width=480,height=760');
     if (!scannerWindow) {
       ended = true;

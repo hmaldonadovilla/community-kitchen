@@ -158,6 +158,7 @@ export const FormFileOverlay: React.FC<{
     fieldPath: scannerFieldPath,
     instruction: scannerInstruction,
     hideCloseOnIos: scannerLinkCaptureConfig?.hideCloseOnIos !== false,
+    commitOnReturnOnIos: scannerLinkCaptureConfig?.commitOnReturnOnIos === true,
     prepareSession: prepareQrScannerLaunch,
     onSessionReady: onQrScannerSessionReady,
     onSessionEnd: onQrScannerSessionEnd,

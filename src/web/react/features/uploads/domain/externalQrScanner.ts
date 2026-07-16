@@ -23,6 +23,7 @@ export const resolveExternalQrScannerLaunch = (args: {
   targetOrigin?: string | null;
   instruction?: string | null;
   hideCloseOnIos?: boolean;
+  commitOnReturnOnIos?: boolean;
 }): ExternalQrScannerLaunch | null => {
   const baseUrl = (args.assetBaseUrl || '').toString().trim().replace(/\/+$/, '');
   const requestId = (args.requestId || '').toString().trim();
@@ -49,6 +50,7 @@ export const resolveExternalQrScannerLaunch = (args: {
     const instruction = (args.instruction || '').toString().trim().slice(0, 300);
     if (instruction) scannerUrl.searchParams.set('instruction', instruction);
     scannerUrl.searchParams.set('hideCloseOnIos', args.hideCloseOnIos === false ? '0' : '1');
+    if (args.commitOnReturnOnIos === true) scannerUrl.searchParams.set('commitOnReturnOnIos', '1');
     return { url: scannerUrl.toString(), origin: base.origin };
   } catch {
     return null;

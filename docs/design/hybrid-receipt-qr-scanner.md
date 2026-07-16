@@ -14,9 +14,9 @@ The implementation uses Firebase Hosting for the scanner page and Apps Script fo
 4. QR values detected before the session is ready are kept in a bounded local queue and shown as waiting for verification.
 5. The retained origin redeems the one-time launch token and submits queued and subsequent values to Apps Script. The scanner receives only bounded setup and result messages; it never receives Apps Script credentials.
 6. The scanner shows a configured instruction, the camera, and one row per scanned receipt with checking, accepted, duplicate, rejected, or retryable feedback.
-7. **Finish and add receipts** revalidates accepted files and performs one idempotent, field-scoped Apps Script append. **Cancel** writes nothing.
+7. Android and desktop use **Finish and add receipts** to revalidate accepted files and perform one idempotent, field-scoped Apps Script append. **Cancel** writes nothing.
 8. The scanner notifies the retained origin tab. The origin updates its local record and file overlay from the committed session result without navigating or reloading the application.
-9. On iOS the page-owned Close control is hidden and the scanner never calls `window.close()`. After a successful Finish, the scanner stops the camera, confirms that the receipts were added, and waits for the user to use the native browser X. Android and desktop close the scanner programmatically after success and may use the page-owned close action when no commit is running.
+9. When `commitOnReturnOnIos` is enabled, iOS hides both page-owned completion actions. The user scans multiple receipts and uses the native browser X when done. Once the originating form is visible again, it reads the authoritative session and commits the accepted batch. Android and desktop keep explicit Finish and scripted close behavior.
 
 ## Security and data integrity
 
@@ -39,6 +39,7 @@ The existing `linkCapture.validation` object remains the source for authoritativ
 - `instruction`: localized, field-specific sentence shown above the camera.
 - `sessionTtlMinutes`: bounded session lifetime.
 - `hideCloseOnIos`: hides only the scanner page's own Close control.
+- `commitOnReturnOnIos`: hides Finish on iOS and commits the accepted batch when the originating form returns to the foreground.
 - `allowedMimeTypes`: optional captured-link MIME policy independent from uploads. An explicit list replaces upload MIME/extension restrictions for scanned Drive files; `*/*` permits any non-folder file that passes the Drive scope policy.
 
 Existing labels and validation messages continue to be configuration-driven. Meal Production supplies the receipt-specific instruction.
@@ -47,11 +48,11 @@ Existing labels and validation messages continue to be configuration-driven. Mea
 
 - If session preparation fails, the scanner stops the camera and tells the user to return to the form and open a fresh session. No candidate can be committed from a partially prepared session.
 - If the opener is temporarily suspended, the scanner session and checked candidates remain in Apps Script. The origin reconciles on `message`, `focus`, and `pageshow`.
-- Finish uses one stable idempotency key and is retried until the form acknowledges that commit processing has started or completed. A transiently dropped iOS cross-window event therefore cannot silently turn Finish into Cancel.
+- Android and desktop Finish uses one stable idempotency key and is retried until the form acknowledges that commit processing has started or completed.
 - Once Apps Script commits, the origin retains the terminal response briefly and resends it when the scanner repeats Finish or reconnects. The originating overlay is updated before the success response is sent.
 - If the opener was discarded, no unsafe client-side save is attempted. The committed field remains authoritative and the normal record reload shows it.
-- Closing the native browser surface before Finish leaves an expiring session and does not mutate the record. Closing it after Finish repeats the same Finish request instead of cancelling the accepted session.
-- On iOS, closing the native browser surface after a confirmed Finish returns to the already-updated form without a scripted close or navigation.
+- On configured iOS scanners, `pagehide` never sends Cancel or Closed. The foreground form waits for queued checks, reads the authoritative session, and commits it when at least one candidate is authorised. An empty session is cancelled.
+- Origin-side visibility, focus, and pageshow events may repeat, but one stable request ID and the existing commit guard ensure a single field mutation.
 - A lost commit response is reconciled with the same commit request ID.
 
 ## Implementation slices
@@ -69,7 +70,7 @@ Existing labels and validation messages continue to be configuration-driven. Mea
 - Camera permission is requested immediately after the scanner tab opens.
 - Ten distinct receipts can be scanned without restarting the camera.
 - Every receipt receives an authoritative user-facing result.
-- Finish appends accepted receipts once; Cancel and native-close-before-Finish append none.
+- Finish appends accepted receipts once on Android and desktop. On configured iOS scanners, returning with the native X appends the accepted batch once.
 - Returning to a retained origin tab does not reload the application.
 - Android Chrome/Samsung Internet, iPhone browser surface, desktop Chromium, and desktop Firefox pass the lifecycle checks.
 - Runtime traffic is limited to Firebase Hosting and Apps Script.

@@ -1820,7 +1820,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
       - `linkCapture`: optional QR/link capture for existing Drive files. Use `{ "enabled": true, "mode": "driveQr", "allowManualPaste": true, "dedupeBy": "driveFileId" }` when users should scan or paste a Google Drive/Docs file link instead of uploading a new file. In `driveQr` mode, non-Drive QR content is rejected and repeated scans of the same Drive file are stored once.
         Set `allowedMimeTypes` inside `linkCapture` when captured links need a different type policy from uploaded files. It replaces the upload MIME/extension rules for link capture only. Use `["*/*"]` to accept any non-folder file that passes Drive scope validation.
         Add `validation: { "requireServerValidation": true, "includeUploadDestinationDrive": true, "includeUploadDestinationFolder": true, "rejectTrashed": true }` when captured links must belong to the same customer Drive/folder as `destinationFolderId`. Apps Script resolves this policy from the authoritative form configuration and verifies Drive metadata before a scanner result can be committed. Add `validation.messages` to customize failures such as `notDriveFile`, `notAccessible`, `trashed`, and `outOfScope`; omitted values fall back to `files.linkCapture.validation.*` system strings.
-        Configure `instruction` with the localized sentence shown above the camera, `sessionTtlMinutes` with an integer from 1 to 30, and `hideCloseOnIos: true` when iOS users should rely on the browser's native X. The page cannot remove that native control; Android and desktop retain the page-owned Close action.
+        Configure `instruction` with the localized sentence shown above the camera and `sessionTtlMinutes` with an integer from 1 to 30. Set `hideCloseOnIos: true` to remove the page-owned Close action on iOS, and `commitOnReturnOnIos: true` when the native browser X should finish and add the accepted batch. Android and desktop retain their page-owned actions.
 
         ```json
         {
@@ -1834,6 +1834,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
           },
           "sessionTtlMinutes": 15,
           "hideCloseOnIos": true,
+          "commitOnReturnOnIos": true,
           "validation": {
             "requireServerValidation": true,
             "includeUploadDestinationFolder": true,
@@ -1843,7 +1844,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
         ```
 
         The continuous scanner opens its Firebase-hosted top-level page synchronously and requests camera access immediately. Apps Script prepares the expiring, field-scoped session in parallel; codes detected during preparation wait in a bounded queue, and the same camera stream stays active while the user scans multiple receipts. Each row shows the authoritative server result.
-        **Finish and add receipts** revalidates accepted files and appends them once through an idempotent Apps Script field commit. Android and desktop close the scanner after a confirmed commit. On iOS the scanner never calls `window.close()`; it confirms success and waits for the native browser X so the originating form remains mounted. **Cancel**, the iOS native X, or another close before Finish leaves the record unchanged.
+        **Finish and add receipts** revalidates accepted files and appends them once through an idempotent Apps Script field commit on Android and desktop. With `commitOnReturnOnIos`, iOS hides Finish: users scan multiple receipts and use the native browser X when done, then the foreground form commits the accepted batch. Returning with no accepted receipt cancels the empty session.
         This runtime uses Firebase Hosting and Apps Script only. For staging, deploy it with `npm run deploy:firebase-web-app` so the hosted scanner assets and Apps Script shell are updated together. Do not deploy or configure Cloud Run for the scanner; no billing-enabled Google Cloud project is required.
       - `discardChangesConfirm`: optional localized confirmation shown when the user closes the photo overlay with unsaved add/remove changes. Use simple wording for field-specific photo flows; when omitted, the UI falls back to `files.discardChangesConfirm`.
       - `ui.variant`: optional UI variant; set to `"progressive"` to show slots + checkmarks based on `minFiles`

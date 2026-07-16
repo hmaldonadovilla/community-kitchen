@@ -1606,6 +1606,11 @@ export interface FileUploadLinkCaptureConfig {
    */
   hideCloseOnIos?: boolean;
   /**
+   * On iOS, hide Finish and commit the accepted batch when the originating
+   * form becomes active again after the native scanner surface is closed.
+   */
+  commitOnReturnOnIos?: boolean;
+  /**
    * Optional server-side Drive metadata validation for captured links.
    * Use this when QR/manual links must belong to a customer Drive or folder.
    */

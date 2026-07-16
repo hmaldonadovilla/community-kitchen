@@ -1171,6 +1171,12 @@ components:
           description: |
             When true, hide only the scanner page's Close action on iOS and rely on the browser's native X control.
             Android and desktop keep the page-owned Close action. The native browser control cannot be hidden by the page.
+        commitOnReturnOnIos:
+          type: boolean
+          description: |
+            When true, iOS hides Finish and treats the native browser X return as completion of the current accepted batch.
+            The originating form commits after it returns to the foreground, preserving continuous multi-receipt scanning without a background-tab Finish message.
+            Android and desktop keep the explicit Finish action.
         validation:
           $ref: '#/components/schemas/FileUploadLinkCaptureValidationConfig'
           description: |

@@ -90,6 +90,7 @@ describe('staging integrity dialogs and list legend config', () => {
           },
           sessionTtlMinutes: 15,
           hideCloseOnIos: true,
+          commitOnReturnOnIos: true,
           validation: expect.objectContaining({
             requireServerValidation: true,
             includeUploadDestinationFolder: true,

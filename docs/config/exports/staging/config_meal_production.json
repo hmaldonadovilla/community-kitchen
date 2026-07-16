@@ -6857,6 +6857,7 @@
           },
           "sessionTtlMinutes": 15,
           "hideCloseOnIos": true,
+          "commitOnReturnOnIos": true,
           "validation": {
             "requireServerValidation": true,
             "includeUploadDestinationDrive": false,
@@ -10543,6 +10544,7 @@
             },
             "sessionTtlMinutes": 15,
             "hideCloseOnIos": true,
+            "commitOnReturnOnIos": true,
             "validation": {
               "requireServerValidation": true,
             "includeUploadDestinationDrive": false,

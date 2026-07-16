@@ -44,10 +44,11 @@ describe('external QR scanner launch', () => {
         requestId: 'scan-123',
         targetOrigin: 'https://script.googleusercontent.com',
         instruction: 'Point the camera at each ingredient receipt.',
-        hideCloseOnIos: false
+        hideCloseOnIos: false,
+        commitOnReturnOnIos: true
       })?.url
     ).toBe(
-      'https://community-kitchen-staging-assets.web.app/qr-scanner.html?requestId=scan-123&targetOrigin=https%3A%2F%2Fscript.googleusercontent.com&instruction=Point+the+camera+at+each+ingredient+receipt.&hideCloseOnIos=0'
+      'https://community-kitchen-staging-assets.web.app/qr-scanner.html?requestId=scan-123&targetOrigin=https%3A%2F%2Fscript.googleusercontent.com&instruction=Point+the+camera+at+each+ingredient+receipt.&hideCloseOnIos=0&commitOnReturnOnIos=1'
     );
   });
 });

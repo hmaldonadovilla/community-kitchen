@@ -23,7 +23,8 @@ import {
 type StatusTone = 'neutral' | 'success' | 'error';
 
 const params = new URLSearchParams(window.location.search);
-let openerWindow = window.opener;
+const originalOpenerWindow = window.opener;
+let authenticatedReplyPeer = originalOpenerWindow;
 const requestId = (params.get('requestId') || '').trim();
 const provisionalInstruction = (params.get('instruction') || '').trim().slice(0, 300);
 const targetOrigin = (() => {
@@ -63,6 +64,7 @@ let candidates: ScannerCandidateView[] = [];
 let maxFiles = 10;
 let existingCount = 0;
 let hideCloseOnIos = params.get('hideCloseOnIos') !== '0';
+let commitOnReturnOnIos = params.get('commitOnReturnOnIos') === '1';
 const recentFingerprints = new Map<string, number>();
 const scanFingerprints = new Map<string, string>();
 
@@ -99,25 +101,37 @@ const setStatus = (message: string, tone: StatusTone = 'neutral'): void => {
   statusNode.dataset.tone = tone;
 };
 
-const applyCloseVisibility = (): void => {
-  if (!cancelButton) return;
-  cancelButton.hidden = isIosLike && hideCloseOnIos;
+const usesNativeReturnCommit = (): boolean => isIosLike && commitOnReturnOnIos;
+
+const applyActionVisibility = (): void => {
+  if (cancelButton) cancelButton.hidden = isIosLike && hideCloseOnIos;
+  if (finishButton) finishButton.hidden = usesNativeReturnCommit();
 };
 
 const postToOpener = (message: unknown): boolean => {
-  if (!targetOrigin || !openerWindow) {
+  const peers = [originalOpenerWindow, authenticatedReplyPeer].filter(
+    (peer, index, all): peer is Window => Boolean(peer) && all.indexOf(peer) === index
+  );
+  if (!targetOrigin || peers.length === 0) {
     failScannerConnection('The form connection is unavailable. Return to the form and try again.');
     return false;
   }
-  try {
-    // WindowProxy.closed is advisory on mobile browser-owned tab surfaces. A
-    // strict-origin postMessage attempt is the reliable liveness check.
-    openerWindow.postMessage(message, targetOrigin);
-    return true;
-  } catch {
+  const posted = peers.reduce((delivered, peer) => {
+    try {
+      // The original opener is retained because WebKit may expose a parent
+      // WindowProxy as event.source. Fan out to an authenticated reply peer
+      // without replacing the route that successfully delivered READY/SCAN.
+      peer.postMessage(message, targetOrigin);
+      return true;
+    } catch {
+      return delivered;
+    }
+  }, false);
+  if (!posted) {
     failScannerConnection('The form connection is unavailable. Return to the form and try again.');
     return false;
   }
+  return true;
 };
 
 const candidateStatusLabel = (candidate: ScannerCandidateView): string => {
@@ -170,7 +184,12 @@ function renderCandidates(): void {
       counts.accepted === 0;
   }
   if (!connectionFailed && !finishRequested && !commitInFlight && availableSlots === 0 && counts.accepted > 0) {
-    setStatus('The maximum number of receipts is ready to add. Select Finish and add receipts.', 'success');
+    setStatus(
+      usesNativeReturnCommit()
+        ? 'The maximum number of receipts is ready. Use the browser X to add them.'
+        : 'The maximum number of receipts is ready to add. Select Finish and add receipts.',
+      'success'
+    );
   }
 }
 
@@ -334,7 +353,14 @@ const handleCandidate = (message: QrScannerCandidateMessage): void => {
   if (message.status === 'error' && fingerprint) recentFingerprints.delete(fingerprint);
   scanFingerprints.delete(message.scanId);
   const tone: StatusTone = message.status === 'accepted' ? 'success' : message.status === 'error' ? 'error' : 'neutral';
-  setStatus(message.message || candidates.find(candidate => candidate.scanId === message.scanId)?.message || 'Receipt checked.', tone);
+  const resultMessage =
+    message.message || candidates.find(candidate => candidate.scanId === message.scanId)?.message || 'Receipt checked.';
+  setStatus(
+    message.status === 'accepted' && usesNativeReturnCommit()
+      ? 'Receipt ready. Scan another receipt, or use the browser X when finished.'
+      : resultMessage,
+    tone
+  );
   renderCandidates();
 };
 
@@ -342,7 +368,7 @@ const handleOpenerMessage = (event: MessageEvent): void => {
   if (event.origin !== targetOrigin || !event.source) return;
   const message = parseQrScannerFromOpenerMessage(event.data, requestId);
   if (!message) return;
-  if (event.source !== openerWindow) openerWindow = event.source as Window;
+  authenticatedReplyPeer = event.source as Window;
 
   switch (message.type) {
     case QR_SCANNER_MESSAGE_TYPES.setup:
@@ -351,8 +377,9 @@ const handleOpenerMessage = (event: MessageEvent): void => {
       maxFiles = message.maxFiles && message.maxFiles > 0 ? message.maxFiles : maxFiles;
       existingCount = message.existingCount || 0;
       hideCloseOnIos = message.hideCloseOnIos !== false;
+      commitOnReturnOnIos = message.commitOnReturnOnIos === true;
       if (instructionNode && message.instruction) instructionNode.textContent = message.instruction;
-      applyCloseVisibility();
+      applyActionVisibility();
       if (cameraReady && !candidates.length) setStatus('Camera ready.');
       renderCandidates();
       break;
@@ -419,11 +446,7 @@ const postFinishRequest = (): void => {
     setStatus('Adding receipts is taking longer than expected. Use the browser X to return to the form and check the receipt list.');
     return;
   }
-  try {
-    openerWindow?.postMessage(buildQrScannerFinishMessage(requestId, commitRequestId), targetOrigin);
-  } catch {
-    // Retry the same idempotent request while the iOS browser surface settles.
-  }
+  postToOpener(buildQrScannerFinishMessage(requestId, commitRequestId));
   stopFinishRetry();
   finishRetryTimer = window.setTimeout(postFinishRequest, commitInFlight ? 1500 : FINISH_RETRY_INTERVAL_MS);
 };
@@ -453,12 +476,11 @@ cancelButton?.addEventListener('click', () => {
 
 window.addEventListener('message', handleOpenerMessage);
 window.addEventListener('pagehide', () => {
-  if (finishRequested && commitRequestId && !connectionFailed) {
-    try {
-      openerWindow?.postMessage(buildQrScannerFinishMessage(requestId, commitRequestId), targetOrigin);
-    } catch {
-      // The retained origin reconciles a commit that was already received.
-    }
+  if (usesNativeReturnCommit()) {
+    // The retained form owns the authoritative commit when iOS returns it to
+    // the foreground. Do not turn the native browser X into a cancellation.
+  } else if (finishRequested && commitRequestId && !connectionFailed) {
+    postToOpener(buildQrScannerFinishMessage(requestId, commitRequestId));
   } else {
     postClosed();
   }
@@ -470,7 +492,7 @@ window.addEventListener('pagehide', () => {
 if (instructionNode) {
   instructionNode.textContent = provisionalInstruction || 'Point the camera at each receipt QR code.';
 }
-applyCloseVisibility();
+applyActionVisibility();
 renderCandidates();
 
 if (!requestId || !targetOrigin) {

@@ -68,6 +68,7 @@ export interface QrScannerSetupMessage extends QrScannerMessageBase {
   maxFiles?: number;
   existingCount?: number;
   hideCloseOnIos?: boolean;
+  commitOnReturnOnIos?: boolean;
 }
 
 export interface QrScannerCandidateMessage extends QrScannerMessageBase {
@@ -281,11 +282,15 @@ export const parseQrScannerFromOpenerMessage = (
     const existingCount = optionalNonNegativeInteger(value.existingCount);
     if (instruction === null || maxFiles === null || existingCount === null) return null;
     if (value.hideCloseOnIos !== undefined && typeof value.hideCloseOnIos !== 'boolean') return null;
+    if (value.commitOnReturnOnIos !== undefined && typeof value.commitOnReturnOnIos !== 'boolean') return null;
     return buildQrScannerSetupMessage(base.requestId, {
       ...(instruction ? { instruction } : {}),
       ...(maxFiles !== undefined ? { maxFiles } : {}),
       ...(existingCount !== undefined ? { existingCount } : {}),
-      ...(typeof value.hideCloseOnIos === 'boolean' ? { hideCloseOnIos: value.hideCloseOnIos } : {})
+      ...(typeof value.hideCloseOnIos === 'boolean' ? { hideCloseOnIos: value.hideCloseOnIos } : {}),
+      ...(typeof value.commitOnReturnOnIos === 'boolean'
+        ? { commitOnReturnOnIos: value.commitOnReturnOnIos }
+        : {})
     });
   }
 

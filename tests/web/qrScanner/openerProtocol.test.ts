@@ -60,7 +60,8 @@ describe('QR scanner opener protocol', () => {
       instruction: 'Point the camera at each QR code on the ingredient receipts.',
       maxFiles: 10,
       existingCount: 2,
-      hideCloseOnIos: true
+      hideCloseOnIos: true,
+      commitOnReturnOnIos: true
     });
     expect(parseQrScannerFromOpenerMessage(setup, requestId)).toEqual(setup);
 

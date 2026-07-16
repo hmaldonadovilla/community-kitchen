@@ -10,6 +10,7 @@ export type UploadLinkCaptureConfig = {
   instruction?: unknown;
   sessionTtlMinutes?: number;
   hideCloseOnIos?: boolean;
+  commitOnReturnOnIos?: boolean;
   validation?: Record<string, unknown>;
   labels?: {
     scan?: unknown;

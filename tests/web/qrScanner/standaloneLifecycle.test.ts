@@ -41,7 +41,7 @@ class FakeElement {
   async play(): Promise<void> {}
 }
 
-const createHarness = () => {
+const createHarness = (options?: { ios?: boolean; commitOnReturnOnIos?: boolean }) => {
   const windowListeners = new Map<string, Listener>();
   const opener = { postMessage: jest.fn() };
   const status = new FakeElement();
@@ -68,7 +68,8 @@ const createHarness = () => {
   const fakeWindow = {
     location: {
       search:
-        '?requestId=request-1&targetOrigin=https%3A%2F%2Fform.example.test&hideCloseOnIos=1'
+        '?requestId=request-1&targetOrigin=https%3A%2F%2Fform.example.test&hideCloseOnIos=1' +
+        (options?.commitOnReturnOnIos ? '&commitOnReturnOnIos=1' : '')
     },
     opener,
     addEventListener: jest.fn((type: string, listener: Listener) => {
@@ -91,9 +92,11 @@ const createHarness = () => {
   Object.defineProperty(globalThis, 'navigator', {
     configurable: true,
     value: {
-      userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_4 like Mac OS X)',
-      platform: 'iPhone',
-      maxTouchPoints: 5
+      userAgent: options?.ios
+        ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_4 like Mac OS X)'
+        : 'Mozilla/5.0 (Linux; Android 15)',
+      platform: options?.ios ? 'iPhone' : 'Linux armv8l',
+      maxTouchPoints: options?.ios ? 5 : 1
     }
   });
   Object.defineProperty(globalThis, 'crypto', {
@@ -135,6 +138,8 @@ const createHarness = () => {
   };
 
   return {
+    opener,
+    status,
     finish,
     dispatchFromOpener,
     dispatchFromSource,
@@ -191,7 +196,7 @@ describe('standalone QR scanner Finish lifecycle', () => {
     expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.finish)).toHaveLength(2);
   });
 
-  test('sends Finish to a valid replacement opener peer', () => {
+  test('retains the original opener while also using an authenticated replacement source', () => {
     const harness = createHarness();
     const replacementOpener = { postMessage: jest.fn() };
     harness.dispatchFromSource(
@@ -208,6 +213,13 @@ describe('standalone QR scanner Finish lifecycle', () => {
     harness.finish.dispatch('click');
 
     expect(replacementOpener.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: QR_SCANNER_MESSAGE_TYPES.finish,
+        requestId: 'request-1'
+      }),
+      'https://form.example.test'
+    );
+    expect(harness.opener.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         type: QR_SCANNER_MESSAGE_TYPES.finish,
         requestId: 'request-1'
@@ -235,6 +247,41 @@ describe('standalone QR scanner Finish lifecycle', () => {
   test('reports a normal pagehide as closed when Finish was not requested', () => {
     const harness = createHarness();
 
+    harness.dispatchPageHide();
+
+    expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.finish)).toHaveLength(0);
+    expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.closed)).toHaveLength(1);
+  });
+
+  test('uses the native X as Done on configured iOS scanners', () => {
+    const harness = createHarness({ ios: true, commitOnReturnOnIos: true });
+    harness.acceptCandidate();
+
+    expect(harness.finish.hidden).toBe(true);
+    expect(harness.status.textContent).toContain('use the browser X when finished');
+
+    harness.dispatchPageHide();
+
+    expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.finish)).toHaveLength(0);
+    expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.closed)).toHaveLength(0);
+  });
+
+  test('keeps explicit Finish and page-close handling on Android when native return is configured', () => {
+    const harness = createHarness({ commitOnReturnOnIos: true });
+    harness.acceptCandidate();
+
+    expect(harness.finish.hidden).toBe(false);
+    harness.dispatchPageHide();
+
+    expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.finish)).toHaveLength(0);
+    expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.closed)).toHaveLength(1);
+  });
+
+  test('keeps explicit Finish on iOS when native return is not configured', () => {
+    const harness = createHarness({ ios: true });
+    harness.acceptCandidate();
+
+    expect(harness.finish.hidden).toBe(false);
     harness.dispatchPageHide();
 
     expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.finish)).toHaveLength(0);
