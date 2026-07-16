@@ -2,7 +2,7 @@
 
 ## Objective
 
-Provide a continuous QR scanner that opens the camera immediately on Android and iOS, keeps the originating file overlay alive, validates every scanned Drive file with authoritative Apps Script configuration, and commits accepted receipts once.
+Provide a continuous QR scanner that opens the camera immediately on Android and iOS, keeps the originating file overlay alive, validates every scanned Drive file with authoritative Apps Script configuration, and persists each accepted receipt independently.
 
 The implementation uses Firebase Hosting for the scanner page and Apps Script for all session, Drive, and record operations. It must not depend on Cloud Run.
 
@@ -10,67 +10,70 @@ The implementation uses Firebase Hosting for the scanner page and Apps Script fo
 
 1. The user opens the file overlay and selects **Scan QR**.
 2. The application opens the Firebase scanner synchronously so the browser does not block the new tab. The scanner requests camera permission immediately.
-3. The originating form prepares a saved record and an expiring, field-scoped Apps Script session in parallel.
-4. QR values detected before the session is ready are kept in a bounded local queue and shown as waiting for verification.
-5. The retained origin redeems the one-time launch token and submits queued and subsequent values to Apps Script. The scanner receives only bounded setup and result messages; it never receives Apps Script credentials.
-6. The scanner shows a configured instruction, the camera, and one row per scanned receipt with checking, accepted, duplicate, rejected, or retryable feedback.
-7. Android and desktop use **Finish and add receipts** to revalidate accepted files and perform one idempotent, field-scoped Apps Script append. **Cancel** writes nothing.
-8. The scanner notifies the retained origin tab. The origin updates its local record and file overlay from the committed session result without navigating or reloading the application.
-9. When `commitOnReturnOnIos` is enabled, iOS hides both page-owned completion actions. The user scans multiple receipts and uses the native browser X when done. Once the originating form is visible again, it reads the authoritative session and commits the accepted batch. Android and desktop keep explicit Finish and scripted close behavior.
+3. Opening the scanner creates no Apps Script session. The first detected QR starts lazy record preparation, session creation, and token redemption.
+4. Every unique detected value enters a bounded, serial queue. The originating file overlay is locked only while one or more scan transactions are queued or in flight.
+5. For each value, Apps Script validates the Drive file and, when authorised, appends its canonical link to the configured upload field in the same client-visible transaction.
+6. The origin applies the returned authoritative field value, links, and record version before reporting success to the scanner. **Accepted** therefore means **Added**, not “ready to add later.”
+7. The camera continues and the scanner lists added, duplicate, rejected, and retryable results for multiple receipts.
+8. On iOS the user returns with the native browser X. Android and desktop show one page-owned **Close** action. Neither action commits, cancels, reloads, or otherwise changes server data.
+9. If the user returns while a scan transaction is unresolved, the file overlay remains locked until the queued work settles, then displays the latest authoritative receipt list.
 
 ## Security and data integrity
 
-- The launch session is created from authoritative form configuration and a saved record version.
+- The launch session is created lazily from authoritative form configuration and a saved record version.
 - The retained origin redeems the one-time launch token and keeps the derived scoped access token in memory.
 - Apps Script calls remain in its own trusted iframe through `google.script.run` and an explicit RPC allowlist; the Firebase scanner cannot invoke them directly.
 - QR parsing accepts only explicit HTTPS Google Drive or Docs file URL shapes.
-- Apps Script checks access, trash state, configured file types, folder/shared-drive scope, duplicates, and maximum file count.
-- Finish revalidates every accepted file and appends only the target upload field under the shared document lock.
-- A stable commit request ID makes retries idempotent.
-- Origin messages require the configured Firebase origin and a matching cryptographically random request ID. A valid message may rebind the peer `WindowProxy` because iOS can present a different proxy object for the same browser-owned scanner surface after suspension.
+- Apps Script checks access, trash state, configured captured-link file types, folder/shared-drive scope, duplicates, and maximum file count.
+- An accepted scan first stores a compact pending intent, then appends only the target upload field under the shared document lock, and finally advances the session's expected record version.
+- The stable scanner `scanId` makes retries idempotent. A retry reconciles an already durable link by Drive file ID rather than appending it twice.
+- Origin messages require the configured Firebase origin and a matching cryptographically random request ID. A valid message may rebind the peer `WindowProxy` because mobile browsers can expose a different proxy for the same scanner surface.
 - Raw rejected QR payloads and Drive scope identifiers are not logged.
 
 ## Configuration
 
 The feature remains generic and is enabled per `FILE_UPLOAD` field through `uploadConfig.linkCapture`.
 
-The existing `linkCapture.validation` object remains the source for authoritative Drive scope rules. The following scanner settings are added to `linkCapture`:
+The existing `linkCapture.validation` object remains the source for authoritative Drive scope rules. Scanner settings include:
 
 - `instruction`: localized, field-specific sentence shown above the camera.
-- `sessionTtlMinutes`: bounded session lifetime.
-- `hideCloseOnIos`: hides only the scanner page's own Close control.
-- `commitOnReturnOnIos`: hides Finish on iOS and commits the accepted batch when the originating form returns to the foreground.
+- `sessionTtlMinutes`: bounded session lifetime, starting when the first QR is processed.
+- `hideCloseOnIos`: retained configuration for hiding the scanner page's Close control; the incremental UI always relies on the native iOS X.
 - `allowedMimeTypes`: optional captured-link MIME policy independent from uploads. An explicit list replaces upload MIME/extension restrictions for scanned Drive files; `*/*` permits any non-folder file that passes the Drive scope policy.
+- `commitOnReturnOnIos`: accepted only for backward-compatible configuration and cached scanner URLs. The incremental flow does not infer native return or perform a batch commit.
 
 Existing labels and validation messages continue to be configuration-driven. Meal Production supplies the receipt-specific instruction.
 
 ## Failure and recovery behavior
 
-- If session preparation fails, the scanner stops the camera and tells the user to return to the form and open a fresh session. No candidate can be committed from a partially prepared session.
-- If the opener is temporarily suspended, the scanner session and checked candidates remain in Apps Script. The origin reconciles on `message`, `focus`, and `pageshow`.
-- Android and desktop Finish uses one stable idempotency key and is retried until the form acknowledges that commit processing has started or completed.
-- Once Apps Script commits, the origin retains the terminal response briefly and resends it when the scanner repeats Finish or reconnects. The originating overlay is updated before the success response is sent.
-- If the opener was discarded, no unsafe client-side save is attempted. The committed field remains authoritative and the normal record reload shows it.
-- On configured iOS scanners, `pagehide` never sends Cancel or Closed. The foreground form waits for queued checks, reads the authoritative session, and commits it when at least one candidate is authorised. An empty session is cancelled.
-- Origin-side visibility, focus, and pageshow events may repeat, but one stable request ID and the existing commit guard ensure a single field mutation.
-- A lost commit response is reconciled with the same commit request ID.
+- Camera startup is independent from server preparation. Opening the scanner or waiting before the first scan consumes no session and starts no expiry clock.
+- A preparation or temporary validation failure affects only that scanned item. Retrying uses the same transaction semantics and the camera remains available.
+- Transport uncertainty is retried with the same `scanId`. If the record write succeeded but the response or final session update was lost, Apps Script returns the authoritative already-linked field without another append.
+- Permanent rejection, duplicate, out-of-scope, unsupported, and maximum-file results do not mutate the record.
+- Closing the scanner never calls `qrScanner.commit` or `qrScanner.cancel`. Focus, visibility, `window.closed`, heartbeat, and elapsed-time signals have no persistence meaning.
+- A close message stops accepting new scans but does not interrupt queued work. The origin releases the overlay lock and autosave hold only after relevant in-flight transactions settle.
+- If the scanner page or opener is discarded after a durable write, the record remains authoritative and a normal record reload shows the linked receipt.
+- Expired credentials are discarded; a later scan can lazily create a fresh session from the origin's latest record version.
 
 ## Implementation slices
 
-1. Port the Apps Script session, validation, whitelisted origin-side RPC dispatcher, and field-scoped commit modules while retaining the existing `linkCapture` configuration model.
-2. Replace the static scanner page with the continuous result-list UI and a waiting-for-launch bootstrap state.
-3. Open the scanner immediately from the file overlay, prepare the session asynchronously, and add strict two-way window messaging.
-4. Reconcile a successful field commit into the retained form state without a top-level navigation.
-5. Remove the legacy embedded camera/photo/paste fallbacks for this configured flow and hide the page Close control on iOS.
-6. Add domain, service, message-contract, UI-state, configuration, and build tests; then run changed-line lint, focused tests, the full build, and physical-device staging validation.
+1. Keep the Apps Script session, validation, and whitelisted origin-side RPC dispatcher, but make `qrScanner.addCandidate` validate and append one authorised link.
+2. Store a pending append marker and reconcile same-`scanId` retries by Drive file ID.
+3. Return the complete authoritative upload-field state and data version after every accepted scan while keeping the session active.
+4. Open the scanner immediately, start session preparation only on the first scan, and serialize the bounded scan queue.
+5. Apply each authoritative update before reporting **Added**, and scope the file-overlay lock/autosave hold to queued work only.
+6. Remove native-return inference, heartbeat, timeout cancellation, and generated Finish/Cancel actions while retaining legacy message parsing during rollout.
+7. Cover server idempotency, multi-scan ordering, overlay blocking, platform close behavior, configuration, and generated scanner assets.
 
 ## Acceptance criteria
 
 - The Scan QR action is enabled immediately when the file overlay opens.
 - Camera permission is requested immediately after the scanner tab opens.
+- Opening and closing without a scan performs no session, commit, or cancel RPC.
 - Ten distinct receipts can be scanned without restarting the camera.
-- Every receipt receives an authoritative user-facing result.
-- Finish appends accepted receipts once on Android and desktop. On configured iOS scanners, returning with the native X appends the accepted batch once.
-- Returning to a retained origin tab does not reload the application.
+- Every receipt receives an authoritative user-facing result; **Added** means its link is already durable.
+- Two valid scans produce two ordered `addCandidate` transactions and no batch commit/cancel transaction.
+- Returning while a transaction is in flight locks only the relevant file overlay until it settles.
+- iOS native X and Android/desktop Close do not reload or mutate the originating application.
 - Android Chrome/Samsung Internet, iPhone browser surface, desktop Chromium, and desktop Firefox pass the lifecycle checks.
 - Runtime traffic is limited to Firebase Hosting and Apps Script.

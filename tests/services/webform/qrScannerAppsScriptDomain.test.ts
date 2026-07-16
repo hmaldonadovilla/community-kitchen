@@ -1,6 +1,7 @@
 import {
   buildScannerLaunchUrl,
   buildScannerReturnUrl,
+  candidateCounts,
   canonicalizeQrScannerCommitLinks,
   dedupeUploadLinksByFileId,
   fileTypeMatches,
@@ -90,6 +91,33 @@ describe('Apps Script QR scanner domain', () => {
     expect(dedupeUploadLinksByFileId([openVariant, canonical, second])).toEqual([openVariant, second]);
     expect(canonicalizeQrScannerCommitLinks([openVariant, canonical, second])).toEqual([canonical, second]);
     expect(canonicalizeQrScannerCommitLinks([canonical, 'https://example.test/not-drive'])).toBeNull();
+  });
+
+  test('projects an in-flight incremental append as pending rather than rejected', () => {
+    const counts = candidateCounts({
+      maxFiles: 10,
+      existingCount: 1,
+      candidates: [
+        {
+          status: 'RETRYABLE_ERROR',
+          incremental: { state: 'PENDING' }
+        },
+        {
+          status: 'RETRYABLE_ERROR',
+          incremental: { state: 'RETRYABLE' }
+        },
+        { status: 'AUTHORISED' }
+      ]
+    } as any);
+
+    expect(counts).toMatchObject({
+      authorised: 1,
+      pending: 1,
+      retryable: 1,
+      rejected: 1,
+      total: 3,
+      remaining: 8
+    });
   });
 
   test('keeps credentials in the launch fragment and constructs navigation-only return state', () => {

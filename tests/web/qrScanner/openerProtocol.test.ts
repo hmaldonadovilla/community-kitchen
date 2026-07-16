@@ -1,5 +1,7 @@
 import {
+  buildQrScannerCancelMessage,
   buildQrScannerCandidateMessage,
+  buildQrScannerClosedMessage,
   buildQrScannerCommitMessage,
   buildQrScannerFinishMessage,
   buildQrScannerScanMessage,
@@ -13,7 +15,7 @@ import {
 describe('QR scanner opener protocol', () => {
   const requestId = 'request-123';
 
-  it('builds and validates scan and finish messages sent to the exact opener request', () => {
+  it('builds and validates incremental and legacy messages sent to the exact opener request', () => {
     const scan = buildQrScannerScanMessage(
       requestId,
       'scan-123',
@@ -23,7 +25,21 @@ describe('QR scanner opener protocol', () => {
 
     const finish = buildQrScannerFinishMessage(requestId, 'commit-123');
     expect(parseQrScannerToOpenerMessage(finish, requestId)).toEqual(finish);
+    const cancel = buildQrScannerCancelMessage(requestId);
+    expect(parseQrScannerToOpenerMessage(cancel, requestId)).toEqual(cancel);
+    const closed = buildQrScannerClosedMessage(requestId);
+    expect(parseQrScannerToOpenerMessage(closed, requestId)).toEqual(closed);
     expect(parseQrScannerToOpenerMessage(scan, 'different-request')).toBeNull();
+  });
+
+  it('does not add a scanner liveness message to the protocol', () => {
+    expect(
+      parseQrScannerToOpenerMessage({
+        version: QR_SCANNER_PROTOCOL_VERSION,
+        type: 'CK_QR_SCANNER_HEARTBEAT',
+        requestId
+      })
+    ).toBeNull();
   });
 
   it('rejects unknown versions, unbounded QR values, and malformed ids', () => {

@@ -285,7 +285,7 @@ describe('billing-free Apps Script QR scanner service', () => {
     expect(sessions.get(sessionId)?.status).toBe('EXPIRED');
   });
 
-  test('checks multiple candidates, deduplicates and commits only the target field idempotently', () => {
+  test('checks and incrementally attaches multiple candidates while leaving the session active', () => {
     const { append, drive, properties, record, service } = makeHarness();
     const credentials = launchAndRedeem(service);
     const auth = { sessionId: credentials.sessionId, accessToken: credentials.accessToken };
@@ -295,45 +295,97 @@ describe('billing-free Apps Script QR scanner service', () => {
       status: 'REJECTED',
       code: 'INVALID_PAYLOAD'
     });
-    expect(service.addCandidate({ ...auth, scanId: 'scan-1', rawValue: LINK_1 }).candidate).toMatchObject({
+    const first = service.addCandidate({ ...auth, scanId: 'scan-1', rawValue: LINK_1 });
+    expect(first.candidate).toMatchObject({
       status: 'AUTHORISED',
       code: 'ACCEPTED',
       displayName: 'Receipt one.jpg'
     });
+    expect(first.committed).toMatchObject({
+      linkedCount: 1,
+      recordId: 'REC-1',
+      dataVersion: 8,
+      fieldValue: LINK_1,
+      links: [LINK_1],
+      summaryCode: 'COMMITTED',
+      idempotent: false
+    });
+    expect(first.session.status).toBe('ACTIVE');
     expect(service.addCandidate({ ...auth, scanId: 'scan-1-repeat', rawValue: LINK_1 }).candidate).toMatchObject({
       status: 'DUPLICATE',
-      code: 'DUPLICATE_SESSION'
+      code: 'ALREADY_LINKED'
     });
-    expect(service.addCandidate({ ...auth, scanId: 'scan-2', rawValue: LINK_2 }).candidate.code).toBe('ACCEPTED');
-
-    const committed = service.commit({ ...auth, requestId: 'stable-request' });
-    expect(committed.result).toMatchObject({
-      linkedCount: 2,
-      skippedCount: 0,
+    const second = service.addCandidate({ ...auth, scanId: 'scan-2', rawValue: LINK_2 });
+    expect(second.candidate.code).toBe('ACCEPTED');
+    expect(second.committed).toMatchObject({
+      linkedCount: 1,
       summaryCode: 'COMMITTED',
-      dataVersion: 8,
+      dataVersion: 9,
       fieldValue: `${LINK_1}, ${LINK_2}`,
       links: [LINK_1, LINK_2]
     });
     expect(record.values.RECEIPTS).toBe(`${LINK_1}, ${LINK_2}`);
     expect(record.values.OTHER_FIELD).toBe('preserve me');
     expect(record.OTHER_FIELD).toBe('preserve me');
-    expect(append).toHaveBeenCalledTimes(1);
-    expect(append).toHaveBeenCalledWith({
+    expect(record.dataVersion).toBe(9);
+    expect(service.getSession(auth).session.status).toBe('ACTIVE');
+    expect(append).toHaveBeenCalledTimes(2);
+    expect(append).toHaveBeenNthCalledWith(1, {
       formKey: 'Config: Receipts',
       recordId: 'REC-1',
       fieldId: 'RECEIPTS',
-      links: [LINK_1, LINK_2],
+      links: [LINK_1],
       expectedDataVersion: 7
     });
-    expect(service.commit({ ...auth, requestId: 'stable-request' }).result).toEqual(committed.result);
-    expect(append).toHaveBeenCalledTimes(1);
-    expect((drive.fetchMetadata as jest.Mock).mock.calls.filter(call => call[0] === FILE_1)).toHaveLength(2);
+    expect(append).toHaveBeenNthCalledWith(2, {
+      formKey: 'Config: Receipts',
+      recordId: 'REC-1',
+      fieldId: 'RECEIPTS',
+      links: [LINK_2],
+      expectedDataVersion: 8
+    });
+    expect((drive.fetchMetadata as jest.Mock).mock.calls.filter(call => call[0] === FILE_1)).toHaveLength(1);
 
     const persisted = JSON.stringify(properties);
     expect(persisted).not.toContain(invalidRaw);
-    expect(persisted).toContain(LINK_1);
+    expect(persisted).toContain(FILE_1);
     expect(persisted).not.toContain(credentials.accessToken);
+  });
+
+  test('compacts acknowledged candidates while preserving counts for larger scanner limits', () => {
+    const drive: QrScannerDriveRepository = {
+      fetchMetadata: jest.fn(fileId => ({
+        id: fileId,
+        name: `${fileId}.pdf`,
+        mimeType: 'application/pdf',
+        trashed: false,
+        parentIds: [FOLDER],
+        shortcut: false
+      }))
+    };
+    const { record, service, sessions } = makeHarness(drive, ['*/*']);
+    const credentials = launchAndRedeem(service);
+    const auth = { sessionId: credentials.sessionId, accessToken: credentials.accessToken };
+    sessions.mutate(credentials.sessionId, current => ({
+      ...current,
+      maxFiles: 20,
+      maxAttempts: 40
+    }));
+
+    let latest: ReturnType<typeof service.addCandidate> | null = null;
+    for (let index = 0; index < 15; index += 1) {
+      const fileId = `1ReceiptFile${index.toString().padStart(2, '0')}AbCdEfGhIjKlMn`;
+      latest = service.addCandidate({
+        ...auth,
+        scanId: `scan-${index}`,
+        rawValue: `https://drive.google.com/file/d/${fileId}/view`
+      });
+    }
+
+    expect(latest?.counts).toMatchObject({ accepted: 15, authorised: 15, remaining: 5 });
+    expect(latest?.session.candidates).toHaveLength(12);
+    expect((record.values.RECEIPTS || '').split(', ')).toHaveLength(15);
+    expect(record.dataVersion).toBe(22);
   });
 
   test('reconciles a lost commit response by Drive file ID and returns authoritative field state', () => {
@@ -341,6 +393,7 @@ describe('billing-free Apps Script QR scanner service', () => {
     const credentials = launchAndRedeem(service);
     const auth = { sessionId: credentials.sessionId, accessToken: credentials.accessToken };
     service.addCandidate({ ...auth, scanId: 'scan-1', rawValue: LINK_1 });
+    append.mockClear();
 
     const requestId = 'stable-request';
     sessions.mutate(credentials.sessionId, current => ({
@@ -374,6 +427,7 @@ describe('billing-free Apps Script QR scanner service', () => {
     service.addCandidate({ ...auth, scanId: 'scan-1', rawValue: LINK_1 });
     const durableAppend = append.getMockImplementation();
     if (!durableAppend) throw new Error('append implementation missing');
+    append.mockClear();
     (append as jest.Mock<any, [any]>).mockImplementationOnce((request: any) => {
       durableAppend(request);
       return {
@@ -404,6 +458,7 @@ describe('billing-free Apps Script QR scanner service', () => {
     const credentials = launchAndRedeem(service);
     const auth = { sessionId: credentials.sessionId, accessToken: credentials.accessToken };
     service.addCandidate({ ...auth, scanId: 'scan-1', rawValue: LINK_1 });
+    append.mockClear();
     const mutate = sessions.mutate.bind(sessions);
     let completionFailuresRemaining = 2;
     jest.spyOn(sessions, 'mutate').mockImplementation((sessionId, update) =>
@@ -443,12 +498,300 @@ describe('billing-free Apps Script QR scanner service', () => {
     const credentials = launchAndRedeem(service);
     const auth = { sessionId: credentials.sessionId, accessToken: credentials.accessToken };
     service.addCandidate({ ...auth, scanId: 'scan-1', rawValue: LINK_1 });
-    record.dataVersion = 8;
+    record.dataVersion = 9;
 
     expect(() => service.commit({ ...auth, requestId: 'stable-request' })).toThrow(
       expect.objectContaining({ code: 'RECORD_CHANGED' })
     );
     expect(service.getSession(auth).session.status).toBe('ACTIVE');
+  });
+
+  test('replays one scan idempotently without appending or advancing the record twice', () => {
+    const { append, record, service } = makeHarness();
+    const credentials = launchAndRedeem(service);
+    const auth = { sessionId: credentials.sessionId, accessToken: credentials.accessToken };
+
+    const first = service.addCandidate({ ...auth, scanId: 'stable-scan', rawValue: LINK_1 });
+    const repeated = service.addCandidate({ ...auth, scanId: 'stable-scan', rawValue: LINK_1 });
+
+    expect(first.committed).toMatchObject({ dataVersion: 8, idempotent: false });
+    expect(repeated.candidate).toEqual(first.candidate);
+    expect(repeated.committed).toMatchObject({
+      linkedCount: 1,
+      dataVersion: 8,
+      fieldValue: LINK_1,
+      links: [LINK_1],
+      idempotent: true
+    });
+    expect(repeated.session.status).toBe('ACTIVE');
+    expect(record.dataVersion).toBe(8);
+    expect(append).toHaveBeenCalledTimes(1);
+  });
+
+  test('recovers a durable incremental append when final session persistence fails', () => {
+    const { append, record, service, sessions } = makeHarness();
+    const credentials = launchAndRedeem(service);
+    const auth = { sessionId: credentials.sessionId, accessToken: credentials.accessToken };
+    const mutate = sessions.mutate.bind(sessions);
+    let failCompletion = true;
+    jest.spyOn(sessions, 'mutate').mockImplementation((sessionId, update) =>
+      mutate(sessionId, current => {
+        const next = update(current);
+        if (
+          failCompletion &&
+          next?.candidates.some(candidate => candidate.incremental?.state === 'COMPLETED')
+        ) {
+          failCompletion = false;
+          throw new Error('incremental completion unavailable');
+        }
+        return next;
+      })
+    );
+
+    expect(() => service.addCandidate({ ...auth, scanId: 'stable-scan', rawValue: LINK_1 })).toThrow(
+      'incremental completion unavailable'
+    );
+    expect(record.values.RECEIPTS).toBe(LINK_1);
+    expect(record.dataVersion).toBe(8);
+    expect(service.getSession(auth).session.status).toBe('ACTIVE');
+
+    const recovered = service.addCandidate({ ...auth, scanId: 'stable-scan', rawValue: LINK_1 });
+    expect(recovered.candidate).toMatchObject({ status: 'AUTHORISED', code: 'ACCEPTED', fileId: FILE_1 });
+    expect(recovered.committed).toMatchObject({ dataVersion: 8, idempotent: true, links: [LINK_1] });
+    expect(recovered.session.status).toBe('ACTIVE');
+    expect(record.dataVersion).toBe(8);
+    expect(append).toHaveBeenCalledTimes(2);
+  });
+
+  test('does not let legacy commit or cancel overtake an incremental append', () => {
+    const { append, service } = makeHarness();
+    const credentials = launchAndRedeem(service);
+    const auth = { sessionId: credentials.sessionId, accessToken: credentials.accessToken };
+    const appendImplementation = append.getMockImplementation()!;
+
+    append.mockImplementationOnce(request => {
+      expect(() => service.commit({ ...auth, requestId: 'legacy-finish' })).toThrow(
+        expect.objectContaining({ code: 'TEMPORARY_ERROR', retryable: true })
+      );
+      expect(() => service.cancel(auth)).toThrow(
+        expect.objectContaining({ code: 'TEMPORARY_ERROR', retryable: true })
+      );
+      return appendImplementation(request);
+    });
+
+    const result = service.addCandidate({ ...auth, scanId: 'scan-1', rawValue: LINK_1 });
+    expect(result.candidate).toMatchObject({ status: 'AUTHORISED', code: 'ACCEPTED' });
+    expect(result.session.status).toBe('ACTIVE');
+  });
+
+  test('serializes different scan IDs at the server boundary', () => {
+    const { append, record, service } = makeHarness();
+    const credentials = launchAndRedeem(service);
+    const auth = { sessionId: credentials.sessionId, accessToken: credentials.accessToken };
+    const appendImplementation = append.getMockImplementation()!;
+    let concurrentFailure: any;
+
+    append.mockImplementationOnce(request => {
+      try {
+        service.addCandidate({ ...auth, scanId: 'scan-2', rawValue: LINK_2 });
+      } catch (error) {
+        concurrentFailure = error;
+      }
+      return appendImplementation(request);
+    });
+
+    const first = service.addCandidate({ ...auth, scanId: 'scan-1', rawValue: LINK_1 });
+    expect(concurrentFailure).toMatchObject({ code: 'TEMPORARY_ERROR', retryable: true });
+    expect(first.committed).toMatchObject({ dataVersion: 8, links: [LINK_1] });
+
+    const second = service.addCandidate({ ...auth, scanId: 'scan-2', rawValue: LINK_2 });
+    expect(second.committed).toMatchObject({ dataVersion: 9, links: [LINK_1, LINK_2] });
+    expect(record.dataVersion).toBe(9);
+  });
+
+  test('returns the same durable result to concurrent requests with one scan ID', () => {
+    const { append, record, service } = makeHarness();
+    const credentials = launchAndRedeem(service);
+    const auth = { sessionId: credentials.sessionId, accessToken: credentials.accessToken };
+    const appendImplementation = append.getMockImplementation()!;
+    let concurrentCommitted: any = null;
+
+    append.mockImplementationOnce(request => {
+      concurrentCommitted = service.addCandidate({ ...auth, scanId: 'same-scan', rawValue: LINK_1 }).committed;
+      return appendImplementation(request);
+    });
+
+    const firstResult = service.addCandidate({ ...auth, scanId: 'same-scan', rawValue: LINK_1 });
+    expect(concurrentCommitted).toMatchObject({ dataVersion: 8, links: [LINK_1] });
+    expect(firstResult.committed).toMatchObject({ dataVersion: 8, links: [LINK_1], idempotent: true });
+    expect(record.dataVersion).toBe(8);
+    expect(append).toHaveBeenCalledTimes(2);
+  });
+
+  test('allows same-scan recovery after the global attempt limit is reached', () => {
+    const { record, service, sessions } = makeHarness();
+    const credentials = launchAndRedeem(service);
+    const auth = { sessionId: credentials.sessionId, accessToken: credentials.accessToken };
+    const mutate = sessions.mutate.bind(sessions);
+    let failCompletion = true;
+    jest.spyOn(sessions, 'mutate').mockImplementation((sessionId, update) =>
+      mutate(sessionId, current => {
+        const next = update(current);
+        if (failCompletion && next?.candidates.some(candidate => candidate.incremental?.state === 'COMPLETED')) {
+          failCompletion = false;
+          throw new Error('incremental completion unavailable');
+        }
+        return next;
+      })
+    );
+
+    expect(() => service.addCandidate({ ...auth, scanId: 'stable-scan', rawValue: LINK_1 })).toThrow(
+      'incremental completion unavailable'
+    );
+    sessions.mutate(credentials.sessionId, current => ({ ...current, attempts: current.maxAttempts }));
+
+    const recovered = service.addCandidate({ ...auth, scanId: 'stable-scan', rawValue: LINK_1 });
+    expect(recovered.committed).toMatchObject({ dataVersion: 8, idempotent: true, links: [LINK_1] });
+    expect(record.dataVersion).toBe(8);
+  });
+
+  test('allows a fresh scan ID to supersede a retryable append for the same file', () => {
+    const { append, record, service } = makeHarness();
+    const credentials = launchAndRedeem(service);
+    const auth = { sessionId: credentials.sessionId, accessToken: credentials.accessToken };
+    append.mockReturnValueOnce({
+      success: false,
+      code: 'TEMPORARY_ERROR',
+      message: 'temporary failure'
+    } as any);
+
+    const failed = service.addCandidate({ ...auth, scanId: 'scan-failed', rawValue: LINK_1 });
+    expect(failed.candidate).toMatchObject({ status: 'RETRYABLE_ERROR', code: 'TEMPORARY_ERROR' });
+
+    const rescanned = service.addCandidate({ ...auth, scanId: 'scan-rescanned', rawValue: LINK_1 });
+    expect(rescanned.candidate).toMatchObject({ status: 'AUTHORISED', code: 'ACCEPTED' });
+    expect(rescanned.committed).toMatchObject({ dataVersion: 8, links: [LINK_1] });
+    expect(record.values.RECEIPTS).toBe(LINK_1);
+  });
+
+  test('does not adopt an unrelated record version during incremental recovery', () => {
+    const { record, service, sessions } = makeHarness();
+    const credentials = launchAndRedeem(service);
+    const auth = { sessionId: credentials.sessionId, accessToken: credentials.accessToken };
+    const mutate = sessions.mutate.bind(sessions);
+    let failCompletion = true;
+    jest.spyOn(sessions, 'mutate').mockImplementation((sessionId, update) =>
+      mutate(sessionId, current => {
+        const next = update(current);
+        if (failCompletion && next?.candidates.some(candidate => candidate.incremental?.state === 'COMPLETED')) {
+          failCompletion = false;
+          throw new Error('incremental completion unavailable');
+        }
+        return next;
+      })
+    );
+
+    expect(() => service.addCandidate({ ...auth, scanId: 'stable-scan', rawValue: LINK_1 })).toThrow(
+      'incremental completion unavailable'
+    );
+    record.OTHER_FIELD = 'changed elsewhere';
+    record.values.OTHER_FIELD = 'changed elsewhere';
+    record.dataVersion = 9;
+
+    expect(() => service.addCandidate({ ...auth, scanId: 'stable-scan', rawValue: LINK_1 })).toThrow(
+      expect.objectContaining({ code: 'RECORD_CHANGED' })
+    );
+  });
+
+  test('does not replay a completed scan across a later unrelated record version', () => {
+    const { record, service } = makeHarness();
+    const credentials = launchAndRedeem(service);
+    const auth = { sessionId: credentials.sessionId, accessToken: credentials.accessToken };
+    service.addCandidate({ ...auth, scanId: 'stable-scan', rawValue: LINK_1 });
+    record.OTHER_FIELD = 'changed elsewhere';
+    record.values.OTHER_FIELD = 'changed elsewhere';
+    record.dataVersion = 9;
+
+    expect(() => service.addCandidate({ ...auth, scanId: 'stable-scan', rawValue: LINK_1 })).toThrow(
+      expect.objectContaining({ code: 'RECORD_CHANGED' })
+    );
+  });
+
+  test('rejects reuse of one scan ID with a different payload', () => {
+    const { service } = makeHarness();
+    const credentials = launchAndRedeem(service);
+    const auth = { sessionId: credentials.sessionId, accessToken: credentials.accessToken };
+    service.addCandidate({ ...auth, scanId: 'stable-scan', rawValue: LINK_1 });
+
+    expect(() => service.addCandidate({ ...auth, scanId: 'stable-scan', rawValue: LINK_2 })).toThrow(
+      expect.objectContaining({ code: 'INVALID_REQUEST' })
+    );
+  });
+
+  test('does not mutate the record when the incremental append is rejected', () => {
+    const { append, record, service } = makeHarness();
+    const credentials = launchAndRedeem(service);
+    const auth = { sessionId: credentials.sessionId, accessToken: credentials.accessToken };
+    (append as jest.Mock).mockReturnValueOnce({
+      success: false,
+      code: 'LIMIT_REACHED',
+      message: 'The field is full.'
+    });
+
+    const result = service.addCandidate({ ...auth, scanId: 'scan-full', rawValue: LINK_1 });
+
+    expect(result.candidate).toMatchObject({ status: 'REJECTED', code: 'LIMIT_REACHED' });
+    expect(result.committed).toBeUndefined();
+    expect(result.session.status).toBe('ACTIVE');
+    expect(record.values.RECEIPTS).toBe('');
+    expect(record.dataVersion).toBe(7);
+    expect(append).toHaveBeenCalledTimes(1);
+  });
+
+  test('clears PENDING when a successful append reports a conflicting version', () => {
+    const { append, record, service, sessions } = makeHarness();
+    const credentials = launchAndRedeem(service);
+    const auth = { sessionId: credentials.sessionId, accessToken: credentials.accessToken };
+    append.mockImplementationOnce(() => {
+      record.values.RECEIPTS = LINK_1;
+      record.RECEIPTS = LINK_1;
+      record.dataVersion = 9;
+      return {
+        success: true,
+        message: 'saved with a conflicting version',
+        appendedCount: 1,
+        dataVersion: 9,
+        fieldValue: LINK_1,
+        links: [LINK_1],
+        idempotent: false
+      };
+    });
+
+    const result = service.addCandidate({ ...auth, scanId: 'scan-conflict', rawValue: LINK_1 });
+    expect(result.candidate).toMatchObject({ status: 'REJECTED', code: 'RECORD_CHANGED' });
+    expect(result.committed).toBeUndefined();
+    expect(sessions.get(credentials.sessionId)?.candidates[0]?.incremental).toBeUndefined();
+    expect(service.cancel(auth).status).toBe('CANCELLED');
+  });
+
+  test('makes malformed successful append metadata retryable without stranding PENDING', () => {
+    const { append, service, sessions } = makeHarness();
+    const credentials = launchAndRedeem(service);
+    const auth = { sessionId: credentials.sessionId, accessToken: credentials.accessToken };
+    append.mockReturnValueOnce({
+      success: true,
+      message: 'response metadata unavailable',
+      appendedCount: 1,
+      fieldValue: LINK_1,
+      links: [LINK_1],
+      idempotent: false
+    } as any);
+
+    const result = service.addCandidate({ ...auth, scanId: 'scan-malformed', rawValue: LINK_1 });
+    expect(result.candidate).toMatchObject({ status: 'RETRYABLE_ERROR', code: 'TEMPORARY_ERROR' });
+    expect(result.committed).toBeUndefined();
+    expect(sessions.get(credentials.sessionId)?.candidates[0]?.incremental?.state).toBe('RETRYABLE');
+    expect(service.cancel(auth).status).toBe('CANCELLED');
   });
 
   test.each([
@@ -457,7 +800,7 @@ describe('billing-free Apps Script QR scanner service', () => {
     [{ parentIds: ['8AbCdEfGhIjKlMnOpQrStUvWxYz'] }, 'NOT_AUTHORISED_OR_UNAVAILABLE'],
     [{ shortcut: true }, 'NOT_AUTHORISED_OR_UNAVAILABLE']
   ])('returns a typed permanent rejection without exposing Drive errors', (metadataOverride, code) => {
-    const { service } = makeHarness(makeDrive({ [FILE_1]: metadataOverride }));
+    const { append, record, service } = makeHarness(makeDrive({ [FILE_1]: metadataOverride }));
     const credentials = launchAndRedeem(service);
     const result = service.addCandidate({
       sessionId: credentials.sessionId,
@@ -466,6 +809,9 @@ describe('billing-free Apps Script QR scanner service', () => {
       rawValue: LINK_1
     });
     expect(result.candidate).toMatchObject({ status: 'REJECTED', code });
+    expect(result.committed).toBeUndefined();
+    expect(append).not.toHaveBeenCalled();
+    expect(record.values.RECEIPTS).toBe('');
   });
 
   test('accepts any non-folder MIME type when link capture has an explicit wildcard policy', () => {

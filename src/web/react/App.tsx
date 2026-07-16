@@ -2708,6 +2708,8 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         draftSaveInFlight: draftSaveRequestInFlightRef.current,
         submissionInFlight: Boolean(submissionRequestPromiseRef.current) || submittingRef.current,
         uploadInFlight: uploadQueueRef.current.size > 0,
+        qrScannerInFlight:
+          autoSaveHoldRef.current.hold && autoSaveHoldRef.current.reason === 'qrScannerSession',
         recordSyncInFlight: Boolean(recordSyncPromiseRef.current) || Boolean(recordLoadingIdRef.current),
         utilisationSyncInFlight: Boolean(utilisationSyncPromiseRef.current),
         guidedStepLiveSyncInFlight: Boolean(guidedStepImmediateSyncPromiseRef.current),
@@ -6032,6 +6034,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         pending,
         view: viewRef.current,
         currentRecordId: getCurrentOpenRecordId(),
+        currentDataVersion: getCurrentKnownClientDataVersion(),
         recordLoading: Boolean(recordLoadingIdRef.current),
         submitting: submittingRef.current,
         recordSyncInFlight: Boolean(recordSyncPromiseRef.current),
@@ -6058,13 +6061,21 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
       });
       return true;
     },
-    [getCurrentOpenRecordId, getRecordFreshnessSyncBlockers, logEvent]
+    [getCurrentKnownClientDataVersion, getCurrentOpenRecordId, getRecordFreshnessSyncBlockers, logEvent]
   );
   resumeDeferredRecordFreshnessSyncRef.current = resumeDeferredRecordFreshnessSyncIfUnblocked;
 
   useEffect(() => {
     resumeDeferredRecordFreshnessSyncIfUnblocked('reactivity');
-  }, [draftSave.phase, recordLoadingId, resumeDeferredRecordFreshnessSyncIfUnblocked, submitting, view]);
+  }, [
+    autoSaveHold.hold,
+    autoSaveHold.reason,
+    draftSave.phase,
+    recordLoadingId,
+    resumeDeferredRecordFreshnessSyncIfUnblocked,
+    submitting,
+    view
+  ]);
 
   const loadOptionsForField = useCallback(
     (field: any, groupId?: string) => {

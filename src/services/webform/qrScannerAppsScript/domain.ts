@@ -324,10 +324,18 @@ export const projectCandidate = (candidate: StoredQrScannerCandidate): QrScanner
 
 export const candidateCounts = (session: StoredQrScannerSession): QrScannerSessionProjection['counts'] => {
   const candidates = session.candidates || [];
-  const authorised = candidates.filter(candidate => candidate.status === 'AUTHORISED').length;
+  const retainedAuthorised = candidates.filter(candidate => candidate.status === 'AUTHORISED').length;
+  const trackedAuthorised = Number(session.incrementalAcceptedCount);
+  const authorised = Math.max(
+    retainedAuthorised,
+    Number.isSafeInteger(trackedAuthorised) && trackedAuthorised >= 0 ? trackedAuthorised : 0
+  );
   const duplicate = candidates.filter(candidate => candidate.status === 'DUPLICATE').length;
   const permanentRejected = candidates.filter(candidate => candidate.status === 'REJECTED').length;
-  const retryable = candidates.filter(candidate => candidate.status === 'RETRYABLE_ERROR').length;
+  const pending = candidates.filter(candidate => candidate.incremental?.state === 'PENDING').length;
+  const retryable = candidates.filter(
+    candidate => candidate.status === 'RETRYABLE_ERROR' && candidate.incremental?.state !== 'PENDING'
+  ).length;
   return {
     accepted: authorised,
     authorised,
@@ -335,7 +343,7 @@ export const candidateCounts = (session: StoredQrScannerSession): QrScannerSessi
     rejected: duplicate + permanentRejected + retryable,
     permanentRejected,
     retryable,
-    pending: 0,
+    pending,
     total: candidates.length,
     remaining: Math.max(0, session.maxFiles - session.existingCount - authorised)
   };

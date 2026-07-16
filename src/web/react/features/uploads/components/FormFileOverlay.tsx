@@ -32,6 +32,7 @@ import type {
   BeginQrScannerInteraction,
   EndQrScannerInteraction,
   PrepareQrScannerLaunch,
+  QrScannerCandidateOutcome,
   QrScannerCommittedUpdate
 } from '../qrScannerTypes';
 import type {
@@ -145,6 +146,33 @@ export const FormFileOverlay: React.FC<{
   const scannerInstruction = scannerLinkCaptureConfig?.instruction
     ? resolveLocalizedString(scannerLinkCaptureConfig.instruction as any, language, '')
     : '';
+  const updateScannerPendingOverlay = (pendingCount: number): void => {
+    const saving = pendingCount > 0;
+    const matchesScannerField = (state: FileOverlayState): boolean =>
+      Boolean(
+        state.open &&
+        state.scope === 'top' &&
+        state.question &&
+        (state.question.id || '') === scannerFieldId
+      );
+    const latest = fileOverlayRef.current;
+    if (matchesScannerField(latest)) fileOverlayRef.current = { ...latest, saving };
+    setFileOverlay(previous => (matchesScannerField(previous) ? { ...previous, saving } : previous));
+  };
+  const reportScannerCandidateOutcome = (outcome: QrScannerCandidateOutcome): void => {
+    const notice = { tone: 'warning' as const, message: outcome.message };
+    const matchesScannerField = (state: FileOverlayState): boolean =>
+      Boolean(
+        state.open &&
+        state.scope === 'top' &&
+        state.question &&
+        (state.question.id || '') === scannerFieldId
+      );
+    const latest = fileOverlayRef.current;
+    if (matchesScannerField(latest)) fileOverlayRef.current = { ...latest, notice };
+    setFileOverlay(previous => (matchesScannerField(previous) ? { ...previous, notice } : previous));
+    announceUpload(scannerFieldPath, outcome.message);
+  };
   const externalQrScanner = useExternalQrScannerSession({
     assetBaseUrl: resolveWindowWebAssetConfig()?.baseUrl,
     enabled:
@@ -162,6 +190,8 @@ export const FormFileOverlay: React.FC<{
     prepareSession: prepareQrScannerLaunch,
     onSessionReady: onQrScannerSessionReady,
     onSessionEnd: onQrScannerSessionEnd,
+    onPendingWorkChange: updateScannerPendingOverlay,
+    onCandidateOutcome: reportScannerCandidateOutcome,
     onCommitted: update => {
       onQrScannerCommitted?.(update);
       const nextItems = update.links;
@@ -171,7 +201,6 @@ export const FormFileOverlay: React.FC<{
           ...latest,
           draftItems: nextItems,
           originalSignature: fileItemsSignature(nextItems),
-          saving: false,
           notice: undefined,
           invalidItemErrors: undefined
         };
@@ -182,7 +211,6 @@ export const FormFileOverlay: React.FC<{
               ...prev,
               draftItems: nextItems,
               originalSignature: fileItemsSignature(nextItems),
-              saving: false,
               notice: undefined,
               invalidItemErrors: undefined
             }

@@ -43,10 +43,12 @@ import {
   buildQrScannerCancelMessage,
   buildQrScannerClosedMessage,
   buildQrScannerFinishMessage,
+  buildQrScannerReadyMessage,
   buildQrScannerScanMessage,
   QR_SCANNER_MESSAGE_TYPES
 } from '../../../src/web/qrScanner/openerProtocol';
 import { useExternalQrScannerSession } from '../../../src/web/react/features/uploads/hooks/useExternalQrScannerSession';
+import type { QrScannerCandidateResult } from '../../../src/web/react/features/uploads/services/qrScannerSessionClient';
 
 const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
 const originalDocument = Object.getOwnPropertyDescriptor(globalThis, 'document');
@@ -68,20 +70,32 @@ const redeemedSession = {
     instruction: 'Point the camera at each QR code on the ingredient receipts.',
     maxFiles: 10,
     existingCount: 0,
-    status: 'ACTIVE'
+    status: 'ACTIVE' as const
   }
 };
 
-const candidateResult = (id: string) => ({
+const receiptUrl = (index: number): string =>
+  `https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQrStUvWxY${index}/view`;
+
+const candidateResult = (scanId: string, index: number, linkCount = index) => ({
   candidate: {
-    id: `candidate-${id}`,
+    id: `candidate-${scanId}`,
     status: 'AUTHORISED' as const,
     code: 'ACCEPTED',
-    fileId: `1AbCdEfGhIjKlMnOpQrStUvWxY${id}`,
-    canonicalUrl: `https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQrStUvWxY${id}/view`,
-    displayName: `Receipt ${id}.jpg`
+    fileId: `1AbCdEfGhIjKlMnOpQrStUvWxY${index}`,
+    canonicalUrl: receiptUrl(index),
+    displayName: `Receipt ${index}.jpg`
   },
-  session: redeemedSession.session
+  session: redeemedSession.session,
+  committed: {
+    linkedCount: 1,
+    skippedCount: 0,
+    recordId: 'record-1',
+    dataVersion: 7 + index,
+    fieldValue: Array.from({ length: linkCount }, (_, offset) => receiptUrl(offset + 1)).join(', '),
+    links: Array.from({ length: linkCount }, (_, offset) => receiptUrl(offset + 1)),
+    summaryCode: 'COMMITTED' as const
+  }
 });
 
 const deferred = <T,>() => {
@@ -95,7 +109,7 @@ const deferred = <T,>() => {
 };
 
 const flushPromises = async (): Promise<void> => {
-  for (let index = 0; index < 8; index += 1) await Promise.resolve();
+  for (let index = 0; index < 12; index += 1) await Promise.resolve();
 };
 
 type HookArgs = Parameters<typeof useExternalQrScannerSession>[0];
@@ -103,7 +117,6 @@ type HookArgs = Parameters<typeof useExternalQrScannerSession>[0];
 const createHarness = (options?: {
   args?: Partial<HookArgs>;
   open?: (url: string, target: string, features: string) => Window | null;
-  platform?: { userAgent: string; platform: string; maxTouchPoints: number };
 }) => {
   const eventListeners = new Map<string, Set<(event: any) => void>>();
   const documentListeners = new Map<string, Set<(event: any) => void>>();
@@ -132,11 +145,10 @@ const createHarness = (options?: {
     }),
     clearTimeout: jest.fn((timerId: number) => {
       timers.delete(timerId);
-    }),
-    setInterval: jest.fn(() => 202),
-    clearInterval: jest.fn()
+    })
   };
   Object.defineProperty(globalThis, 'window', { configurable: true, value: fakeWindow });
+
   const fakeDocument = {
     visibilityState: 'visible',
     addEventListener: jest.fn((type: string, listener: (event: any) => void) => {
@@ -151,21 +163,23 @@ const createHarness = (options?: {
   Object.defineProperty(globalThis, 'document', { configurable: true, value: fakeDocument });
   Object.defineProperty(globalThis, 'navigator', {
     configurable: true,
-    value: options?.platform || {
-      userAgent: 'Mozilla/5.0 (X11; Linux x86_64)',
-      platform: 'Linux x86_64',
-      maxTouchPoints: 0
+    value: {
+      userAgent: 'Mozilla/5.0 (Linux; Android 15)',
+      platform: 'Linux armv8l',
+      maxTouchPoints: 5
     }
   });
 
-  const prepareSession = options?.args?.prepareSession || jest.fn(async () => successfulLaunch);
-  const callbacks = {
+  const defaultCallbacks = {
     onSessionReady: jest.fn(),
     onSessionEnd: jest.fn(),
+    onPendingWorkChange: jest.fn(),
+    onCandidateOutcome: jest.fn(),
     onCommitted: jest.fn(),
     onUnavailable: jest.fn(),
     onDiagnostic: jest.fn()
   };
+  const prepareSession = options?.args?.prepareSession || jest.fn(async () => successfulLaunch);
   const baseArgs: HookArgs = {
     assetBaseUrl: 'https://scanner.example.test',
     enabled: true,
@@ -175,14 +189,21 @@ const createHarness = (options?: {
     hideCloseOnIos: true,
     commitOnReturnOnIos: false,
     prepareSession,
-    ...callbacks,
+    ...defaultCallbacks,
     ...options?.args
   };
-  const render = (updates?: Partial<HookArgs>) => {
-    mockRefIndex = 0;
-    return useExternalQrScannerSession({ ...baseArgs, ...updates });
+  const callbacks = {
+    onSessionReady: baseArgs.onSessionReady as jest.Mock,
+    onSessionEnd: baseArgs.onSessionEnd as jest.Mock,
+    onPendingWorkChange: baseArgs.onPendingWorkChange as jest.Mock,
+    onCandidateOutcome: baseArgs.onCandidateOutcome as jest.Mock,
+    onCommitted: baseArgs.onCommitted as jest.Mock,
+    onUnavailable: baseArgs.onUnavailable as jest.Mock,
+    onDiagnostic: baseArgs.onDiagnostic as jest.Mock
   };
-  const hook = render();
+
+  mockRefIndex = 0;
+  const hook = useExternalQrScannerSession(baseArgs);
 
   const requestId = (): string => {
     const launchUrl = openMock.mock.calls[0]?.[0];
@@ -200,16 +221,15 @@ const createHarness = (options?: {
     } as MessageEvent;
     eventListeners.get('message')?.forEach(listener => listener(messageEvent));
   };
-  const dispatchWindowEvent = (type: 'focus' | 'pageshow' | 'blur'): void => {
+  const dispatchWindowEvent = (type: string): void => {
     eventListeners.get(type)?.forEach(listener => listener({ type }));
   };
   const dispatchVisibility = (visibilityState: 'hidden' | 'visible'): void => {
     fakeDocument.visibilityState = visibilityState;
     documentListeners.get('visibilitychange')?.forEach(listener => listener({ type: 'visibilitychange' }));
   };
-  const runTimersWithDelay = (delay: number): void => {
+  const runAllTimers = (): void => {
     [...timers.entries()].forEach(([timerId, timer]) => {
-      if (timer.delay !== delay) return;
       timers.delete(timerId);
       if (typeof timer.listener === 'function') timer.listener();
     });
@@ -221,16 +241,23 @@ const createHarness = (options?: {
     openMock,
     prepareSession,
     callbacks,
+    fakeWindow,
+    fakeDocument,
     requestId,
     dispatch,
     dispatchWindowEvent,
     dispatchVisibility,
-    runTimersWithDelay,
-    render
+    runAllTimers
   };
 };
 
-describe('external QR scanner session hook', () => {
+const expectNoTerminalSessionRpc = (): void => {
+  expect(mockCommitQrScannerSession).not.toHaveBeenCalled();
+  expect(mockCancelQrScannerSession).not.toHaveBeenCalled();
+  expect(mockGetQrScannerSession).not.toHaveBeenCalled();
+};
+
+describe('external QR scanner incremental session hook', () => {
   let requestSequence = 0;
 
   beforeEach(() => {
@@ -239,30 +266,12 @@ describe('external QR scanner session hook', () => {
     mockRefValues = [];
     mockRefIndex = 0;
     mockRedeemQrScannerSession.mockReset().mockResolvedValue(redeemedSession);
-    mockAddQrScannerCandidate.mockReset().mockImplementation((_credentials, request) =>
-      Promise.resolve(candidateResult(request.scanId))
-    );
-    mockCommitQrScannerSession.mockReset().mockResolvedValue({
-      status: 'COMPLETED',
-      result: {
-        linkedCount: 2,
-        skippedCount: 0,
-        recordId: 'record-1',
-        dataVersion: 8,
-        fieldValue: 'https://drive.google.com/file/d/file-1/view, https://drive.google.com/file/d/file-2/view',
-        links: [
-          'https://drive.google.com/file/d/file-1/view',
-          'https://drive.google.com/file/d/file-2/view'
-        ],
-        summaryCode: 'COMMITTED'
-      },
-      session: { ...redeemedSession.session, status: 'COMPLETED' }
-    });
-    mockCancelQrScannerSession.mockReset().mockResolvedValue({
-      status: 'CANCELLED',
-      session: { ...redeemedSession.session, status: 'CANCELLED' }
-    });
-    mockGetQrScannerSession.mockReset().mockResolvedValue({ session: redeemedSession.session });
+    mockAddQrScannerCandidate
+      .mockReset()
+      .mockImplementation((_credentials, request) => Promise.resolve(candidateResult(request.scanId, 1)));
+    mockCommitQrScannerSession.mockReset();
+    mockCancelQrScannerSession.mockReset();
+    mockGetQrScannerSession.mockReset();
     Object.defineProperty(globalThis, 'crypto', {
       configurable: true,
       value: {
@@ -285,11 +294,19 @@ describe('external QR scanner session hook', () => {
     else Reflect.deleteProperty(globalThis, 'crypto');
   });
 
-  test('opens the popup synchronously before session preparation starts', async () => {
+  test('opens synchronously and defers prepare and redeem until the first scan', async () => {
     const order: string[] = [];
     const prepareSession = jest.fn(async () => {
       order.push('prepare');
       return successfulLaunch;
+    });
+    mockRedeemQrScannerSession.mockImplementation(async () => {
+      order.push('redeem');
+      return redeemedSession;
+    });
+    mockAddQrScannerCandidate.mockImplementation(async (_credentials, request) => {
+      order.push('add');
+      return candidateResult(request.scanId, 1);
     });
     const harness = createHarness({
       args: { prepareSession },
@@ -300,726 +317,365 @@ describe('external QR scanner session hook', () => {
     });
 
     expect(harness.hook.available).toBe(true);
-    expect(prepareSession).not.toHaveBeenCalled();
     expect(harness.hook.openScanner()).toBe(true);
     expect(order).toEqual(['open']);
-
     await flushPromises();
-    expect(order).toEqual(['open', 'prepare']);
+    expect(order).toEqual(['open']);
+
+    harness.dispatch(buildQrScannerScanMessage(harness.requestId(), 'scan-1', 'receipt-1'));
+    await flushPromises();
+
+    expect(order).toEqual(['open', 'prepare', 'redeem', 'add']);
+    expect(prepareSession).toHaveBeenCalledWith({ fieldId: 'ING_EVD', fieldPath: 'ING_EVD' });
+    expect(mockRedeemQrScannerSession).toHaveBeenCalledWith(successfulLaunch);
+    expectNoTerminalSessionRpc();
   });
 
-  test('rebinds to a replacement scanner peer only after matching origin and request', async () => {
+  test('READY sends provisional setup without creating or redeeming a session', async () => {
     const harness = createHarness();
     expect(harness.hook.openScanner()).toBe(true);
-    await flushPromises();
-    const requestId = harness.requestId();
-    const validScan = buildQrScannerScanMessage(requestId, 'scan-valid', 'https://drive.google.com/file/d/file-valid/view');
-    const replacementPopup = {
-      closed: false,
-      postMessage: jest.fn()
-    } as unknown as Window;
 
-    harness.dispatch(validScan, {
-      source: replacementPopup,
-      origin: 'https://evil.example.test'
-    });
-    harness.dispatch(buildQrScannerScanMessage('wrong-request', 'scan-wrong', 'value'), {
-      source: replacementPopup,
-      origin: 'https://scanner.example.test'
-    });
+    harness.dispatch(buildQrScannerReadyMessage(harness.requestId()));
+    await flushPromises();
+
+    expect(harness.prepareSession).not.toHaveBeenCalled();
+    expect(mockRedeemQrScannerSession).not.toHaveBeenCalled();
     expect(mockAddQrScannerCandidate).not.toHaveBeenCalled();
-    expect(replacementPopup.postMessage).not.toHaveBeenCalled();
-
-    harness.dispatch(validScan, {
-      source: replacementPopup,
-      origin: 'https://scanner.example.test'
-    });
-    await flushPromises();
-    expect(mockAddQrScannerCandidate).toHaveBeenCalledTimes(1);
-    expect(mockAddQrScannerCandidate).toHaveBeenCalledWith(redeemedSession.credentials, {
-      scanId: 'scan-valid',
-      rawValue: 'https://drive.google.com/file/d/file-valid/view'
-    });
-    expect(replacementPopup.postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: QR_SCANNER_MESSAGE_TYPES.candidate,
-        scanId: 'scan-valid',
-        status: 'accepted'
-      }),
-      'https://scanner.example.test'
-    );
-
-    harness.dispatch(buildQrScannerFinishMessage(requestId, 'replacement-commit-request'), {
-      source: replacementPopup,
-      origin: 'https://scanner.example.test'
-    });
-    await flushPromises();
-
-    expect(mockCommitQrScannerSession).toHaveBeenCalledTimes(1);
-    expect(mockCommitQrScannerSession).toHaveBeenCalledWith(
-      redeemedSession.credentials,
-      'replacement-commit-request'
-    );
-    expect(replacementPopup.postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: QR_SCANNER_MESSAGE_TYPES.commit,
-        status: 'committed'
-      }),
-      'https://scanner.example.test'
-    );
-  });
-
-  test('queues early scans until the session is ready and checks candidates sequentially', async () => {
-    const launchDeferred = deferred<typeof successfulLaunch>();
-    const firstCandidate = deferred<ReturnType<typeof candidateResult>>();
-    mockAddQrScannerCandidate
-      .mockReset()
-      .mockImplementationOnce(() => firstCandidate.promise)
-      .mockImplementationOnce((_credentials, request) => Promise.resolve(candidateResult(request.scanId)));
-    const harness = createHarness({
-      args: { prepareSession: jest.fn(() => launchDeferred.promise) }
-    });
-    expect(harness.hook.openScanner()).toBe(true);
-    const requestId = harness.requestId();
-
-    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-1', 'value-1'));
-    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-2', 'value-2'));
-    await flushPromises();
-    expect(mockAddQrScannerCandidate).not.toHaveBeenCalled();
-
-    launchDeferred.resolve(successfulLaunch);
-    await flushPromises();
-    expect(mockAddQrScannerCandidate).toHaveBeenCalledTimes(1);
-    expect(mockAddQrScannerCandidate.mock.calls[0][1]).toEqual({ scanId: 'scan-1', rawValue: 'value-1' });
-
-    firstCandidate.resolve(candidateResult('scan-1'));
-    await flushPromises();
-    expect(mockAddQrScannerCandidate).toHaveBeenCalledTimes(2);
-    expect(mockAddQrScannerCandidate.mock.calls[1][1]).toEqual({ scanId: 'scan-2', rawValue: 'value-2' });
-  });
-
-  test('does not treat a mobile WindowProxy closed flag as a terminal scanner close', async () => {
-    const candidateDeferred = deferred<ReturnType<typeof candidateResult>>();
-    mockAddQrScannerCandidate.mockReset().mockImplementationOnce(() => candidateDeferred.promise);
-    const harness = createHarness();
-    expect(harness.hook.openScanner()).toBe(true);
-    await flushPromises();
-
-    harness.dispatch(
-      buildQrScannerScanMessage(harness.requestId(), 'scan-mobile', 'https://drive.google.com/file/d/file-mobile/view')
-    );
-    await flushPromises();
-    (harness.popup as unknown as { closed: boolean }).closed = true;
-    candidateDeferred.resolve(candidateResult('scan-mobile'));
-    await flushPromises();
-
     expect(harness.popup.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: QR_SCANNER_MESSAGE_TYPES.candidate,
-        scanId: 'scan-mobile',
-        status: 'accepted'
+        type: QR_SCANNER_MESSAGE_TYPES.setup,
+        requestId: harness.requestId(),
+        instruction: 'Configured instruction',
+        hideCloseOnIos: true,
+        commitOnReturnOnIos: false
       }),
       'https://scanner.example.test'
     );
-    harness.dispatch(buildQrScannerFinishMessage(harness.requestId(), 'mobile-commit-request'));
-    await flushPromises();
-
-    expect(mockCommitQrScannerSession).toHaveBeenCalledWith(redeemedSession.credentials, 'mobile-commit-request');
-    expect(mockCancelQrScannerSession).not.toHaveBeenCalled();
-    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('committed');
+    const setup = (harness.popup.postMessage as jest.Mock).mock.calls.find(
+      ([message]) => message?.type === QR_SCANNER_MESSAGE_TYPES.setup
+    )?.[0];
+    expect(setup).not.toHaveProperty('maxFiles');
+    expect(setup).not.toHaveProperty('existingCount');
+    expectNoTerminalSessionRpc();
   });
 
-  test('commits an authorised iOS batch when the native scanner returns without Finish', async () => {
-    mockGetQrScannerSession.mockResolvedValue({
-      session: {
-        ...redeemedSession.session,
-        status: 'ACTIVE',
-        counts: { authorised: 1 },
-        candidates: [{ status: 'AUTHORISED' }]
-      }
+  test('queues two scans, persists each authoritative update in order, and holds only for pending mutations', async () => {
+    const launch = deferred<typeof successfulLaunch>();
+    const redeemed = deferred<typeof redeemedSession>();
+    const first = deferred<ReturnType<typeof candidateResult>>();
+    const second = deferred<ReturnType<typeof candidateResult>>();
+    const order: string[] = [];
+    const prepareSession = jest.fn(() => launch.promise);
+    mockRedeemQrScannerSession.mockImplementation(() => {
+      order.push('redeem');
+      return redeemed.promise;
     });
+    mockAddQrScannerCandidate
+      .mockImplementationOnce((_credentials, request) => {
+        order.push(`add:${request.scanId}`);
+        return first.promise;
+      })
+      .mockImplementationOnce((_credentials, request) => {
+        order.push(`add:${request.scanId}`);
+        return second.promise;
+      });
+    const onSessionReady = jest.fn(() => order.push('hold:start'));
+    const onSessionEnd = jest.fn((reason: string) => order.push(`hold:${reason}`));
+    const onCommitted = jest.fn(update => order.push(`apply:${update.dataVersion}`));
     const harness = createHarness({
-      args: { commitOnReturnOnIos: true },
-      platform: {
-        userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_4 like Mac OS X)',
-        platform: 'iPhone',
-        maxTouchPoints: 5
-      }
+      args: { prepareSession, onSessionReady, onSessionEnd, onCommitted }
     });
     expect(harness.hook.openScanner()).toBe(true);
+    const requestId = harness.requestId();
+
+    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-1', 'receipt-1'));
+    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-2', 'receipt-2'));
     await flushPromises();
 
-    harness.dispatchWindowEvent('focus');
-    await flushPromises();
-    expect(mockGetQrScannerSession).not.toHaveBeenCalled();
+    expect(harness.callbacks.onPendingWorkChange.mock.calls.map(([count]) => count)).toEqual([1, 2]);
+    expect(onSessionReady).not.toHaveBeenCalled();
+    expect(mockAddQrScannerCandidate).not.toHaveBeenCalled();
 
-    harness.dispatchVisibility('hidden');
-    harness.dispatchVisibility('visible');
-    harness.dispatchWindowEvent('focus');
+    launch.resolve(successfulLaunch);
     await flushPromises();
+    expect(order).toEqual(['hold:start', 'redeem']);
+    expect(onSessionReady).toHaveBeenCalledTimes(1);
+    expect(mockAddQrScannerCandidate).not.toHaveBeenCalled();
 
-    expect(mockGetQrScannerSession).toHaveBeenCalledTimes(1);
-    expect(mockCommitQrScannerSession).toHaveBeenCalledTimes(1);
-    expect(mockCommitQrScannerSession).toHaveBeenCalledWith(
-      redeemedSession.credentials,
-      expect.any(String)
-    );
-    expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(1);
-    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('committed');
-    expect(mockCancelQrScannerSession).not.toHaveBeenCalled();
-    expect(harness.callbacks.onDiagnostic).toHaveBeenCalledWith(
-      'upload.linkCapture.externalScanner.nativeReturnCommitStart',
-      expect.objectContaining({ fieldPath: 'ING_EVD' })
-    );
-  });
-
-  test('waits for a pending iOS scan before committing on native return', async () => {
-    const pendingCandidate = deferred<ReturnType<typeof candidateResult>>();
-    mockAddQrScannerCandidate.mockReset().mockReturnValueOnce(pendingCandidate.promise);
-    mockGetQrScannerSession.mockResolvedValue({
-      session: {
-        ...redeemedSession.session,
-        status: 'ACTIVE',
-        counts: { authorised: 1 },
-        candidates: [{ status: 'AUTHORISED' }]
-      }
-    });
-    const harness = createHarness({
-      args: { commitOnReturnOnIos: true },
-      platform: {
-        userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_4 like Mac OS X)',
-        platform: 'iPhone',
-        maxTouchPoints: 5
-      }
-    });
-    expect(harness.hook.openScanner()).toBe(true);
+    redeemed.resolve(redeemedSession);
     await flushPromises();
-
-    harness.dispatch(
-      buildQrScannerScanMessage(harness.requestId(), 'scan-pending', 'https://drive.google.com/file/d/file-pending/view')
-    );
-    await flushPromises();
+    expect(order).toEqual(['hold:start', 'redeem', 'add:scan-1']);
     expect(mockAddQrScannerCandidate).toHaveBeenCalledTimes(1);
+    expect(onSessionEnd).not.toHaveBeenCalled();
 
-    harness.dispatchVisibility('hidden');
-    harness.dispatchVisibility('visible');
+    first.resolve(candidateResult('scan-1', 1));
     await flushPromises();
-    expect(mockGetQrScannerSession).not.toHaveBeenCalled();
-    expect(mockCommitQrScannerSession).not.toHaveBeenCalled();
+    expect(order).toEqual(['hold:start', 'redeem', 'add:scan-1', 'apply:8', 'add:scan-2']);
+    expect(mockAddQrScannerCandidate).toHaveBeenCalledTimes(2);
+    expect(harness.callbacks.onPendingWorkChange.mock.calls.map(([count]) => count)).toEqual([1, 2, 1]);
+    expect(onSessionEnd).not.toHaveBeenCalled();
 
-    pendingCandidate.resolve(candidateResult('scan-pending'));
+    second.resolve(candidateResult('scan-2', 2));
     await flushPromises();
 
-    expect(mockGetQrScannerSession).toHaveBeenCalledTimes(1);
-    expect(mockCommitQrScannerSession).toHaveBeenCalledTimes(1);
-    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('committed');
+    expect(order).toEqual([
+      'hold:start',
+      'redeem',
+      'add:scan-1',
+      'apply:8',
+      'add:scan-2',
+      'apply:9',
+      'hold:settled'
+    ]);
+    expect(harness.callbacks.onPendingWorkChange.mock.calls.map(([count]) => count)).toEqual([1, 2, 1, 0]);
+    expect(onSessionReady).toHaveBeenCalledTimes(1);
+    expect(onSessionEnd).toHaveBeenCalledTimes(1);
+    expect(onSessionEnd).toHaveBeenCalledWith('settled');
+    expect(onCommitted.mock.calls.map(([update]) => update)).toEqual([
+      {
+        fieldId: 'ING_EVD',
+        fieldPath: 'ING_EVD',
+        recordId: 'record-1',
+        fieldValue: receiptUrl(1),
+        links: [receiptUrl(1)],
+        linkedCount: 1,
+        dataVersion: 8
+      },
+      {
+        fieldId: 'ING_EVD',
+        fieldPath: 'ING_EVD',
+        recordId: 'record-1',
+        fieldValue: `${receiptUrl(1)}, ${receiptUrl(2)}`,
+        links: [receiptUrl(1), receiptUrl(2)],
+        linkedCount: 1,
+        dataVersion: 9
+      }
+    ]);
+    expect(harness.callbacks.onCandidateOutcome).not.toHaveBeenCalled();
+    expectNoTerminalSessionRpc();
   });
 
-  test('does not cancel an empty iOS session after an ambiguous blur and focus', async () => {
-    mockGetQrScannerSession.mockResolvedValue({
-      session: {
-        ...redeemedSession.session,
-        status: 'ACTIVE',
-        counts: { authorised: 0 },
-        candidates: []
-      }
-    });
-    const harness = createHarness({
-      args: { commitOnReturnOnIos: true },
-      platform: {
-        userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_4 like Mac OS X)',
-        platform: 'iPhone',
-        maxTouchPoints: 5
-      }
-    });
+  test('focus, visibility, and elapsed time do not create, reconcile, commit, or cancel a session', async () => {
+    const harness = createHarness();
     expect(harness.hook.openScanner()).toBe(true);
-    await flushPromises();
+    harness.dispatch(buildQrScannerReadyMessage(harness.requestId()));
 
     harness.dispatchWindowEvent('blur');
     harness.dispatchWindowEvent('focus');
-    await flushPromises();
-
-    expect(mockCommitQrScannerSession).not.toHaveBeenCalled();
-    expect(mockCancelQrScannerSession).not.toHaveBeenCalled();
-
-    harness.dispatchVisibility('hidden');
-    harness.dispatchVisibility('visible');
-    await flushPromises();
-
-    expect(mockCancelQrScannerSession).toHaveBeenCalledTimes(1);
-    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('closed');
-  });
-
-  test('retries an iOS native-return commit with one stable request ID', async () => {
-    const { QrScannerSessionError } = jest.requireActual(
-      '../../../src/web/react/features/uploads/services/qrScannerSessionClient'
-    ) as typeof import('../../../src/web/react/features/uploads/services/qrScannerSessionClient');
-    mockGetQrScannerSession.mockResolvedValue({
-      session: {
-        ...redeemedSession.session,
-        status: 'ACTIVE',
-        counts: { authorised: 1 },
-        candidates: [{ status: 'AUTHORISED' }]
-      }
-    });
-    mockCommitQrScannerSession.mockRejectedValueOnce(
-      new QrScannerSessionError('TEMPORARY_ERROR', 'The commit response was lost.', true)
-    );
-    const harness = createHarness({
-      args: { commitOnReturnOnIos: true },
-      platform: {
-        userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_4 like Mac OS X)',
-        platform: 'iPhone',
-        maxTouchPoints: 5
-      }
-    });
-    expect(harness.hook.openScanner()).toBe(true);
-    await flushPromises();
-
-    harness.dispatchVisibility('hidden');
-    harness.dispatchVisibility('visible');
-    await flushPromises();
-    expect(mockCommitQrScannerSession).toHaveBeenCalledTimes(1);
-
-    harness.runTimersWithDelay(1200);
-    await flushPromises();
-
-    expect(mockCommitQrScannerSession).toHaveBeenCalledTimes(2);
-    expect(mockCommitQrScannerSession.mock.calls[0][1]).toBe(mockCommitQrScannerSession.mock.calls[1][1]);
-    expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(1);
-    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('committed');
-  });
-
-  test('continues retrying the stable iOS commit while the server reports COMMITTING', async () => {
-    const { QrScannerSessionError } = jest.requireActual(
-      '../../../src/web/react/features/uploads/services/qrScannerSessionClient'
-    ) as typeof import('../../../src/web/react/features/uploads/services/qrScannerSessionClient');
-    mockGetQrScannerSession
-      .mockResolvedValueOnce({
-        session: {
-          ...redeemedSession.session,
-          status: 'ACTIVE',
-          counts: { authorised: 1 },
-          candidates: [{ status: 'AUTHORISED' }]
-        }
-      })
-      .mockResolvedValue({
-        session: {
-          ...redeemedSession.session,
-          status: 'COMMITTING',
-          counts: { authorised: 1 },
-          candidates: [{ status: 'AUTHORISED' }]
-        }
-      });
-    mockCommitQrScannerSession
-      .mockRejectedValueOnce(new QrScannerSessionError('TEMPORARY_ERROR', 'The first response was lost.', true))
-      .mockRejectedValueOnce(new QrScannerSessionError('TEMPORARY_ERROR', 'Commit is still running.', true));
-    const harness = createHarness({
-      args: { commitOnReturnOnIos: true },
-      platform: {
-        userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_4 like Mac OS X)',
-        platform: 'iPhone',
-        maxTouchPoints: 5
-      }
-    });
-    expect(harness.hook.openScanner()).toBe(true);
-    await flushPromises();
-
-    harness.dispatchVisibility('hidden');
-    harness.dispatchVisibility('visible');
-    await flushPromises();
-    expect(mockCommitQrScannerSession).toHaveBeenCalledTimes(1);
-
-    harness.runTimersWithDelay(1200);
-    await flushPromises();
-    expect(mockCommitQrScannerSession).toHaveBeenCalledTimes(2);
-
-    harness.runTimersWithDelay(2400);
-    await flushPromises();
-
-    expect(mockCommitQrScannerSession).toHaveBeenCalledTimes(3);
-    const requestIds = mockCommitQrScannerSession.mock.calls.map(call => call[1]);
-    expect(new Set(requestIds).size).toBe(1);
-    expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(1);
-    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('committed');
-  });
-
-  test('retries a transient iOS native-return session read', async () => {
-    const { QrScannerSessionError } = jest.requireActual(
-      '../../../src/web/react/features/uploads/services/qrScannerSessionClient'
-    ) as typeof import('../../../src/web/react/features/uploads/services/qrScannerSessionClient');
-    mockGetQrScannerSession
-      .mockRejectedValueOnce(new QrScannerSessionError('TEMPORARY_ERROR', 'Session read failed.', true))
-      .mockResolvedValue({
-        session: {
-          ...redeemedSession.session,
-          status: 'ACTIVE',
-          counts: { authorised: 1 },
-          candidates: [{ status: 'AUTHORISED' }]
-        }
-      });
-    const harness = createHarness({
-      args: { commitOnReturnOnIos: true },
-      platform: {
-        userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_4 like Mac OS X)',
-        platform: 'iPhone',
-        maxTouchPoints: 5
-      }
-    });
-    expect(harness.hook.openScanner()).toBe(true);
-    await flushPromises();
-
-    harness.dispatchVisibility('hidden');
-    harness.dispatchVisibility('visible');
-    await flushPromises();
-    expect(mockGetQrScannerSession).toHaveBeenCalledTimes(1);
-
-    harness.runTimersWithDelay(1200);
-    await flushPromises();
-
-    expect(mockGetQrScannerSession).toHaveBeenCalledTimes(2);
-    expect(mockCommitQrScannerSession).toHaveBeenCalledTimes(1);
-    expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(1);
-  });
-
-  test('commits Finish once and applies the authoritative field update', async () => {
-    const harness = createHarness();
-    expect(harness.hook.openScanner()).toBe(true);
-    await flushPromises();
-    harness.render({ fieldId: 'OTHER_FIELD', fieldPath: 'OTHER_FIELD' });
-    const finish = buildQrScannerFinishMessage(harness.requestId(), 'commit-request-1');
-
-    harness.dispatch(finish);
-    harness.dispatch(finish);
-    await flushPromises();
-
-    expect(mockCommitQrScannerSession).toHaveBeenCalledTimes(1);
-    expect(mockCommitQrScannerSession).toHaveBeenCalledWith(redeemedSession.credentials, 'commit-request-1');
-    expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(1);
-    expect(harness.callbacks.onCommitted).toHaveBeenCalledWith({
-      fieldId: 'ING_EVD',
-      fieldPath: 'ING_EVD',
-      recordId: 'record-1',
-      fieldValue: 'https://drive.google.com/file/d/file-1/view, https://drive.google.com/file/d/file-2/view',
-      links: [
-        'https://drive.google.com/file/d/file-1/view',
-        'https://drive.google.com/file/d/file-2/view'
-      ],
-      linkedCount: 2,
-      dataVersion: 8
-    });
-    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('committed');
-    expect(mockCancelQrScannerSession).not.toHaveBeenCalled();
-  });
-
-  test('acknowledges duplicate Finish while the commit RPC remains pending without committing twice', async () => {
-    const commitDeferred = deferred<{
-      status: 'COMPLETED';
-      result: {
-        linkedCount: number;
-        skippedCount: number;
-        recordId: string;
-        dataVersion: number;
-        fieldValue: string;
-        links: string[];
-        summaryCode: 'COMMITTED';
-      };
-      session: typeof redeemedSession.session;
-    }>();
-    mockCommitQrScannerSession.mockReset().mockReturnValueOnce(commitDeferred.promise);
-    const harness = createHarness();
-    expect(harness.hook.openScanner()).toBe(true);
-    await flushPromises();
-    const finish = buildQrScannerFinishMessage(harness.requestId(), 'pending-commit-request');
-
-    harness.dispatch(finish);
-    await flushPromises();
-    expect(mockCommitQrScannerSession).toHaveBeenCalledTimes(1);
-
-    harness.dispatch(finish);
-    await flushPromises();
-
-    expect(mockCommitQrScannerSession).toHaveBeenCalledTimes(1);
-    expect(mockCommitQrScannerSession).toHaveBeenCalledWith(
-      redeemedSession.credentials,
-      'pending-commit-request'
-    );
-    const committingMessages = (harness.popup.postMessage as jest.Mock).mock.calls.filter(
-      ([message]) =>
-        message?.type === QR_SCANNER_MESSAGE_TYPES.commit &&
-        message?.status === 'committing'
-    );
-    expect(committingMessages).toHaveLength(2);
-
-    commitDeferred.resolve({
-      status: 'COMPLETED',
-      result: {
-        linkedCount: 1,
-        skippedCount: 0,
-        recordId: 'record-1',
-        dataVersion: 8,
-        fieldValue: 'https://drive.google.com/file/d/file-1/view',
-        links: ['https://drive.google.com/file/d/file-1/view'],
-        summaryCode: 'COMMITTED'
-      },
-      session: { ...redeemedSession.session, status: 'COMPLETED' }
-    });
-    await flushPromises();
-
-    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('committed');
-  });
-
-  test('replays the committed response to repeated Finish during terminal grace without another mutation', async () => {
-    const harness = createHarness();
-    expect(harness.hook.openScanner()).toBe(true);
-    await flushPromises();
-    const finish = buildQrScannerFinishMessage(harness.requestId(), 'terminal-commit-request');
-
-    harness.dispatch(finish);
-    await flushPromises();
-    harness.dispatch(finish);
-    await flushPromises();
-
-    expect(mockCommitQrScannerSession).toHaveBeenCalledTimes(1);
-    expect(mockCancelQrScannerSession).not.toHaveBeenCalled();
-    expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(1);
-    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledTimes(1);
-    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('committed');
-    const committedMessages = (harness.popup.postMessage as jest.Mock).mock.calls.filter(
-      ([message]) =>
-        message?.type === QR_SCANNER_MESSAGE_TYPES.commit &&
-        message?.status === 'committed'
-    );
-    expect(committedMessages).toHaveLength(2);
-  });
-
-  test('reconciles a completed session on focus into the immutable launch field', async () => {
-    const commitResult = {
-      linkedCount: 1,
-      skippedCount: 0,
-      recordId: 'record-1',
-      dataVersion: 9,
-      fieldValue: 'https://drive.google.com/file/d/file-3/view',
-      links: ['https://drive.google.com/file/d/file-3/view'],
-      summaryCode: 'COMMITTED' as const
-    };
-    mockGetQrScannerSession.mockResolvedValue({
-      session: { ...redeemedSession.session, status: 'COMPLETED', commitResult }
-    });
-    const harness = createHarness();
-    expect(harness.hook.openScanner()).toBe(true);
-    await flushPromises();
-    harness.render({ fieldId: 'OTHER_FIELD', fieldPath: 'OTHER_FIELD' });
-
-    harness.dispatchWindowEvent('focus');
-    await flushPromises();
-
-    expect(mockGetQrScannerSession).toHaveBeenCalledWith(redeemedSession.credentials);
-    expect(harness.callbacks.onCommitted).toHaveBeenCalledWith({
-      fieldId: 'ING_EVD',
-      fieldPath: 'ING_EVD',
-      recordId: 'record-1',
-      dataVersion: 9,
-      fieldValue: 'https://drive.google.com/file/d/file-3/view',
-      links: ['https://drive.google.com/file/d/file-3/view'],
-      linkedCount: 1
-    });
-    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('committed');
-  });
-
-  test('reconciles a cancelled session on pageshow without cancelling it again', async () => {
-    mockGetQrScannerSession.mockResolvedValue({
-      session: { ...redeemedSession.session, status: 'CANCELLED' }
-    });
-    const harness = createHarness();
-    expect(harness.hook.openScanner()).toBe(true);
-    await flushPromises();
-
     harness.dispatchWindowEvent('pageshow');
+    harness.dispatchVisibility('hidden');
+    harness.dispatchVisibility('visible');
+    harness.runAllTimers();
     await flushPromises();
 
-    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('cancelled');
-    expect(mockCancelQrScannerSession).not.toHaveBeenCalled();
-    expect(harness.callbacks.onCommitted).not.toHaveBeenCalled();
-  });
-
-  test('ends an expired session when resume reconciliation reports expiry', async () => {
-    const { QrScannerSessionError } = jest.requireActual(
-      '../../../src/web/react/features/uploads/services/qrScannerSessionClient'
-    ) as typeof import('../../../src/web/react/features/uploads/services/qrScannerSessionClient');
-    mockGetQrScannerSession.mockRejectedValue(
-      new QrScannerSessionError('SESSION_EXPIRED', 'This scan session expired.', false)
-    );
-    const harness = createHarness();
-    expect(harness.hook.openScanner()).toBe(true);
-    await flushPromises();
-
-    harness.dispatchWindowEvent('focus');
-    await flushPromises();
-
-    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('failed');
-    expect(harness.callbacks.onCommitted).not.toHaveBeenCalled();
-    expect(harness.popup.postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: QR_SCANNER_MESSAGE_TYPES.error,
-        code: 'SESSION_EXPIRED',
-        retryable: false
-      }),
-      'https://scanner.example.test'
-    );
-  });
-
-  test('recovers a lost commit response from the completed session snapshot', async () => {
-    const { QrScannerSessionError } = jest.requireActual(
-      '../../../src/web/react/features/uploads/services/qrScannerSessionClient'
-    ) as typeof import('../../../src/web/react/features/uploads/services/qrScannerSessionClient');
-    mockCommitQrScannerSession.mockRejectedValueOnce(
-      new QrScannerSessionError('TEMPORARY_ERROR', 'The commit response was lost.', true)
-    );
-    mockGetQrScannerSession.mockResolvedValue({
-      session: {
-        ...redeemedSession.session,
-        status: 'COMPLETED',
-        commitResult: {
-          linkedCount: 1,
-          skippedCount: 0,
-          recordId: 'record-1',
-          dataVersion: 10,
-          fieldValue: 'https://drive.google.com/file/d/file-recovered/view',
-          links: ['https://drive.google.com/file/d/file-recovered/view'],
-          summaryCode: 'COMMITTED'
-        }
-      }
-    });
-    const harness = createHarness();
-    expect(harness.hook.openScanner()).toBe(true);
-    await flushPromises();
-
-    harness.dispatch(buildQrScannerFinishMessage(harness.requestId(), 'stable-commit-request'));
-    await flushPromises();
-
-    expect(mockGetQrScannerSession).toHaveBeenCalledWith(redeemedSession.credentials);
-    expect(harness.callbacks.onCommitted).toHaveBeenCalledWith(
-      expect.objectContaining({
-        fieldId: 'ING_EVD',
-        fieldPath: 'ING_EVD',
-        dataVersion: 10,
-        linkedCount: 1
-      })
-    );
-    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('committed');
-  });
-
-  test('reissues the same commit request when the original response remains pending on resume', async () => {
-    const pendingCommit = deferred<never>();
-    mockCommitQrScannerSession.mockImplementationOnce(() => pendingCommit.promise);
-    mockGetQrScannerSession.mockResolvedValue({
-      session: { ...redeemedSession.session, status: 'COMMITTING' }
-    });
-    const harness = createHarness();
-    expect(harness.hook.openScanner()).toBe(true);
-    await flushPromises();
-
-    harness.dispatch(buildQrScannerFinishMessage(harness.requestId(), 'stable-commit-request'));
-    await flushPromises();
-    expect(mockCommitQrScannerSession).toHaveBeenCalledTimes(1);
-
-    harness.dispatchWindowEvent('focus');
-    await flushPromises();
-
-    expect(mockCommitQrScannerSession).toHaveBeenCalledTimes(2);
-    expect(mockCommitQrScannerSession.mock.calls.map(call => call[1])).toEqual([
-      'stable-commit-request',
-      'stable-commit-request'
-    ]);
-    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('committed');
-  });
-
-  test('reuses the first commit request ID after an uncertain failure', async () => {
-    const { QrScannerSessionError } = jest.requireActual(
-      '../../../src/web/react/features/uploads/services/qrScannerSessionClient'
-    ) as typeof import('../../../src/web/react/features/uploads/services/qrScannerSessionClient');
-    mockCommitQrScannerSession.mockRejectedValueOnce(
-      new QrScannerSessionError('TEMPORARY_ERROR', 'The commit response was lost.', true)
-    );
-    const harness = createHarness();
-    expect(harness.hook.openScanner()).toBe(true);
-    await flushPromises();
-
-    harness.dispatch(buildQrScannerFinishMessage(harness.requestId(), 'first-commit-request'));
-    await flushPromises();
-    harness.dispatch(buildQrScannerFinishMessage(harness.requestId(), 'replacement-commit-request'));
-    await flushPromises();
-
-    expect(mockCommitQrScannerSession).toHaveBeenCalledTimes(2);
-    expect(mockCommitQrScannerSession.mock.calls.map(call => call[1])).toEqual([
-      'first-commit-request',
-      'first-commit-request'
-    ]);
-    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('committed');
-  });
-
-  test('ends a one-shot preparation failure and tells the scanner to restart from the form', async () => {
-    const prepareSession = jest.fn(async () => ({
-      success: false as const,
-      code: 'SERVICE_UNAVAILABLE' as const,
-      message: 'Scanner setup is temporarily unavailable.',
-      retryable: true
-    }));
-    const harness = createHarness({ args: { prepareSession } });
-    expect(harness.hook.openScanner()).toBe(true);
-    await flushPromises();
-
+    expect(harness.fakeWindow.addEventListener.mock.calls.map(([type]) => type)).toEqual(['message']);
+    expect(harness.fakeWindow.setTimeout).not.toHaveBeenCalled();
+    expect(harness.fakeDocument.addEventListener).not.toHaveBeenCalled();
+    expect(harness.prepareSession).not.toHaveBeenCalled();
     expect(mockRedeemQrScannerSession).not.toHaveBeenCalled();
-    expect(harness.popup.postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: QR_SCANNER_MESSAGE_TYPES.error,
-        code: 'SERVICE_UNAVAILABLE',
-        retryable: false,
-        message: expect.stringContaining('start again from the form')
-      }),
-      'https://scanner.example.test'
-    );
-    harness.dispatchWindowEvent('focus');
+    expect(mockAddQrScannerCandidate).not.toHaveBeenCalled();
+    expectNoTerminalSessionRpc();
+  });
+
+  test('replays a completed scan ID without another RPC, pending transition, or field update', async () => {
+    const harness = createHarness();
+    expect(harness.hook.openScanner()).toBe(true);
+    const scan = buildQrScannerScanMessage(harness.requestId(), 'scan-replay', 'receipt-replay');
+
+    harness.dispatch(scan);
     await flushPromises();
-    expect(mockGetQrScannerSession).not.toHaveBeenCalled();
+    const candidateMessagesBeforeReplay = (harness.popup.postMessage as jest.Mock).mock.calls.filter(
+      ([message]) => message?.type === QR_SCANNER_MESSAGE_TYPES.candidate && message?.scanId === 'scan-replay'
+    ).length;
+    expect(candidateMessagesBeforeReplay).toBeGreaterThan(0);
+    expect(mockAddQrScannerCandidate).toHaveBeenCalledTimes(1);
+    expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(1);
+    expect(harness.callbacks.onPendingWorkChange.mock.calls.map(([count]) => count)).toEqual([1, 0]);
+
+    harness.dispatch(scan);
+    await flushPromises();
+
+    const candidateMessagesAfterReplay = (harness.popup.postMessage as jest.Mock).mock.calls.filter(
+      ([message]) => message?.type === QR_SCANNER_MESSAGE_TYPES.candidate && message?.scanId === 'scan-replay'
+    ).length;
+    expect(candidateMessagesAfterReplay).toBe(candidateMessagesBeforeReplay + 1);
+    expect(mockAddQrScannerCandidate).toHaveBeenCalledTimes(1);
+    expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(1);
+    expect(harness.callbacks.onPendingWorkChange.mock.calls.map(([count]) => count)).toEqual([1, 0]);
+    expectNoTerminalSessionRpc();
+  });
+
+  test('retries a transient add once with the same scan identity and applies one authoritative update', async () => {
+    const { QrScannerSessionError } = jest.requireActual(
+      '../../../src/web/react/features/uploads/services/qrScannerSessionClient'
+    ) as typeof import('../../../src/web/react/features/uploads/services/qrScannerSessionClient');
+    mockAddQrScannerCandidate
+      .mockRejectedValueOnce(new QrScannerSessionError('TEMPORARY_ERROR', 'The response was lost.', true))
+      .mockResolvedValueOnce(candidateResult('scan-retry', 1));
+    const harness = createHarness();
+    expect(harness.hook.openScanner()).toBe(true);
+
+    harness.dispatch(buildQrScannerScanMessage(harness.requestId(), 'scan-retry', 'receipt-retry'));
+    await flushPromises();
+
+    expect(mockAddQrScannerCandidate).toHaveBeenCalledTimes(2);
+    expect(mockAddQrScannerCandidate.mock.calls.map(call => call[1])).toEqual([
+      { scanId: 'scan-retry', rawValue: 'receipt-retry' },
+      { scanId: 'scan-retry', rawValue: 'receipt-retry' }
+    ]);
+    expect(harness.callbacks.onPendingWorkChange.mock.calls.map(([count]) => count)).toEqual([1, 0]);
+    expect(harness.callbacks.onSessionReady).toHaveBeenCalledTimes(1);
+    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledTimes(1);
+    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('settled');
+    expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(1);
+    expect(harness.callbacks.onDiagnostic).toHaveBeenCalledWith(
+      'upload.linkCapture.externalScanner.candidateRetry',
+      {
+        fieldPath: 'ING_EVD',
+        scanId: 'scan-retry',
+        code: 'TEMPORARY_ERROR',
+        attempt: 1
+      }
+    );
+    expectNoTerminalSessionRpc();
   });
 
   test.each([
-    ['cancelled', (requestId: string) => buildQrScannerCancelMessage(requestId)],
-    ['closed', (requestId: string) => buildQrScannerClosedMessage(requestId)]
-  ] as const)('%s exits cancel the prepared session without committing', async (reason, message) => {
+    ['CANCEL', (requestId: string) => buildQrScannerCancelMessage(requestId)],
+    ['CLOSED', (requestId: string) => buildQrScannerClosedMessage(requestId)]
+  ] as const)('%s detaches the scanner but lets an in-flight add settle before releasing the hold', async (_label, message) => {
+    const add = deferred<ReturnType<typeof candidateResult>>();
+    mockAddQrScannerCandidate.mockReturnValueOnce(add.promise);
     const harness = createHarness();
     expect(harness.hook.openScanner()).toBe(true);
+    const requestId = harness.requestId();
+    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-pending', 'receipt-pending'));
+    await flushPromises();
+    expect(mockAddQrScannerCandidate).toHaveBeenCalledTimes(1);
+    expect(harness.callbacks.onSessionReady).toHaveBeenCalledTimes(1);
+
+    harness.dispatch(message(requestId));
     await flushPromises();
 
-    harness.dispatch(message(harness.requestId()));
-    await flushPromises();
-
-    expect(mockCommitQrScannerSession).not.toHaveBeenCalled();
-    expect(mockCancelQrScannerSession).toHaveBeenCalledTimes(1);
-    expect(mockCancelQrScannerSession).toHaveBeenCalledWith(redeemedSession.credentials);
-    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith(reason);
+    expect(harness.callbacks.onSessionEnd).not.toHaveBeenCalled();
     expect(harness.callbacks.onCommitted).not.toHaveBeenCalled();
-  });
+    expect(harness.callbacks.onPendingWorkChange.mock.calls.map(([count]) => count)).toEqual([1]);
+    expectNoTerminalSessionRpc();
 
-  test('cancels once when the scanner closes before preparation finishes', async () => {
-    const launchDeferred = deferred<typeof successfulLaunch>();
-    const harness = createHarness({
-      args: { prepareSession: jest.fn(() => launchDeferred.promise) }
-    });
-    expect(harness.hook.openScanner()).toBe(true);
-    harness.dispatch(buildQrScannerClosedMessage(harness.requestId()));
-
-    launchDeferred.resolve(successfulLaunch);
+    add.resolve(candidateResult('scan-pending', 1));
     await flushPromises();
 
-    expect(mockCancelQrScannerSession).toHaveBeenCalledTimes(1);
-    expect(mockCancelQrScannerSession).toHaveBeenCalledWith(redeemedSession.credentials);
-    expect(mockCommitQrScannerSession).not.toHaveBeenCalled();
+    expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(1);
+    expect(harness.callbacks.onPendingWorkChange.mock.calls.map(([count]) => count)).toEqual([1, 0]);
+    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledTimes(1);
+    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('settled');
+    expectNoTerminalSessionRpc();
   });
 
-  test('does not prepare a session when the browser blocks the popup', async () => {
+  test('reports a server duplicate to the originating form without applying a field update', async () => {
+    mockAddQrScannerCandidate.mockResolvedValueOnce({
+      candidate: {
+        id: 'candidate-duplicate',
+        status: 'DUPLICATE',
+        code: 'DUPLICATE',
+        fileId: '1AbCdEfGhIjKlMnOpQrStUvWxY1',
+        canonicalUrl: receiptUrl(1),
+        displayName: 'Receipt 1.jpg'
+      },
+      session: redeemedSession.session
+    } satisfies QrScannerCandidateResult);
+    const harness = createHarness();
+    expect(harness.hook.openScanner()).toBe(true);
+
+    harness.dispatch(buildQrScannerScanMessage(harness.requestId(), 'scan-duplicate', 'receipt-duplicate'));
+    await flushPromises();
+
+    expect(harness.callbacks.onCommitted).not.toHaveBeenCalled();
+    expect(harness.callbacks.onCandidateOutcome).toHaveBeenCalledTimes(1);
+    expect(harness.callbacks.onCandidateOutcome).toHaveBeenCalledWith({
+      scanId: 'scan-duplicate',
+      status: 'duplicate',
+      code: 'DUPLICATE',
+      message: 'This receipt was already scanned or linked.'
+    });
+    expect(harness.callbacks.onPendingWorkChange.mock.calls.map(([count]) => count)).toEqual([1, 0]);
+    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('settled');
+    expectNoTerminalSessionRpc();
+  });
+
+  test('reports a rejected in-flight scan to the form after the scanner is closed', async () => {
+    const add = deferred<QrScannerCandidateResult>();
+    mockAddQrScannerCandidate.mockReturnValueOnce(add.promise);
+    const harness = createHarness();
+    expect(harness.hook.openScanner()).toBe(true);
+    const requestId = harness.requestId();
+    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-stale', 'receipt-stale'));
+    await flushPromises();
+    harness.dispatch(buildQrScannerClosedMessage(requestId));
+
+    add.resolve({
+      candidate: {
+        id: 'candidate-stale',
+        status: 'REJECTED',
+        code: 'RECORD_CHANGED'
+      },
+      session: redeemedSession.session
+    });
+    await flushPromises();
+
+    expect(harness.callbacks.onCommitted).not.toHaveBeenCalled();
+    expect(harness.callbacks.onCandidateOutcome).toHaveBeenCalledWith({
+      scanId: 'scan-stale',
+      status: 'rejected',
+      code: 'RECORD_CHANGED',
+      message: 'The form changed while this receipt was being added. Return to the form and reopen the scanner.'
+    });
+    expect(harness.callbacks.onPendingWorkChange.mock.calls.map(([count]) => count)).toEqual([1, 0]);
+    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('settled');
+    expectNoTerminalSessionRpc();
+  });
+
+  test('legacy FINISH drains pending work and returns a synthetic committed acknowledgement without commit RPC', async () => {
+    const add = deferred<ReturnType<typeof candidateResult>>();
+    mockAddQrScannerCandidate.mockReturnValueOnce(add.promise);
+    const harness = createHarness();
+    expect(harness.hook.openScanner()).toBe(true);
+    const requestId = harness.requestId();
+    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-before-finish', 'receipt-before-finish'));
+    await flushPromises();
+    expect(mockAddQrScannerCandidate).toHaveBeenCalledTimes(1);
+
+    harness.dispatch(buildQrScannerFinishMessage(requestId, 'legacy-commit-request'));
+    await flushPromises();
+
+    expect(harness.popup.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: QR_SCANNER_MESSAGE_TYPES.commit,
+        status: 'committing'
+      }),
+      'https://scanner.example.test'
+    );
+    expect(harness.callbacks.onSessionEnd).not.toHaveBeenCalled();
+    expectNoTerminalSessionRpc();
+
+    add.resolve(candidateResult('scan-before-finish', 1));
+    await flushPromises();
+
+    expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(1);
+    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('settled');
+    expect(harness.popup.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: QR_SCANNER_MESSAGE_TYPES.commit,
+        status: 'committed',
+        linkedCount: 1,
+        message: '1 receipt added.'
+      }),
+      'https://scanner.example.test'
+    );
+    expectNoTerminalSessionRpc();
+  });
+
+  test('does not prepare a session when the popup is blocked', async () => {
     const prepareSession = jest.fn(async () => successfulLaunch);
     const harness = createHarness({
       args: { prepareSession },
@@ -1031,8 +687,79 @@ describe('external QR scanner session hook', () => {
 
     expect(prepareSession).not.toHaveBeenCalled();
     expect(mockRedeemQrScannerSession).not.toHaveBeenCalled();
+    expect(mockAddQrScannerCandidate).not.toHaveBeenCalled();
     expect(harness.callbacks.onUnavailable).toHaveBeenCalledWith(
       'Could not open the scanner window. Allow popups and try again.'
     );
+    expectNoTerminalSessionRpc();
+  });
+
+  test('rebinds only to a peer with the expected origin and request ID', async () => {
+    const harness = createHarness();
+    expect(harness.hook.openScanner()).toBe(true);
+    const requestId = harness.requestId();
+    const replacementPopup = {
+      closed: false,
+      postMessage: jest.fn()
+    } as unknown as Window;
+
+    harness.dispatch(buildQrScannerReadyMessage(requestId), {
+      source: replacementPopup,
+      origin: 'https://evil.example.test'
+    });
+    harness.dispatch(buildQrScannerReadyMessage('wrong-request'), {
+      source: replacementPopup,
+      origin: 'https://scanner.example.test'
+    });
+    harness.dispatch(buildQrScannerReadyMessage(requestId), {
+      source: null,
+      origin: 'https://scanner.example.test'
+    });
+    expect(replacementPopup.postMessage).not.toHaveBeenCalled();
+    expect(harness.callbacks.onDiagnostic).not.toHaveBeenCalledWith(
+      'upload.linkCapture.externalScanner.peerRebound',
+      expect.anything()
+    );
+    expect(harness.prepareSession).not.toHaveBeenCalled();
+
+    harness.dispatch(buildQrScannerReadyMessage(requestId), {
+      source: replacementPopup,
+      origin: 'https://scanner.example.test'
+    });
+    await flushPromises();
+
+    expect(replacementPopup.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: QR_SCANNER_MESSAGE_TYPES.setup,
+        requestId
+      }),
+      'https://scanner.example.test'
+    );
+    expect(harness.callbacks.onDiagnostic).toHaveBeenCalledWith(
+      'upload.linkCapture.externalScanner.peerRebound',
+      { fieldPath: 'ING_EVD', messageType: QR_SCANNER_MESSAGE_TYPES.ready }
+    );
+    expect(harness.prepareSession).not.toHaveBeenCalled();
+
+    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-rebound', 'receipt-rebound'), {
+      source: replacementPopup,
+      origin: 'https://scanner.example.test'
+    });
+    await flushPromises();
+
+    expect(mockAddQrScannerCandidate).toHaveBeenCalledTimes(1);
+    expect(mockAddQrScannerCandidate).toHaveBeenCalledWith(redeemedSession.credentials, {
+      scanId: 'scan-rebound',
+      rawValue: 'receipt-rebound'
+    });
+    expect(replacementPopup.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: QR_SCANNER_MESSAGE_TYPES.candidate,
+        scanId: 'scan-rebound',
+        status: 'accepted'
+      }),
+      'https://scanner.example.test'
+    );
+    expectNoTerminalSessionRpc();
   });
 });

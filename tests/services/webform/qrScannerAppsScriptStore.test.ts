@@ -118,17 +118,71 @@ describe('Apps Script QR scanner session store', () => {
     expect(store.get('large')).toBeNull();
   });
 
-  test('bounds the global session count and evicts a terminal session before refusing active work', () => {
+  test('bounds the global session count and evicts a terminal session first', () => {
     const { properties } = makeProperties();
     const store = new AppsScriptQrScannerSessionStore({ properties, lock: null, nowMs: () => NOW });
     for (let index = 0; index < MAX_QR_SCANNER_STORED_SESSIONS; index += 1) {
       store.create(session(`session-${index}`));
     }
-    expect(() => store.create(session('overflow'))).toThrow(expect.objectContaining({ code: 'TEMPORARY_ERROR' }));
+    store.mutate('session-5', current => ({ ...current, status: 'CANCELLED' }));
+    expect(store.create(session('replacement')).id).toBe('replacement');
+    expect(store.get('session-5')).toBeNull();
+    expect(store.get('session-0')).not.toBeNull();
+  });
 
-    store.mutate('session-0', current => ({ ...current, status: 'CANCELLED' }));
+  test('reclaims the oldest idle ACTIVE session when native close left it non-terminal', () => {
+    const { properties } = makeProperties();
+    const store = new AppsScriptQrScannerSessionStore({ properties, lock: null, nowMs: () => NOW });
+    for (let index = 0; index < MAX_QR_SCANNER_STORED_SESSIONS; index += 1) {
+      store.create(
+        session(`session-${index}`, {
+          updatedAt: new Date(index === 0 ? NOW - 3 * 60 * 1000 : NOW).toISOString()
+        })
+      );
+    }
+
     expect(store.create(session('replacement')).id).toBe('replacement');
     expect(store.get('session-0')).toBeNull();
+    expect(store.get('session-1')).not.toBeNull();
+  });
+
+  test('does not reclaim a recently active session between scans', () => {
+    const { properties } = makeProperties();
+    const store = new AppsScriptQrScannerSessionStore({ properties, lock: null, nowMs: () => NOW });
+    for (let index = 0; index < MAX_QR_SCANNER_STORED_SESSIONS; index += 1) {
+      store.create(session(`session-${index}`, { updatedAt: new Date(NOW - 30_000).toISOString() }));
+    }
+
+    expect(() => store.create(session('overflow'))).toThrow(
+      expect.objectContaining({ code: 'TEMPORARY_ERROR', retryable: true })
+    );
+  });
+
+  test('never evicts an ACTIVE session with an incremental append pending', () => {
+    const { properties } = makeProperties();
+    const store = new AppsScriptQrScannerSessionStore({ properties, lock: null, nowMs: () => NOW });
+    for (let index = 0; index < MAX_QR_SCANNER_STORED_SESSIONS; index += 1) {
+      store.create(
+        session(`session-${index}`, {
+          candidates: [
+            {
+              id: `candidate-${index}`,
+              scanIdHash: `scan-${index}`,
+              payloadHash: `payload-${index}`,
+              status: 'RETRYABLE_ERROR',
+              code: 'TEMPORARY_ERROR',
+              retryable: true,
+              incremental: { state: 'PENDING', updatedAt: new Date(NOW).toISOString() },
+              checkedAt: new Date(NOW).toISOString()
+            }
+          ]
+        })
+      );
+    }
+
+    expect(() => store.create(session('overflow'))).toThrow(
+      expect.objectContaining({ code: 'TEMPORARY_ERROR', retryable: true })
+    );
   });
 
   test('cleans malformed and long-expired values while retaining recently expired state for clear errors', () => {

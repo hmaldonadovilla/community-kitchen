@@ -237,6 +237,41 @@ describe('recordFreshness helpers', () => {
     ).toEqual(['utilisationSync.inFlight']);
   });
 
+  test('blocks auto-sync while a QR scanner transaction is in flight', () => {
+    expect(
+      resolveRecordFreshnessSyncBlockers({
+        dirty: false,
+        draftSavePhase: 'saved',
+        autoSaveQueued: false,
+        autoSaveInFlight: false,
+        draftSaveInFlight: false,
+        submissionInFlight: false,
+        uploadInFlight: false,
+        qrScannerInFlight: true,
+        recordSyncInFlight: false,
+        guidedStepLiveSyncInFlight: false,
+        guidedStepBackgroundSyncInFlight: false,
+        lastUserInteractionAt: 0,
+        now: 90_000
+      })
+    ).toEqual(['qrScanner.inFlight']);
+  });
+
+  test('clears deferred sync after an authoritative scanner update reaches the server version', () => {
+    expect(
+      resolveDeferredRecordFreshnessResumeAction({
+        pending: { recordId: 'rec-1', serverVersion: 4 },
+        view: 'form',
+        currentRecordId: 'rec-1',
+        currentDataVersion: 4,
+        recordLoading: false,
+        submitting: false,
+        recordSyncInFlight: false,
+        blockers: []
+      })
+    ).toBe('clear');
+  });
+
   test('clears deferred sync when the user has moved to another record', () => {
     expect(
       resolveDeferredRecordFreshnessResumeAction({

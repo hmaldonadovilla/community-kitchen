@@ -1,8 +1,6 @@
 import { createNativeQrDetector, decodeQrFromVideoFrame, isLiveCameraSupported } from './decoder';
 import {
-  buildQrScannerCancelMessage,
   buildQrScannerClosedMessage,
-  buildQrScannerFinishMessage,
   buildQrScannerReadyMessage,
   buildQrScannerScanMessage,
   parseQrScannerFromOpenerMessage,
@@ -16,7 +14,6 @@ import {
   countScannerCandidates,
   failCheckingCandidates,
   fingerprintQrValue,
-  retainScannerCommitRequestId,
   type ScannerCandidateView
 } from './scannerState';
 
@@ -43,19 +40,13 @@ const instructionNode = document.querySelector<HTMLElement>('[data-role="instruc
 const video = document.querySelector<HTMLVideoElement>('[data-role="video"]');
 const candidateListNode = document.querySelector<HTMLUListElement>('[data-role="candidate-list"]');
 const candidateSummaryNode = document.querySelector<HTMLElement>('[data-role="candidate-summary"]');
-const finishButton = document.querySelector<HTMLButtonElement>('[data-action="finish"]');
-const cancelButton = document.querySelector<HTMLButtonElement>('[data-action="cancel"]');
+const closeButton = document.querySelector<HTMLButtonElement>('[data-action="close"]');
 
 let stream: MediaStream | null = null;
 let frameId = 0;
 let resumeTimer = 0;
-let finishRetryTimer = 0;
 let idSequence = 0;
 let closing = false;
-let finishRequested = false;
-let commitInFlight = false;
-let commitRequestId = '';
-let finishRequestedAt = 0;
 let setupReceived = false;
 let connectionFailed = false;
 let closedPosted = false;
@@ -63,15 +54,11 @@ let cameraReady = false;
 let candidates: ScannerCandidateView[] = [];
 let maxFiles = 10;
 let existingCount = 0;
-let hideCloseOnIos = params.get('hideCloseOnIos') !== '0';
-let commitOnReturnOnIos = params.get('commitOnReturnOnIos') === '1';
 const recentFingerprints = new Map<string, number>();
 const scanFingerprints = new Map<string, string>();
 
 const scanCanvas = document.createElement('canvas');
 const detector = createNativeQrDetector();
-const FINISH_RETRY_INTERVAL_MS = 900;
-const FINISH_RETRY_TIMEOUT_MS = 60_000;
 
 const scannerPlatform = {
   userAgent: navigator.userAgent,
@@ -101,11 +88,8 @@ const setStatus = (message: string, tone: StatusTone = 'neutral'): void => {
   statusNode.dataset.tone = tone;
 };
 
-const usesNativeReturnCommit = (): boolean => isIosLike && commitOnReturnOnIos;
-
 const applyActionVisibility = (): void => {
-  if (cancelButton) cancelButton.hidden = isIosLike && hideCloseOnIos;
-  if (finishButton) finishButton.hidden = usesNativeReturnCommit();
+  if (closeButton) closeButton.hidden = isIosLike;
 };
 
 const postToOpener = (message: unknown): boolean => {
@@ -136,7 +120,7 @@ const postToOpener = (message: unknown): boolean => {
 
 const candidateStatusLabel = (candidate: ScannerCandidateView): string => {
   if (candidate.status === 'checking') return 'Checking';
-  if (candidate.status === 'accepted') return 'Ready to add';
+  if (candidate.status === 'accepted') return 'Added';
   if (candidate.status === 'error') return 'Check failed';
   return 'Not added';
 };
@@ -146,7 +130,7 @@ function renderCandidates(): void {
   const availableSlots = Math.max(0, maxFiles - existingCount - counts.accepted);
   if (candidateSummaryNode) {
     candidateSummaryNode.textContent = candidates.length
-      ? `${counts.accepted} ready to add, ${counts.checking} checking, ${counts.notAdded} not added.`
+      ? `${counts.accepted} added, ${counts.checking} checking, ${counts.notAdded} not added.`
       : 'No receipts scanned yet.';
   }
   if (candidateListNode) {
@@ -174,20 +158,11 @@ function renderCandidates(): void {
       })
     );
   }
-  if (finishButton) {
-    finishButton.disabled =
-      closing ||
-      finishRequested ||
-      commitInFlight ||
-      connectionFailed ||
-      counts.checking > 0 ||
-      counts.accepted === 0;
-  }
-  if (!connectionFailed && !finishRequested && !commitInFlight && availableSlots === 0 && counts.accepted > 0) {
+  if (!connectionFailed && availableSlots === 0 && counts.accepted > 0) {
     setStatus(
-      usesNativeReturnCommit()
-        ? 'The maximum number of receipts is ready. Use the browser X to add them.'
-        : 'The maximum number of receipts is ready to add. Select Finish and add receipts.',
+      isIosLike
+        ? 'The maximum number of receipts has been added. Use the browser X when finished.'
+        : 'The maximum number of receipts has been added. Select Close when finished.',
       'success'
     );
   }
@@ -204,12 +179,6 @@ const stopScanLoop = (): void => {
   }
 };
 
-const stopFinishRetry = (): void => {
-  if (!finishRetryTimer) return;
-  window.clearTimeout(finishRetryTimer);
-  finishRetryTimer = 0;
-};
-
 const stopCamera = (): void => {
   stopScanLoop();
   if (stream) {
@@ -222,7 +191,6 @@ const stopCamera = (): void => {
 
 function failScannerConnection(message: string): void {
   connectionFailed = true;
-  stopFinishRetry();
   candidates = failCheckingCandidates(
     candidates,
     'This receipt was not checked. Return to the form and open the scanner again.'
@@ -257,7 +225,7 @@ const postClosed = (): void => {
 };
 
 const scheduleNextFrame = (): void => {
-  if (closing || finishRequested || connectionFailed || !cameraReady) return;
+  if (closing || connectionFailed || !cameraReady) return;
   frameId = window.requestAnimationFrame(() => {
     void scanLoop();
   });
@@ -275,7 +243,7 @@ const shouldSuppressValue = (value: string): boolean => {
 };
 
 const sendDetectedValue = (value: string): void => {
-  if (closing || finishRequested || connectionFailed || shouldSuppressValue(value)) return;
+  if (closing || connectionFailed || shouldSuppressValue(value)) return;
   const scanId = createMessageId('scan');
   scanFingerprints.set(scanId, fingerprintQrValue(value));
   candidates = appendCheckingCandidate(candidates, scanId);
@@ -289,9 +257,9 @@ const sendDetectedValue = (value: string): void => {
 };
 
 async function scanLoop(): Promise<void> {
-  if (!video || closing || finishRequested || connectionFailed || !cameraReady) return;
+  if (!video || closing || connectionFailed || !cameraReady) return;
   const value = await decodeQrFromVideoFrame(video, scanCanvas, detector);
-  if (closing || finishRequested || connectionFailed || !cameraReady) return;
+  if (closing || connectionFailed || !cameraReady) return;
   if (value) {
     sendDetectedValue(value);
     resumeTimer = window.setTimeout(scheduleNextFrame, 700);
@@ -301,7 +269,7 @@ async function scanLoop(): Promise<void> {
 }
 
 const beginScanning = (): void => {
-  if (closing || finishRequested || connectionFailed || !cameraReady) return;
+  if (closing || connectionFailed || !cameraReady) return;
   stopScanLoop();
   scheduleNextFrame();
 };
@@ -334,7 +302,7 @@ const startCamera = async (): Promise<void> => {
       return;
     }
     cameraReady = true;
-    setStatus(setupReceived ? 'Camera ready.' : 'Camera ready. You can scan while the secure check is prepared.');
+    setStatus('Camera ready.');
     beginScanning();
   } catch {
     stopCamera();
@@ -348,16 +316,24 @@ const startCamera = async (): Promise<void> => {
 };
 
 const handleCandidate = (message: QrScannerCandidateMessage): void => {
-  candidates = applyCandidateResult(candidates, message);
+  const displayedMessage =
+    message.status === 'accepted'
+      ? {
+          ...message,
+          message: 'Receipt added.'
+        }
+      : message;
+  candidates = applyCandidateResult(candidates, displayedMessage);
   const fingerprint = scanFingerprints.get(message.scanId);
   if (message.status === 'error' && fingerprint) recentFingerprints.delete(fingerprint);
   scanFingerprints.delete(message.scanId);
   const tone: StatusTone = message.status === 'accepted' ? 'success' : message.status === 'error' ? 'error' : 'neutral';
-  const resultMessage =
-    message.message || candidates.find(candidate => candidate.scanId === message.scanId)?.message || 'Receipt checked.';
+  const resultMessage = candidates.find(candidate => candidate.scanId === message.scanId)?.message || 'Receipt checked.';
   setStatus(
-    message.status === 'accepted' && usesNativeReturnCommit()
-      ? 'Receipt ready. Scan another receipt, or use the browser X when finished.'
+    message.status === 'accepted'
+      ? isIosLike
+        ? 'Receipt added. Scan another receipt, or use the browser X when finished.'
+        : 'Receipt added. Scan another receipt, or select Close when finished.'
       : resultMessage,
     tone
   );
@@ -376,8 +352,6 @@ const handleOpenerMessage = (event: MessageEvent): void => {
       connectionFailed = false;
       maxFiles = message.maxFiles && message.maxFiles > 0 ? message.maxFiles : maxFiles;
       existingCount = message.existingCount || 0;
-      hideCloseOnIos = message.hideCloseOnIos !== false;
-      commitOnReturnOnIos = message.commitOnReturnOnIos === true;
       if (instructionNode && message.instruction) instructionNode.textContent = message.instruction;
       applyActionVisibility();
       if (cameraReady && !candidates.length) setStatus('Camera ready.');
@@ -388,13 +362,9 @@ const handleOpenerMessage = (event: MessageEvent): void => {
       break;
     case QR_SCANNER_MESSAGE_TYPES.commit:
       if (message.status === 'committing') {
-        commitInFlight = true;
-        finishRequested = true;
         stopScanLoop();
         setStatus(message.message || 'Adding checked receipts...');
       } else if (message.status === 'committed') {
-        stopFinishRetry();
-        commitInFlight = false;
         closing = true;
         stopCamera();
         const linkedCount = Number(message.linkedCount || 0);
@@ -408,16 +378,12 @@ const handleOpenerMessage = (event: MessageEvent): void => {
           window.setTimeout(closeScannerWindow, 350);
         }
       } else {
-        stopFinishRetry();
-        commitInFlight = false;
-        finishRequested = false;
         setStatus(message.message || 'The receipts could not be added. Try again.', 'error');
         beginScanning();
       }
       renderCandidates();
       break;
     case QR_SCANNER_MESSAGE_TYPES.cancelled:
-      stopFinishRetry();
       closing = true;
       stopCamera();
       setStatus(
@@ -428,9 +394,6 @@ const handleOpenerMessage = (event: MessageEvent): void => {
       closeScannerWindow();
       break;
     case QR_SCANNER_MESSAGE_TYPES.error:
-      stopFinishRetry();
-      commitInFlight = false;
-      finishRequested = false;
       failScannerConnection(`${message.message} Return to the form and open the scanner again.`);
       break;
     default:
@@ -438,54 +401,18 @@ const handleOpenerMessage = (event: MessageEvent): void => {
   }
 };
 
-const postFinishRequest = (): void => {
-  if (!finishRequested || closing || connectionFailed || !commitRequestId) return;
-  if (Date.now() - finishRequestedAt >= FINISH_RETRY_TIMEOUT_MS) {
-    stopFinishRetry();
-    stopCamera();
-    setStatus('Adding receipts is taking longer than expected. Use the browser X to return to the form and check the receipt list.');
-    return;
-  }
-  postToOpener(buildQrScannerFinishMessage(requestId, commitRequestId));
-  stopFinishRetry();
-  finishRetryTimer = window.setTimeout(postFinishRequest, commitInFlight ? 1500 : FINISH_RETRY_INTERVAL_MS);
-};
-
-finishButton?.addEventListener('click', () => {
-  const counts = countScannerCandidates(candidates);
-  if (closing || finishRequested || commitInFlight || counts.checking > 0 || counts.accepted === 0) return;
-  finishRequested = true;
-  stopScanLoop();
-  setStatus('Adding checked receipts...');
-  renderCandidates();
-  // Reuse the same id after an uncertain commit response so Apps Script can
-  // reconcile a write that may already be durable.
-  commitRequestId = retainScannerCommitRequestId(commitRequestId, () => createMessageId('commit'));
-  finishRequestedAt = Date.now();
-  postFinishRequest();
-});
-
-cancelButton?.addEventListener('click', () => {
-  if (closing || commitInFlight) return;
+closeButton?.addEventListener('click', () => {
+  if (closing) return;
+  postClosed();
   closing = true;
-  stopFinishRetry();
-  postToOpener(buildQrScannerCancelMessage(requestId));
   stopCamera();
   closeScannerWindow();
 });
 
 window.addEventListener('message', handleOpenerMessage);
 window.addEventListener('pagehide', () => {
-  if (usesNativeReturnCommit()) {
-    // The retained form owns the authoritative commit when iOS returns it to
-    // the foreground. Do not turn the native browser X into a cancellation.
-  } else if (finishRequested && commitRequestId && !connectionFailed) {
-    postToOpener(buildQrScannerFinishMessage(requestId, commitRequestId));
-  } else {
-    postClosed();
-  }
+  postClosed();
   closing = true;
-  stopFinishRetry();
   stopCamera();
 });
 

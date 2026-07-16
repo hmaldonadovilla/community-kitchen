@@ -19,4 +19,15 @@ export type ApplyQrScannerCommittedUpdate = (update: QrScannerCommittedUpdate) =
 
 export type BeginQrScannerInteraction = () => void;
 
-export type EndQrScannerInteraction = (reason: 'committed' | 'cancelled' | 'closed' | 'failed') => void;
+export type EndQrScannerInteraction = (reason: 'settled' | 'committed' | 'cancelled' | 'closed' | 'failed') => void;
+
+export type UpdateQrScannerPendingWork = (pendingCount: number) => void;
+
+export type QrScannerCandidateOutcome = {
+  scanId: string;
+  status: 'duplicate' | 'rejected' | 'error';
+  code: string;
+  message: string;
+};
+
+export type ReportQrScannerCandidateOutcome = (outcome: QrScannerCandidateOutcome) => void;

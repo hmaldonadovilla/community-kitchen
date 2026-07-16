@@ -1,6 +1,7 @@
 import {
   buildQrScannerCandidateMessage,
   buildQrScannerCommitMessage,
+  buildQrScannerSetupMessage,
   QR_SCANNER_MESSAGE_TYPES
 } from '../../../src/web/qrScanner/openerProtocol';
 
@@ -49,16 +50,14 @@ const createHarness = (options?: { ios?: boolean; commitOnReturnOnIos?: boolean 
   const video = new FakeElement();
   const candidateList = new FakeElement();
   const candidateSummary = new FakeElement();
-  const finish = new FakeElement();
-  const cancel = new FakeElement();
+  const close = new FakeElement();
   const elements = new Map<string, FakeElement>([
     ['[data-role="status"]', status],
     ['[data-role="instruction"]', instruction],
     ['[data-role="video"]', video],
     ['[data-role="candidate-list"]', candidateList],
     ['[data-role="candidate-summary"]', candidateSummary],
-    ['[data-action="finish"]', finish],
-    ['[data-action="cancel"]', cancel]
+    ['[data-action="close"]', close]
   ]);
   const fakeDocument = {
     visibilityState: 'visible',
@@ -78,9 +77,7 @@ const createHarness = (options?: { ios?: boolean; commitOnReturnOnIos?: boolean 
     removeEventListener: jest.fn((type: string) => {
       windowListeners.delete(type);
     }),
-    setTimeout: jest.fn((listener: TimerHandler, delay?: number) =>
-      globalThis.setTimeout(listener, delay)
-    ),
+    setTimeout: jest.fn((listener: TimerHandler, delay?: number) => globalThis.setTimeout(listener, delay)),
     clearTimeout: jest.fn((timer: ReturnType<typeof setTimeout>) => globalThis.clearTimeout(timer)),
     requestAnimationFrame: jest.fn(() => 101),
     cancelAnimationFrame: jest.fn(),
@@ -122,16 +119,15 @@ const createHarness = (options?: { ios?: boolean; commitOnReturnOnIos?: boolean 
     windowListeners.get('pagehide')?.({ type: 'pagehide' });
   };
   const messagesOfType = (type: string): any[] =>
-    opener.postMessage.mock.calls
-      .map(call => call[0])
-      .filter(message => message?.type === type);
-  const acceptCandidate = (): void => {
+    opener.postMessage.mock.calls.map(call => call[0]).filter(message => message?.type === type);
+  const acceptCandidate = (scanId = 'scan-1', displayName = 'Receipt 1.jpg'): void => {
     dispatchFromOpener(
       buildQrScannerCandidateMessage('request-1', {
-        scanId: 'scan-1',
+        scanId,
         status: 'accepted',
         code: 'ACCEPTED',
-        displayName: 'Receipt 1.jpg',
+        displayName,
+        // Cached opener bundles may still use the old batch-oriented copy.
         message: 'Receipt checked and ready to add.'
       })
     );
@@ -139,8 +135,10 @@ const createHarness = (options?: { ios?: boolean; commitOnReturnOnIos?: boolean 
 
   return {
     opener,
+    fakeWindow,
     status,
-    finish,
+    candidateSummary,
+    close,
     dispatchFromOpener,
     dispatchFromSource,
     dispatchPageHide,
@@ -149,7 +147,7 @@ const createHarness = (options?: { ios?: boolean; commitOnReturnOnIos?: boolean 
   };
 };
 
-describe('standalone QR scanner Finish lifecycle', () => {
+describe('standalone incremental QR scanner lifecycle', () => {
   beforeEach(() => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date('2026-07-16T08:00:00.000Z'));
@@ -169,20 +167,85 @@ describe('standalone QR scanner Finish lifecycle', () => {
     else Reflect.deleteProperty(globalThis, 'crypto');
   });
 
-  test('retries one stable Finish request until the committed response arrives', () => {
+  test('shows every accepted candidate as durably added and remains available for another scan', () => {
     const harness = createHarness();
+
     harness.acceptCandidate();
-    expect(harness.finish.disabled).toBe(false);
+    expect(harness.status.textContent).toContain('Receipt added. Scan another receipt');
+    expect(harness.candidateSummary.textContent).toBe('1 added, 0 checking, 0 not added.');
 
-    harness.finish.dispatch('click');
-    const initial = harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.finish);
-    expect(initial).toHaveLength(1);
-    expect(initial[0].commitRequestId).toBeTruthy();
+    harness.acceptCandidate('scan-2', 'Receipt 2.pdf');
+    expect(harness.candidateSummary.textContent).toBe('2 added, 0 checking, 0 not added.');
+    expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.finish)).toHaveLength(0);
+    expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.cancel)).toHaveLength(0);
+    expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.closed)).toHaveLength(0);
+  });
 
-    jest.advanceTimersByTime(900);
-    const retried = harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.finish);
-    expect(retried).toHaveLength(2);
-    expect(retried[1].commitRequestId).toBe(initial[0].commitRequestId);
+  test('uses one local Close action on Android without committing or cancelling the session', () => {
+    const harness = createHarness({ commitOnReturnOnIos: true });
+    expect(harness.close.hidden).toBe(false);
+
+    harness.close.dispatch('click');
+    harness.dispatchPageHide();
+
+    expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.closed)).toHaveLength(1);
+    expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.finish)).toHaveLength(0);
+    expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.cancel)).toHaveLength(0);
+    expect(harness.fakeWindow.close).toHaveBeenCalledTimes(1);
+  });
+
+  test('hides the page Close action on iOS and reports native X pagehide as CLOSED only', () => {
+    const harness = createHarness({ ios: true, commitOnReturnOnIos: true });
+    harness.dispatchFromOpener(
+      buildQrScannerSetupMessage('request-1', {
+        hideCloseOnIos: false,
+        commitOnReturnOnIos: false
+      })
+    );
+
+    expect(harness.close.hidden).toBe(true);
+    harness.acceptCandidate();
+    expect(harness.status.textContent).toContain('use the browser X when finished');
+
+    harness.dispatchPageHide();
+
+    expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.closed)).toHaveLength(1);
+    expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.finish)).toHaveLength(0);
+    expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.cancel)).toHaveLength(0);
+    expect(harness.fakeWindow.close).not.toHaveBeenCalled();
+  });
+
+  test('retains the original opener while also posting CLOSED to an authenticated replacement source', () => {
+    const harness = createHarness();
+    const replacementOpener = { postMessage: jest.fn() };
+    harness.dispatchFromSource(
+      buildQrScannerCandidateMessage('request-1', {
+        scanId: 'scan-rebound',
+        status: 'accepted'
+      }),
+      replacementOpener
+    );
+
+    harness.close.dispatch('click');
+
+    expect(replacementOpener.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: QR_SCANNER_MESSAGE_TYPES.closed, requestId: 'request-1' }),
+      'https://form.example.test'
+    );
+    expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.closed)).toHaveLength(1);
+  });
+
+  test('does not emit liveness or terminal actions while the scanner is idle', () => {
+    const harness = createHarness();
+
+    jest.advanceTimersByTime(10_000);
+
+    const types = harness.opener.postMessage.mock.calls.map(call => call[0]?.type);
+    expect(types).toEqual([QR_SCANNER_MESSAGE_TYPES.ready, QR_SCANNER_MESSAGE_TYPES.ready]);
+  });
+
+  test('still consumes a cached legacy committed response', () => {
+    const harness = createHarness();
 
     harness.dispatchFromOpener(
       buildQrScannerCommitMessage('request-1', {
@@ -191,100 +254,9 @@ describe('standalone QR scanner Finish lifecycle', () => {
         message: '1 receipt added.'
       })
     );
-    jest.advanceTimersByTime(5_000);
+    jest.advanceTimersByTime(350);
 
-    expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.finish)).toHaveLength(2);
-  });
-
-  test('retains the original opener while also using an authenticated replacement source', () => {
-    const harness = createHarness();
-    const replacementOpener = { postMessage: jest.fn() };
-    harness.dispatchFromSource(
-      buildQrScannerCandidateMessage('request-1', {
-        scanId: 'scan-rebound',
-        status: 'accepted',
-        code: 'ACCEPTED',
-        displayName: 'Receipt rebound.jpg',
-        message: 'Receipt checked and ready to add.'
-      }),
-      replacementOpener
-    );
-
-    harness.finish.dispatch('click');
-
-    expect(replacementOpener.postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: QR_SCANNER_MESSAGE_TYPES.finish,
-        requestId: 'request-1'
-      }),
-      'https://form.example.test'
-    );
-    expect(harness.opener.postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: QR_SCANNER_MESSAGE_TYPES.finish,
-        requestId: 'request-1'
-      }),
-      'https://form.example.test'
-    );
-  });
-
-  test('replays Finish rather than cancelling when pagehide follows Finish', () => {
-    const harness = createHarness();
-    harness.acceptCandidate();
-    harness.finish.dispatch('click');
-    const firstFinish = harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.finish)[0];
-
-    harness.dispatchPageHide();
-
-    const finishMessages = harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.finish);
-    expect(finishMessages).toHaveLength(2);
-    expect(finishMessages[1].commitRequestId).toBe(firstFinish.commitRequestId);
-    expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.closed)).toHaveLength(0);
-    jest.advanceTimersByTime(5_000);
-    expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.finish)).toHaveLength(2);
-  });
-
-  test('reports a normal pagehide as closed when Finish was not requested', () => {
-    const harness = createHarness();
-
-    harness.dispatchPageHide();
-
-    expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.finish)).toHaveLength(0);
-    expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.closed)).toHaveLength(1);
-  });
-
-  test('uses the native X as Done on configured iOS scanners', () => {
-    const harness = createHarness({ ios: true, commitOnReturnOnIos: true });
-    harness.acceptCandidate();
-
-    expect(harness.finish.hidden).toBe(true);
-    expect(harness.status.textContent).toContain('use the browser X when finished');
-
-    harness.dispatchPageHide();
-
-    expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.finish)).toHaveLength(0);
-    expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.closed)).toHaveLength(0);
-  });
-
-  test('keeps explicit Finish and page-close handling on Android when native return is configured', () => {
-    const harness = createHarness({ commitOnReturnOnIos: true });
-    harness.acceptCandidate();
-
-    expect(harness.finish.hidden).toBe(false);
-    harness.dispatchPageHide();
-
-    expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.finish)).toHaveLength(0);
-    expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.closed)).toHaveLength(1);
-  });
-
-  test('keeps explicit Finish on iOS when native return is not configured', () => {
-    const harness = createHarness({ ios: true });
-    harness.acceptCandidate();
-
-    expect(harness.finish.hidden).toBe(false);
-    harness.dispatchPageHide();
-
-    expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.finish)).toHaveLength(0);
-    expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.closed)).toHaveLength(1);
+    expect(harness.status.textContent).toBe('1 receipt added.');
+    expect(harness.fakeWindow.close).toHaveBeenCalled();
   });
 });

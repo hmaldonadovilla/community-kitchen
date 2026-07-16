@@ -5,6 +5,7 @@ export const QR_SCANNER_SESSION_PROPERTY_PREFIX = 'CK_QR_SESSION_V1_';
 export const MAX_QR_SCANNER_SESSION_BYTES = 8500;
 export const MAX_QR_SCANNER_STORED_SESSIONS = 30;
 const EXPIRED_SESSION_RETENTION_MS = 10 * 60 * 1000;
+const ACTIVE_SESSION_EVICTION_GRACE_MS = 2 * 60 * 1000;
 const LOCK_TIMEOUT_MS = 8000;
 
 export interface QrScannerPropertyStore {
@@ -87,7 +88,7 @@ export class AppsScriptQrScannerSessionStore implements QrScannerSessionStore {
 
   create(session: StoredQrScannerSession): StoredQrScannerSession {
     return this.withLock(() => {
-      const sessionProperties = this.cleanupLocked();
+      const sessionProperties = this.cleanupLocked(true);
       const key = sessionKey(session.id);
       if (sessionProperties.some(entry => entry.key === key)) throw qrScannerError('INVALID_REQUEST');
       if (sessionProperties.length >= MAX_QR_SCANNER_STORED_SESSIONS) {
@@ -161,7 +162,7 @@ export class AppsScriptQrScannerSessionStore implements QrScannerSessionStore {
       .map(key => ({ key, session: parseSession(all[key]) }));
   }
 
-  private cleanupLocked(): Array<{ key: string; session: StoredQrScannerSession | null }> {
+  private cleanupLocked(reclaimCapacity = false): Array<{ key: string; session: StoredQrScannerSession | null }> {
     const deleteBefore = this.nowMs() - EXPIRED_SESSION_RETENTION_MS;
     const entries = this.sessionPropertiesLocked();
     const remaining = entries.filter(entry => {
@@ -173,12 +174,38 @@ export class AppsScriptQrScannerSessionStore implements QrScannerSessionStore {
       return true;
     });
 
-    if (remaining.length < MAX_QR_SCANNER_STORED_SESSIONS) return remaining;
+    if (!reclaimCapacity || remaining.length < MAX_QR_SCANNER_STORED_SESSIONS) return remaining;
     const terminal = remaining
       .filter(entry => entry.session && ['COMPLETED', 'CANCELLED', 'EXPIRED'].includes(entry.session.status))
       .sort((left, right) => Date.parse(left.session!.updatedAt) - Date.parse(right.session!.updatedAt));
     while (remaining.length >= MAX_QR_SCANNER_STORED_SESSIONS && terminal.length) {
       const evicted = terminal.shift();
+      if (!evicted) break;
+      this.properties.deleteProperty(evicted.key);
+      const index = remaining.findIndex(entry => entry.key === evicted.key);
+      if (index >= 0) remaining.splice(index, 1);
+    }
+
+    // Incremental sessions intentionally remain ACTIVE when the camera UI is
+    // closed: native browser controls do not provide a reliable close signal.
+    // Under global property pressure, reclaim the oldest ACTIVE session that
+    // has no durable append in progress. A PENDING session is never evicted.
+    const idleBefore = this.nowMs() - ACTIVE_SESSION_EVICTION_GRACE_MS;
+    const idleActive = remaining
+      .filter(
+        entry => {
+          const updatedAt = entry.session ? Date.parse(entry.session.updatedAt || '') : Number.NaN;
+          return Boolean(
+            entry.session?.status === 'ACTIVE' &&
+            Number.isFinite(updatedAt) &&
+            updatedAt <= idleBefore &&
+            !entry.session.candidates.some(candidate => candidate.incremental?.state === 'PENDING')
+          );
+        }
+      )
+      .sort((left, right) => Date.parse(left.session!.updatedAt) - Date.parse(right.session!.updatedAt));
+    while (remaining.length >= MAX_QR_SCANNER_STORED_SESSIONS && idleActive.length) {
+      const evicted = idleActive.shift();
       if (!evicted) break;
       this.properties.deleteProperty(evicted.key);
       const index = remaining.findIndex(entry => entry.key === evicted.key);

@@ -87,6 +87,7 @@ export const shouldDeferRecordFreshnessSync = (args: {
   draftSaveInFlight: boolean;
   submissionInFlight: boolean;
   uploadInFlight: boolean;
+  qrScannerInFlight?: boolean;
   recordSyncInFlight: boolean;
   utilisationSyncInFlight?: boolean;
   guidedStepLiveSyncInFlight: boolean;
@@ -127,6 +128,7 @@ export const resolveRecordFreshnessSyncBlockers = (args: {
   draftSaveInFlight: boolean;
   submissionInFlight: boolean;
   uploadInFlight: boolean;
+  qrScannerInFlight?: boolean;
   recordSyncInFlight: boolean;
   utilisationSyncInFlight?: boolean;
   guidedStepLiveSyncInFlight: boolean;
@@ -157,6 +159,7 @@ export const resolveRecordFreshnessSyncBlockers = (args: {
   if (args.draftSaveInFlight) blockers.push('draftSave.inFlight');
   if (args.submissionInFlight) blockers.push('submission.inFlight');
   if (args.uploadInFlight) blockers.push('upload.inFlight');
+  if (args.qrScannerInFlight) blockers.push('qrScanner.inFlight');
   if (args.recordSyncInFlight) blockers.push('recordSync.inFlight');
   if (args.utilisationSyncInFlight) blockers.push('utilisationSync.inFlight');
   if (args.guidedStepLiveSyncInFlight) blockers.push('guidedStep.liveSync');
@@ -167,9 +170,10 @@ export const resolveRecordFreshnessSyncBlockers = (args: {
 };
 
 export const resolveDeferredRecordFreshnessResumeAction = (args: {
-  pending?: { recordId?: string | null } | null;
+  pending?: { recordId?: string | null; serverVersion?: number | null } | null;
   view: View;
   currentRecordId?: string | null;
+  currentDataVersion?: number | null;
   recordLoading: boolean;
   submitting: boolean;
   recordSyncInFlight: boolean;
@@ -182,6 +186,17 @@ export const resolveDeferredRecordFreshnessResumeAction = (args: {
   const currentRecordId = (args.currentRecordId || '').toString().trim();
   if (!pendingRecordId || !currentRecordId) return 'wait';
   if (pendingRecordId !== currentRecordId) return 'clear';
+  const currentDataVersion = Number(args.currentDataVersion);
+  const pendingServerVersion = Number(args.pending.serverVersion);
+  if (
+    Number.isFinite(currentDataVersion) &&
+    currentDataVersion > 0 &&
+    Number.isFinite(pendingServerVersion) &&
+    pendingServerVersion > 0 &&
+    currentDataVersion >= pendingServerVersion
+  ) {
+    return 'clear';
+  }
   if (args.recordLoading || args.submitting || args.recordSyncInFlight) return 'wait';
   if (Array.isArray(args.blockers) && args.blockers.length > 0) return 'wait';
   return 'resume';

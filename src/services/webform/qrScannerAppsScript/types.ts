@@ -32,6 +32,10 @@ export interface StoredQrScannerCandidate {
   displayName?: string;
   mimeType?: string;
   retryable?: boolean;
+  incremental?: {
+    state: 'PENDING' | 'RETRYABLE' | 'COMPLETED';
+    updatedAt: string;
+  };
   checkedAt: string;
 }
 
@@ -44,6 +48,30 @@ export interface QrScannerCommitResult {
   links: string[];
   returnUrl: string;
   summaryCode: 'COMMITTED' | 'NOTHING_TO_COMMIT';
+}
+
+/** Authoritative upload-field state after one accepted scan is attached. */
+export interface QrScannerIncrementalCommitResult {
+  linkedCount: 1;
+  skippedCount: 0;
+  recordId: string;
+  dataVersion: number;
+  fieldValue: string;
+  links: string[];
+  summaryCode: 'COMMITTED';
+  /** True when a same-scan retry reconciled a link that was already durable. */
+  idempotent: boolean;
+}
+
+export interface QrScannerFieldAppendResult {
+  success: boolean;
+  code?: 'RECORD_CHANGED' | 'NOT_FOUND' | 'CONFIGURATION_ERROR' | 'LIMIT_REACHED' | 'TEMPORARY_ERROR';
+  message: string;
+  appendedCount?: number;
+  dataVersion?: number;
+  fieldValue?: string;
+  links?: string[];
+  idempotent?: boolean;
 }
 
 export interface StoredQrScannerSession {
@@ -60,6 +88,8 @@ export interface StoredQrScannerSession {
   maxFiles: number;
   existingCount: number;
   existingFileIds: string[];
+  /** Total files added by this session, including completed candidates compacted from storage. */
+  incrementalAcceptedCount?: number;
   returnContext?: Record<string, string>;
   returnUrl: string;
   status: QrScannerSessionStatus;
@@ -132,16 +162,7 @@ export interface QrScannerAuthoritativeService {
     fieldId: string;
     links: string[];
     expectedDataVersion: number;
-  }): {
-    success: boolean;
-    code?: 'RECORD_CHANGED' | 'NOT_FOUND' | 'CONFIGURATION_ERROR' | 'LIMIT_REACHED' | 'TEMPORARY_ERROR';
-    message: string;
-    appendedCount?: number;
-    dataVersion?: number;
-    fieldValue?: string;
-    links?: string[];
-    idempotent?: boolean;
-  };
+  }): QrScannerFieldAppendResult;
 }
 
 export interface QrScannerTarget {

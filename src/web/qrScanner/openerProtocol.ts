@@ -252,7 +252,13 @@ export const parseQrScannerToOpenerMessage = (
   const base = baseMessage(value, expectedRequestId);
   if (!base) return null;
 
-  if ([QR_SCANNER_MESSAGE_TYPES.ready, QR_SCANNER_MESSAGE_TYPES.cancel, QR_SCANNER_MESSAGE_TYPES.closed].includes(base.type as any)) {
+  if (
+    [
+      QR_SCANNER_MESSAGE_TYPES.ready,
+      QR_SCANNER_MESSAGE_TYPES.cancel,
+      QR_SCANNER_MESSAGE_TYPES.closed
+    ].includes(base.type as any)
+  ) {
     return { ...buildBase(base.type as any, base.requestId) } as QrScannerToOpenerMessage;
   }
   if (base.type === QR_SCANNER_MESSAGE_TYPES.scan) {

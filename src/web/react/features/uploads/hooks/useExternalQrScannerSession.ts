@@ -3,30 +3,24 @@ import React from 'react';
 import type { QrScanSessionLaunchResult } from '../../../../../types';
 import {
   buildQrScannerCandidateMessage,
-  buildQrScannerCancelledMessage,
   buildQrScannerCommitMessage,
-  buildQrScannerErrorMessage,
   buildQrScannerSetupMessage,
   parseQrScannerToOpenerMessage,
   QR_SCANNER_MESSAGE_TYPES,
   type QrScannerCandidateMessage,
-  type QrScannerCommitMessage,
   type QrScannerScanMessage
 } from '../../../../qrScanner/openerProtocol';
-import { isIosLikeScannerPlatform } from '../../../../qrScanner/platform';
 import { resolveExternalQrScannerLaunch } from '../domain/externalQrScanner';
-import { resolveNativeQrScannerReturnAction } from '../domain/qrScannerReturn';
 import type {
   ApplyQrScannerCommittedUpdate,
   BeginQrScannerInteraction,
   EndQrScannerInteraction,
-  PrepareQrScannerLaunch
+  PrepareQrScannerLaunch,
+  ReportQrScannerCandidateOutcome,
+  UpdateQrScannerPendingWork
 } from '../qrScannerTypes';
 import {
   addQrScannerCandidate,
-  cancelQrScannerSession,
-  commitQrScannerSession,
-  getQrScannerSession,
   redeemQrScannerSession,
   QrScannerSessionError,
   type QrScannerCandidateResult,
@@ -37,10 +31,7 @@ import {
 
 const SCANNER_WINDOW_NAME = 'ckReceiptQrScanner';
 const MAX_PENDING_SCANS = 20;
-const SESSION_WINDOW_TIMEOUT_MS = 20 * 60 * 1000;
-const TERMINAL_RESPONSE_GRACE_MS = 60 * 1000;
-const NATIVE_RETURN_RETRY_DELAY_MS = 1200;
-const NATIVE_RETURN_MAX_RETRIES = 3;
+const ADD_CANDIDATE_MAX_ATTEMPTS = 2;
 
 type ActiveScannerCleanup = (reason: 'replaced' | 'unmounted') => void;
 
@@ -74,7 +65,7 @@ const candidateMessage = (
   requestId: string,
   scanId: string,
   result: QrScannerCandidateResult
-) => {
+): QrScannerCandidateMessage => {
   const candidate = result.candidate;
   const status =
     candidate.status === 'AUTHORISED'
@@ -84,18 +75,21 @@ const candidateMessage = (
         : candidate.status === 'RETRYABLE_ERROR'
           ? 'error'
           : 'rejected';
-  const message =
-    status === 'accepted'
-      ? 'Receipt checked and ready to add.'
-      : status === 'duplicate'
-        ? 'This receipt was already scanned or linked.'
-        : status === 'error'
-          ? 'This receipt could not be checked. Scan it again.'
-          : candidate.code === 'LIMIT_REACHED'
-            ? 'The maximum number of receipts has been reached.'
-            : candidate.code === 'UNSUPPORTED_TYPE'
-              ? 'This file type is not allowed for this field.'
-              : 'This QR code is not an authorised receipt.';
+  let message = 'This QR code is not an authorised receipt.';
+  if (status === 'accepted') message = 'Receipt added. Scan another receipt.';
+  else if (status === 'duplicate') message = 'This receipt was already scanned or linked.';
+  else if (status === 'error') message = 'This receipt could not be checked. Scan it again.';
+  else if (candidate.code === 'RECORD_CHANGED') {
+    message = 'The form changed while this receipt was being added. Return to the form and reopen the scanner.';
+  } else if (['SESSION_EXPIRED', 'SESSION_NOT_ACTIVE'].includes(candidate.code)) {
+    message = 'This scan session has ended. Return to the form and reopen the scanner.';
+  } else if (candidate.code === 'CONFIGURATION_ERROR') {
+    message = 'The scanner configuration changed. Return to the form and reopen the scanner.';
+  } else if (candidate.code === 'LIMIT_REACHED') {
+    message = 'The maximum number of receipts has been reached.';
+  } else if (candidate.code === 'UNSUPPORTED_TYPE') {
+    message = 'This file type is not allowed for this field.';
+  }
   return buildQrScannerCandidateMessage(requestId, {
     scanId,
     status,
@@ -118,6 +112,8 @@ export const useExternalQrScannerSession = (args: {
   prepareSession?: PrepareQrScannerLaunch;
   onSessionReady?: BeginQrScannerInteraction;
   onSessionEnd?: EndQrScannerInteraction;
+  onPendingWorkChange?: UpdateQrScannerPendingWork;
+  onCandidateOutcome?: ReportQrScannerCandidateOutcome;
   onCommitted?: ApplyQrScannerCommittedUpdate;
   onUnavailable?: (message: string) => void;
   onDiagnostic?: (event: string, payload?: Record<string, unknown>) => void;
@@ -151,6 +147,7 @@ export const useExternalQrScannerSession = (args: {
       current.onUnavailable?.(errorDetails(error).message);
       return false;
     }
+
     const external = resolveExternalQrScannerLaunch({
       assetBaseUrl: current.assetBaseUrl,
       requestId,
@@ -165,6 +162,7 @@ export const useExternalQrScannerSession = (args: {
       return false;
     }
     const scannerLaunch = external;
+
     const launchTarget = {
       fieldId: current.fieldId,
       fieldPath: current.fieldPath,
@@ -173,41 +171,38 @@ export const useExternalQrScannerSession = (args: {
       commitOnReturnOnIos: current.commitOnReturnOnIos === true,
       prepareSession: current.prepareSession
     };
-    const browserNavigator = typeof navigator === 'undefined' ? null : navigator;
-    const nativeReturnCommitEnabled = Boolean(
-      launchTarget.commitOnReturnOnIos &&
-      browserNavigator &&
-      isIosLikeScannerPlatform({
-        userAgent: browserNavigator.userAgent,
-        platform: browserNavigator.platform,
-        maxTouchPoints: browserNavigator.maxTouchPoints
-      })
-    );
-
+    const launchCallbacks = {
+      onSessionReady: current.onSessionReady,
+      onSessionEnd: current.onSessionEnd,
+      onPendingWorkChange: current.onPendingWorkChange,
+      onCandidateOutcome: current.onCandidateOutcome,
+      onCommitted: current.onCommitted
+    };
     let scannerWindow: Window | null = null;
-    let ended = false;
     let scannerReady = false;
-    let sessionHoldActive = false;
-    let commitInFlight = false;
-    let stableCommitRequestId: string | null = null;
-    let committedUpdateApplied = false;
-    let reconcileWhenReady = false;
-    let reconcilePromise: Promise<void> | null = null;
-    let nativeReturnArmed = false;
-    let nativeReturnHiddenObserved = false;
-    let nativeReturnRetryTimer = 0;
-    let nativeReturnRetryCount = 0;
+    let acceptingScans = true;
+    let detached = false;
+    let disposed = false;
+    let mutationHoldActive = false;
+    let workHadFailure = false;
+    let finishAckScheduled = false;
     let scanChain: Promise<void> = Promise.resolve();
-    let terminalCommitMessage: QrScannerCommitMessage | null = null;
+    let sessionPromise: Promise<{
+      credentials: QrScannerSessionCredentials;
+      session: QrScannerSessionProjection;
+    }> | null = null;
+    let sessionState: {
+      credentials: QrScannerSessionCredentials;
+      session: QrScannerSessionProjection;
+    } | null = null;
     const pendingScanIds = new Set<string>();
     const candidateMessages = new Map<string, QrScannerCandidateMessage>();
 
     const post = (message: unknown): boolean => {
-      if (ended || !scannerWindow) return false;
+      if (disposed || !scannerWindow) return false;
       try {
         // Mobile browser-owned popup surfaces can report WindowProxy.closed
-        // while the strict-origin message channel still works. Attempt the
-        // message and use exceptions/protocol events as the liveness signal.
+        // while the strict-origin message channel remains usable.
         scannerWindow.postMessage(message, scannerLaunch.origin);
         return true;
       } catch {
@@ -215,62 +210,141 @@ export const useExternalQrScannerSession = (args: {
       }
     };
 
-    const finishHold = (reason: Parameters<EndQrScannerInteraction>[0]): void => {
-      if (!sessionHoldActive) return;
-      sessionHoldActive = false;
-      latestRef.current.onSessionEnd?.(reason);
+    const notifyPendingWork = (): void => {
+      launchCallbacks.onPendingWorkChange?.(pendingScanIds.size);
     };
 
-    let sessionState: {
-      credentials: QrScannerSessionCredentials;
-      session: QrScannerSessionProjection;
-    } | null = null;
+    const beginMutationHold = (): void => {
+      if (mutationHoldActive) return;
+      mutationHoldActive = true;
+      launchCallbacks.onSessionReady?.();
+    };
+
+    const releaseMutationHold = (reason: 'settled' | 'failed'): void => {
+      if (!mutationHoldActive) return;
+      mutationHoldActive = false;
+      launchCallbacks.onSessionEnd?.(reason);
+      workHadFailure = false;
+    };
+
+    const finishMutationHoldIfIdle = (): void => {
+      if (pendingScanIds.size > 0) return;
+      releaseMutationHold(workHadFailure ? 'failed' : 'settled');
+      workHadFailure = false;
+      if (detached) disposed = true;
+    };
 
     const sendSetup = (): void => {
-      if (!scannerReady) return;
-      if (terminalCommitMessage) {
-        post(terminalCommitMessage);
-        return;
-      }
-      if (!sessionState) return;
+      if (!scannerReady || disposed) return;
       post(
         buildQrScannerSetupMessage(requestId, {
-          instruction: sessionState.session.instruction || launchTarget.instruction,
-          maxFiles: sessionState.session.maxFiles,
-          existingCount: sessionState.session.existingCount,
+          ...(sessionState?.session.instruction || launchTarget.instruction
+            ? { instruction: sessionState?.session.instruction || launchTarget.instruction }
+            : {}),
+          ...(sessionState ? { maxFiles: sessionState.session.maxFiles } : {}),
+          ...(sessionState ? { existingCount: sessionState.session.existingCount } : {}),
           hideCloseOnIos: launchTarget.hideCloseOnIos,
+          // Retained on the wire for cached scanner pages. Persistence no
+          // longer depends on detecting a native return on any platform.
           commitOnReturnOnIos: launchTarget.commitOnReturnOnIos
         })
       );
-      candidateMessages.forEach(message => post(message));
     };
 
-    let startSessionPreparation = (): void => undefined;
-    const sessionStart = new Promise<void>(resolve => {
-      startSessionPreparation = resolve;
-    });
-    const sessionPromise = sessionStart.then(async () => {
-      const launch = await launchTarget.prepareSession!({
-        fieldId: launchTarget.fieldId,
-        fieldPath: launchTarget.fieldPath
+    const ensureSession = (): Promise<{
+      credentials: QrScannerSessionCredentials;
+      session: QrScannerSessionProjection;
+    }> => {
+      if (sessionPromise) return sessionPromise;
+      const pending = (async () => {
+        const launch = await launchTarget.prepareSession({
+          fieldId: launchTarget.fieldId,
+          fieldPath: launchTarget.fieldPath
+        });
+        if (!launch.success) throw launchError(launch);
+        // Preparation flushes pending form edits. Hold autosave from this
+        // point until every queued scanner mutation has settled.
+        beginMutationHold();
+        const redeemed = await redeemQrScannerSession(launch);
+        sessionState = redeemed;
+        sendSetup();
+        latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.sessionReady', {
+          fieldPath: launchTarget.fieldPath,
+          sessionId: redeemed.session.id
+        });
+        return redeemed;
+      })();
+      sessionPromise = pending;
+      void pending.catch(() => {
+        if (sessionPromise === pending) sessionPromise = null;
       });
-      if (!launch.success) throw launchError(launch);
-      const redeemed = await redeemQrScannerSession(launch);
-      if (ended) return redeemed;
-      sessionState = redeemed;
-      sessionHoldActive = true;
-      latestRef.current.onSessionReady?.();
-      sendSetup();
-      latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.sessionReady', {
-        fieldPath: launchTarget.fieldPath,
-        sessionId: redeemed.session.id
-      });
-      if (reconcileWhenReady) void reconcileSession('resume');
-      return redeemed;
-    });
+      return pending;
+    };
+
+    const applyCommittedUpdate = (result: QrScannerCommittedFieldResult): void => {
+      try {
+        launchCallbacks.onCommitted?.({
+          fieldId: launchTarget.fieldId,
+          fieldPath: launchTarget.fieldPath,
+          recordId: result.recordId,
+          fieldValue: result.fieldValue,
+          links: result.links,
+          linkedCount: result.linkedCount,
+          dataVersion: result.dataVersion
+        });
+      } catch (error) {
+        latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.updateApplyFailed', {
+          fieldPath: launchTarget.fieldPath,
+          message: error instanceof Error ? error.message : 'The scanner update could not be applied.'
+        });
+      }
+    };
+
+    const addCandidateWithRetry = async (
+      credentials: QrScannerSessionCredentials,
+      message: QrScannerScanMessage
+    ): Promise<QrScannerCandidateResult> => {
+      let lastError: unknown;
+      for (let attempt = 1; attempt <= ADD_CANDIDATE_MAX_ATTEMPTS; attempt += 1) {
+        try {
+          const result = await addQrScannerCandidate(credentials, {
+            scanId: message.scanId,
+            rawValue: message.value
+          });
+          const retryableResult =
+            result.candidate.status === 'RETRYABLE_ERROR' ||
+            (result.candidate.status === 'AUTHORISED' && !result.committed);
+          if (!retryableResult || attempt === ADD_CANDIDATE_MAX_ATTEMPTS) {
+            return result;
+          }
+          latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.candidateRetry', {
+            fieldPath: launchTarget.fieldPath,
+            scanId: message.scanId,
+            code: result.candidate.code,
+            attempt
+          });
+        } catch (error) {
+          lastError = error;
+          const failure = errorDetails(error);
+          if (!failure.retryable || attempt === ADD_CANDIDATE_MAX_ATTEMPTS) throw error;
+          latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.candidateRetry', {
+            fieldPath: launchTarget.fieldPath,
+            scanId: message.scanId,
+            code: failure.code,
+            attempt
+          });
+        }
+      }
+      throw lastError || new QrScannerSessionError('TEMPORARY_ERROR', 'The receipt could not be checked.', true);
+    };
 
     const enqueueScan = (message: QrScannerScanMessage): void => {
-      if (pendingScanIds.has(message.scanId)) return;
+      const completed = candidateMessages.get(message.scanId);
+      if (completed) {
+        post(completed);
+        return;
+      }
+      if (!acceptingScans || pendingScanIds.has(message.scanId)) return;
       if (pendingScanIds.size >= MAX_PENDING_SCANS) {
         post(
           buildQrScannerCandidateMessage(requestId, {
@@ -282,367 +356,124 @@ export const useExternalQrScannerSession = (args: {
         );
         return;
       }
+
+      if (pendingScanIds.size === 0) workHadFailure = false;
       pendingScanIds.add(message.scanId);
+      notifyPendingWork();
       scanChain = scanChain
         .then(async () => {
-          if (ended) return;
-          const ready = await sessionPromise;
-          if (ended) return;
-          const result = await addQrScannerCandidate(ready.credentials, {
-            scanId: message.scanId,
-            rawValue: message.value
-          });
+          const ready = await ensureSession();
+          beginMutationHold();
+          const result = await addCandidateWithRetry(ready.credentials, message);
           if (sessionState) sessionState = { ...sessionState, session: result.session };
+          if (result.candidate.status === 'AUTHORISED') {
+            if (!result.committed) {
+              throw new QrScannerSessionError(
+                'INTERNAL_ERROR',
+                'The receipt was checked but its saved field update was missing.'
+              );
+            }
+            // Apply the authoritative record state before telling the camera
+            // page that the receipt was added.
+            applyCommittedUpdate(result.committed);
+          }
           const response = candidateMessage(requestId, message.scanId, result);
           candidateMessages.set(message.scanId, response);
+          sendSetup();
           const posted = post(response);
+          if (response.status !== 'accepted') {
+            launchCallbacks.onCandidateOutcome?.({
+              scanId: response.scanId,
+              status: response.status,
+              code: response.code || 'INTERNAL_ERROR',
+              message: response.message || 'This receipt could not be added.'
+            });
+          }
           latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.candidate', {
             fieldPath: launchTarget.fieldPath,
             scanId: message.scanId,
             code: result.candidate.code,
             status: result.candidate.status,
-            posted
+            posted,
+            committed: Boolean(result.committed)
           });
         })
         .catch(error => {
-          if (ended) return;
-          const failure = errorDetails(error);
-          post(
-            buildQrScannerCandidateMessage(requestId, {
-              scanId: message.scanId,
-              status: 'error',
-              code: failure.code,
-              message: failure.retryable
-                ? 'This receipt could not be checked. Scan it again.'
-                : failure.message
-            })
-          );
-        })
-        .finally(() => {
-          pendingScanIds.delete(message.scanId);
-        });
-    };
-
-    let timeoutId = 0;
-    const removeListeners = (): void => {
-      window.removeEventListener('message', handleMessage);
-      window.removeEventListener('focus', handleResume);
-      window.removeEventListener('pageshow', handleResume);
-      window.removeEventListener('blur', handleOriginAway);
-      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', handleVisibilityChange);
-      if (timeoutId) window.clearTimeout(timeoutId);
-      if (nativeReturnRetryTimer) window.clearTimeout(nativeReturnRetryTimer);
-      if (activeCleanupRef.current === cleanup) activeCleanupRef.current = null;
-    };
-
-    const applyCommittedUpdate = (result: QrScannerCommittedFieldResult): void => {
-      if (committedUpdateApplied) return;
-      committedUpdateApplied = true;
-      try {
-        latestRef.current.onCommitted?.({
-          fieldId: launchTarget.fieldId,
-          fieldPath: launchTarget.fieldPath,
-          recordId: result.recordId,
-          fieldValue: result.fieldValue,
-          links: result.links,
-          linkedCount: result.linkedCount,
-          dataVersion: result.dataVersion
-        });
-      } catch (error) {
-        latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.reconcileApplyFailed', {
-          fieldPath: launchTarget.fieldPath,
-          message: error instanceof Error ? error.message : 'Committed scanner update could not be applied.'
-        });
-      }
-    };
-
-    const completeCommittedSession = (
-      result: QrScannerCommittedFieldResult,
-      source: 'commit' | 'resume' | 'cancelRace'
-    ): void => {
-      applyCommittedUpdate(result);
-      if (nativeReturnRetryTimer) {
-        window.clearTimeout(nativeReturnRetryTimer);
-        nativeReturnRetryTimer = 0;
-      }
-      terminalCommitMessage ||= buildQrScannerCommitMessage(requestId, {
-        status: 'committed',
-        linkedCount: result.linkedCount,
-        message: result.linkedCount === 1 ? '1 receipt added.' : `${result.linkedCount} receipts added.`
-      });
-      if (!ended) post(terminalCommitMessage);
-      commitInFlight = false;
-      if (!ended) {
-        window.removeEventListener('focus', handleResume);
-        window.removeEventListener('pageshow', handleResume);
-        window.removeEventListener('blur', handleOriginAway);
-        if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', handleVisibilityChange);
-        if (timeoutId) window.clearTimeout(timeoutId);
-        timeoutId = window.setTimeout(() => {
-          ended = true;
-          removeListeners();
-        }, TERMINAL_RESPONSE_GRACE_MS);
-      }
-      latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.committed', {
-        fieldPath: launchTarget.fieldPath,
-        linkedCount: result.linkedCount,
-        dataVersion: result.dataVersion ?? null,
-        source
-      });
-      finishHold('committed');
-    };
-
-    const failTerminalSession = (failure: { code: string; message: string }): void => {
-      if (ended) return;
-      post(buildQrScannerErrorMessage(requestId, { ...failure, retryable: false }));
-      commitInFlight = false;
-      ended = true;
-      removeListeners();
-      finishHold('failed');
-    };
-
-    const scheduleNativeReturnRetry = (failure: { code: string; retryable: boolean }): boolean => {
-      if (!failure.retryable || nativeReturnRetryCount >= NATIVE_RETURN_MAX_RETRIES || ended) return false;
-      nativeReturnRetryCount += 1;
-      if (nativeReturnRetryTimer) window.clearTimeout(nativeReturnRetryTimer);
-      nativeReturnRetryTimer = window.setTimeout(() => {
-        nativeReturnRetryTimer = 0;
-        void reconcileSession('resume');
-      }, NATIVE_RETURN_RETRY_DELAY_MS * nativeReturnRetryCount);
-      latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.nativeReturnRetry', {
-        fieldPath: launchTarget.fieldPath,
-        code: failure.code,
-        attempt: nativeReturnRetryCount
-      });
-      return true;
-    };
-
-    async function reconcileSession(source: 'resume' | 'commitFailure'): Promise<void> {
-      if (ended || terminalCommitMessage) return;
-      if (!sessionState) {
-        reconcileWhenReady = true;
-        return;
-      }
-      reconcileWhenReady = false;
-      if (reconcilePromise) return reconcilePromise;
-
-      const run = (async () => {
-        try {
-          if (source === 'resume' && nativeReturnCommitEnabled && nativeReturnArmed) {
-            await scanChain;
-            if (ended) return;
-          }
-          const snapshot = await getQrScannerSession(sessionState!.credentials);
-          if (ended) return;
-          sessionState = { ...sessionState!, session: snapshot.session };
-          if (snapshot.session.status === 'COMPLETED') {
-            if (snapshot.session.commitResult) {
-              completeCommittedSession(snapshot.session.commitResult, 'resume');
-            } else {
-              failTerminalSession({
-                code: 'INTERNAL_ERROR',
-                message: 'The completed scanner session could not be restored. Reload the form to see the saved receipts.'
-              });
-            }
-            return;
-          }
-          if (snapshot.session.status === 'CANCELLED') {
-            post(buildQrScannerCancelledMessage(requestId, 'Scan cancelled.'));
-            ended = true;
-            removeListeners();
-            finishHold('cancelled');
-            return;
-          }
-          if (snapshot.session.status === 'EXPIRED') {
-            failTerminalSession({
-              code: 'SESSION_EXPIRED',
-              message: 'This scan session expired. Return to the form and start again.'
-            });
-            return;
-          }
-          const nativeReturnAction =
-            source === 'resume' && nativeReturnCommitEnabled && nativeReturnArmed
-              ? resolveNativeQrScannerReturnAction(snapshot.session, {
-                  allowEmptyCancel: nativeReturnHiddenObserved
-                })
-              : 'none';
-          if (nativeReturnAction === 'commit') {
-            stableCommitRequestId ||= createSecureRequestId();
-            if (commitInFlight) return;
-            commitInFlight = true;
-            latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.nativeReturnCommitStart', {
-              fieldPath: launchTarget.fieldPath,
-              commitRequestId: stableCommitRequestId
-            });
-            try {
-              const committed = await commitQrScannerSession(sessionState!.credentials, stableCommitRequestId);
-              if (!ended) completeCommittedSession(committed.result, 'resume');
-            } catch (error) {
-              commitInFlight = false;
-              throw error;
-            }
-            return;
-          }
-          if (nativeReturnAction === 'cancel') {
-            latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.nativeReturnEmpty', {
-              fieldPath: launchTarget.fieldPath
-            });
-            endWithoutCommit('closed', false);
-            return;
-          }
-          if (
-            snapshot.session.status === 'COMMITTING' &&
-            stableCommitRequestId
-          ) {
-            const commitWasAlreadyInFlight = commitInFlight;
-            commitInFlight = true;
-            try {
-              const committed = await commitQrScannerSession(sessionState!.credentials, stableCommitRequestId);
-              if (!ended) completeCommittedSession(committed.result, 'resume');
-            } catch (error) {
-              if (!commitWasAlreadyInFlight) commitInFlight = false;
-              const failure = errorDetails(error);
-              latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.reconcileCommitFailed', {
-                fieldPath: launchTarget.fieldPath,
-                code: failure.code,
-                retryable: failure.retryable,
-                source
-              });
-              if (source === 'resume' && nativeReturnCommitEnabled && nativeReturnArmed) throw error;
-            }
-          }
-        } catch (error) {
-          if (ended) return;
+          workHadFailure = true;
           const failure = errorDetails(error);
           if (['SESSION_EXPIRED', 'SESSION_NOT_ACTIVE', 'INVALID_CREDENTIAL', 'NOT_FOUND'].includes(failure.code)) {
-            failTerminalSession(failure);
-            return;
+            sessionPromise = null;
+            sessionState = null;
           }
-          if (source === 'resume' && nativeReturnCommitEnabled && nativeReturnArmed) {
-            if (scheduleNativeReturnRetry(failure)) return;
-            const message = failure.message || 'The scanned receipts could not be added. Refresh the record and try again.';
-            latestRef.current.onUnavailable?.(message);
-            failTerminalSession({ code: failure.code, message });
-            return;
-          }
-          latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.reconcileFailed', {
-            fieldPath: launchTarget.fieldPath,
+          // A failed prepare/redeem or invalidated session must not keep the
+          // autosave hold across the next queued attempt: preparation needs to
+          // flush the latest form state before creating fresh credentials.
+          if (!sessionState) releaseMutationHold('failed');
+          const response = buildQrScannerCandidateMessage(requestId, {
+            scanId: message.scanId,
+            status: 'error',
             code: failure.code,
-            retryable: failure.retryable,
-            source
+            message: failure.retryable
+              ? 'This receipt could not be checked. Scan it again.'
+              : failure.message
           });
-        }
-      })();
-      reconcilePromise = run;
-      await run.finally(() => {
-        if (reconcilePromise === run) reconcilePromise = null;
-      });
-    }
-
-    const cancelPreparedSession = (reason: 'cancelled' | 'closed' | 'failed'): void => {
-      void sessionPromise
-        .then(ready => cancelQrScannerSession(ready.credentials))
-        .then(cancelled => {
-          if (cancelled.status === 'COMPLETED' && cancelled.session.commitResult) {
-            completeCommittedSession(cancelled.session.commitResult, 'cancelRace');
-            return true;
-          }
-          return false;
-        })
-        .catch(() => false)
-        .then(commitRecovered => {
-          if (!commitRecovered) finishHold(reason);
-        });
-    };
-
-    const endWithoutCommit = (reason: 'cancelled' | 'closed' | 'failed', notifyScanner: boolean): void => {
-      if (ended || commitInFlight) return;
-      if (terminalCommitMessage) {
-        ended = true;
-        removeListeners();
-        return;
-      }
-      if (notifyScanner) post(buildQrScannerCancelledMessage(requestId, 'Scan cancelled.'));
-      ended = true;
-      removeListeners();
-      cancelPreparedSession(reason);
-    };
-
-    const cleanup: ActiveScannerCleanup = () => {
-      endWithoutCommit('closed', false);
-    };
-
-    const handleFinish = (commitRequestId: string): void => {
-      latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.finishReceived', {
-        fieldPath: launchTarget.fieldPath,
-        commitRequestId,
-        duplicate: commitInFlight || Boolean(terminalCommitMessage)
-      });
-      if (ended) return;
-      if (terminalCommitMessage) {
-        post(terminalCommitMessage);
-        return;
-      }
-      if (commitInFlight) {
-        post(buildQrScannerCommitMessage(requestId, { status: 'committing', message: 'Adding checked receipts...' }));
-        return;
-      }
-      stableCommitRequestId ||= commitRequestId;
-      commitInFlight = true;
-      post(buildQrScannerCommitMessage(requestId, { status: 'committing', message: 'Adding checked receipts...' }));
-      latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.commitStart', {
-        fieldPath: launchTarget.fieldPath,
-        commitRequestId: stableCommitRequestId
-      });
-      void (async () => {
-        try {
-          await scanChain;
-          const ready = await sessionPromise;
-          if (ended) return;
-          const committed = await commitQrScannerSession(ready.credentials, stableCommitRequestId!);
-          if (ended) return;
-          completeCommittedSession(committed.result, 'commit');
-        } catch (error) {
-          if (ended) return;
-          commitInFlight = false;
-          const failure = errorDetails(error);
-          await reconcileSession('commitFailure');
-          if (ended) return;
-          post(
-            buildQrScannerCommitMessage(requestId, {
-              status: 'error',
-              message: failure.message || 'The receipts could not be added. Try again.'
-            })
-          );
-          latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.commitFailed', {
+          candidateMessages.set(message.scanId, response);
+          post(response);
+          launchCallbacks.onCandidateOutcome?.({
+            scanId: response.scanId,
+            status: 'error',
+            code: response.code || failure.code,
+            message: response.message || failure.message
+          });
+          latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.candidateFailed', {
             fieldPath: launchTarget.fieldPath,
+            scanId: message.scanId,
             code: failure.code,
             retryable: failure.retryable
           });
-        }
-      })();
+        })
+        .finally(() => {
+          pendingScanIds.delete(message.scanId);
+          notifyPendingWork();
+          finishMutationHoldIfIdle();
+        });
     };
 
-    function handleResume(): void {
-      if (nativeReturnCommitEnabled) {
-        if (!nativeReturnArmed) return;
-        if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
-      }
-      void reconcileSession('resume');
-    }
+    const removeListeners = (): void => {
+      window.removeEventListener('message', handleMessage);
+      if (activeCleanupRef.current === cleanup) activeCleanupRef.current = null;
+    };
 
-    function handleOriginAway(): void {
-      if (nativeReturnCommitEnabled && !ended) nativeReturnArmed = true;
-    }
-
-    function handleVisibilityChange(): void {
-      if (document.visibilityState === 'hidden') {
-        nativeReturnHiddenObserved = true;
-        handleOriginAway();
-        return;
+    const detach = (): void => {
+      if (detached) return;
+      acceptingScans = false;
+      detached = true;
+      removeListeners();
+      if (pendingScanIds.size === 0) {
+        finishMutationHoldIfIdle();
+        disposed = true;
       }
-      handleResume();
-    }
+    };
+
+    const handleLegacyFinish = (): void => {
+      if (finishAckScheduled || disposed) return;
+      finishAckScheduled = true;
+      acceptingScans = false;
+      post(buildQrScannerCommitMessage(requestId, { status: 'committing', message: 'Finishing scans...' }));
+      void scanChain.finally(() => {
+        if (!disposed) {
+          const linkedCount = Array.from(candidateMessages.values()).filter(message => message.status === 'accepted').length;
+          post(
+            buildQrScannerCommitMessage(requestId, {
+              status: 'committed',
+              linkedCount,
+              message: linkedCount === 1 ? '1 receipt added.' : `${linkedCount} receipts added.`
+            })
+          );
+        }
+        detach();
+      });
+    };
 
     function handleMessage(event: MessageEvent): void {
       if (event.origin !== scannerLaunch.origin || !event.source) return;
@@ -659,73 +490,44 @@ export const useExternalQrScannerSession = (args: {
         case QR_SCANNER_MESSAGE_TYPES.ready:
           scannerReady = true;
           sendSetup();
+          candidateMessages.forEach(candidate => post(candidate));
           break;
         case QR_SCANNER_MESSAGE_TYPES.scan:
-          if (terminalCommitMessage) {
-            post(terminalCommitMessage);
-            return;
-          }
           scannerReady = true;
           sendSetup();
           enqueueScan(message);
           break;
         case QR_SCANNER_MESSAGE_TYPES.finish:
-          handleFinish(message.commitRequestId);
+          // Compatibility for a scanner page cached before incremental saves.
+          // All candidates are already durable, so no commit RPC is needed.
+          handleLegacyFinish();
           break;
         case QR_SCANNER_MESSAGE_TYPES.cancel:
-          endWithoutCommit('cancelled', true);
-          break;
         case QR_SCANNER_MESSAGE_TYPES.closed:
-          if (nativeReturnCommitEnabled) {
-            nativeReturnArmed = true;
-            nativeReturnHiddenObserved = true;
-            handleResume();
-          } else {
-            endWithoutCommit('closed', false);
-          }
+          // Closing only detaches the camera UI. It must never cancel durable
+          // links or interrupt an addCandidate request already in flight.
+          detach();
           break;
         default:
           break;
       }
     }
 
-    void sessionPromise.catch(error => {
-      if (ended) return;
-      const failure = errorDetails(error);
-      const terminalFailure = {
-        code: failure.code,
-        message: `${failure.message} Close this scanner and start again from the form.`
-      };
-      post(buildQrScannerErrorMessage(requestId, { ...terminalFailure, retryable: false }));
-      latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.sessionFailed', {
-        fieldPath: launchTarget.fieldPath,
-        code: failure.code,
-        retryable: false
-      });
-      ended = true;
-      removeListeners();
-      finishHold('failed');
-    });
+    const cleanup: ActiveScannerCleanup = () => {
+      detach();
+    };
 
     window.addEventListener('message', handleMessage);
-    window.addEventListener('focus', handleResume);
-    window.addEventListener('pageshow', handleResume);
-    window.addEventListener('blur', handleOriginAway);
-    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', handleVisibilityChange);
     scannerWindow = window.open(scannerLaunch.url, SCANNER_WINDOW_NAME, 'popup,width=480,height=760');
     if (!scannerWindow) {
-      ended = true;
+      disposed = true;
       removeListeners();
       current.onDiagnostic?.('upload.linkCapture.externalScanner.blocked', { fieldPath: current.fieldPath });
       current.onUnavailable?.('Could not open the scanner window. Allow popups and try again.');
       return false;
     }
 
-    timeoutId = window.setTimeout(() => endWithoutCommit('closed', false), SESSION_WINDOW_TIMEOUT_MS);
     activeCleanupRef.current = cleanup;
-    // Preserve the user-activation call stack: no asynchronous preparation is
-    // started until after window.open has returned successfully.
-    startSessionPreparation();
     current.onDiagnostic?.('upload.linkCapture.externalScanner.open', {
       fieldPath: current.fieldPath,
       origin: scannerLaunch.origin

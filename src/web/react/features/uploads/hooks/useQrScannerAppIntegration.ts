@@ -182,7 +182,7 @@ export const useQrScannerAppIntegration = (args: UseQrScannerAppIntegrationArgs)
   }, [setAutoSaveHoldFromUi]);
 
   const handleQrScannerSessionEnd = React.useCallback(
-    (reason: 'committed' | 'cancelled' | 'closed' | 'failed') => {
+    (reason: 'settled' | 'committed' | 'cancelled' | 'closed' | 'failed') => {
       setAutoSaveHoldFromUi(false, { reason: 'qrScannerSession' });
       if (autoSaveDirtyRef.current || autoSaveQueuedRef.current) {
         scheduleLatestAutoSave(`qrScanner.${reason}.release`, 0);
@@ -209,6 +209,23 @@ export const useQrScannerAppIntegration = (args: UseQrScannerAppIntegrationArgs)
         return;
       }
 
+      const incomingDataVersion = Number(update.dataVersion);
+      const currentDataVersion = Number(recordDataVersionRef.current);
+      if (
+        Number.isFinite(incomingDataVersion) &&
+        incomingDataVersion > 0 &&
+        Number.isFinite(currentDataVersion) &&
+        currentDataVersion > incomingDataVersion
+      ) {
+        logEvent('qrScanner.update.staleIgnored', {
+          recordId: update.recordId,
+          fieldId: update.fieldId,
+          incomingDataVersion,
+          currentDataVersion
+        });
+        return;
+      }
+
       const hadPendingAutoSave = autoSaveDirtyRef.current || autoSaveQueuedRef.current;
       const nextValues: Record<string, FieldValue> = {
         ...valuesRef.current,
@@ -222,7 +239,7 @@ export const useQrScannerAppIntegration = (args: UseQrScannerAppIntegrationArgs)
         items: update.links
       });
 
-      const nextDataVersion = Number(update.dataVersion);
+      const nextDataVersion = incomingDataVersion;
       if (Number.isFinite(nextDataVersion) && nextDataVersion > 0) {
         recordDataVersionRef.current = nextDataVersion;
         optimisticClientDataVersionRef.current = nextDataVersion;

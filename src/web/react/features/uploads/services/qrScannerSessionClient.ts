@@ -40,6 +40,7 @@ export type QrScannerCommittedFieldResult = {
   fieldValue: string;
   links: string[];
   summaryCode: 'COMMITTED' | 'NOTHING_TO_COMMIT';
+  idempotent?: boolean;
 };
 
 export type QrScannerSessionProjection = {
@@ -64,6 +65,7 @@ export type QrScannerCandidateResult = {
     retryable?: boolean;
   };
   session: QrScannerSessionProjection;
+  committed?: QrScannerCommittedFieldResult;
 };
 
 export type QrScannerCommitResult = {
