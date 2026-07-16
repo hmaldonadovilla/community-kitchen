@@ -177,8 +177,11 @@ export const useExternalQrScannerSession = (args: {
     const pendingScanIds = new Set<string>();
 
     const post = (message: unknown): boolean => {
-      if (ended || !scannerWindow || scannerWindow.closed) return false;
+      if (ended || !scannerWindow) return false;
       try {
+        // Mobile browser-owned popup surfaces can report WindowProxy.closed
+        // while the strict-origin message channel still works. Attempt the
+        // message and use exceptions/protocol events as the liveness signal.
         scannerWindow.postMessage(message, scannerLaunch.origin);
         return true;
       } catch {
@@ -256,12 +259,13 @@ export const useExternalQrScannerSession = (args: {
             scanId: message.scanId,
             rawValue: message.value
           });
-          post(candidateMessage(requestId, message.scanId, result));
+          const delivered = post(candidateMessage(requestId, message.scanId, result));
           latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.candidate', {
             fieldPath: launchTarget.fieldPath,
             scanId: message.scanId,
             code: result.candidate.code,
-            status: result.candidate.status
+            status: result.candidate.status,
+            delivered
           });
         })
         .catch(error => {
@@ -284,13 +288,11 @@ export const useExternalQrScannerSession = (args: {
     };
 
     let timeoutId = 0;
-    let closedPollId = 0;
     const removeListeners = (): void => {
       window.removeEventListener('message', handleMessage);
       window.removeEventListener('focus', handleResume);
       window.removeEventListener('pageshow', handleResume);
       if (timeoutId) window.clearTimeout(timeoutId);
-      if (closedPollId) window.clearInterval(closedPollId);
       if (activeCleanupRef.current === cleanup) activeCleanupRef.current = null;
     };
 
@@ -555,9 +557,6 @@ export const useExternalQrScannerSession = (args: {
     }
 
     timeoutId = window.setTimeout(() => endWithoutCommit('closed', false), SESSION_WINDOW_TIMEOUT_MS);
-    closedPollId = window.setInterval(() => {
-      if (scannerWindow?.closed) endWithoutCommit('closed', false);
-    }, 750);
     activeCleanupRef.current = cleanup;
     // Preserve the user-activation call stack: no asynchronous preparation is
     // started until after window.open has returned successfully.

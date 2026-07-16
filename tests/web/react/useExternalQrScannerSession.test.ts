@@ -301,6 +301,37 @@ describe('external QR scanner session hook', () => {
     expect(mockAddQrScannerCandidate.mock.calls[1][1]).toEqual({ scanId: 'scan-2', rawValue: 'value-2' });
   });
 
+  test('does not treat a mobile WindowProxy closed flag as a terminal scanner close', async () => {
+    const candidateDeferred = deferred<ReturnType<typeof candidateResult>>();
+    mockAddQrScannerCandidate.mockReset().mockImplementationOnce(() => candidateDeferred.promise);
+    const harness = createHarness();
+    expect(harness.hook.openScanner()).toBe(true);
+    await flushPromises();
+
+    harness.dispatch(
+      buildQrScannerScanMessage(harness.requestId(), 'scan-mobile', 'https://drive.google.com/file/d/file-mobile/view')
+    );
+    await flushPromises();
+    (harness.popup as unknown as { closed: boolean }).closed = true;
+    candidateDeferred.resolve(candidateResult('scan-mobile'));
+    await flushPromises();
+
+    expect(harness.popup.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: QR_SCANNER_MESSAGE_TYPES.candidate,
+        scanId: 'scan-mobile',
+        status: 'accepted'
+      }),
+      'https://scanner.example.test'
+    );
+    harness.dispatch(buildQrScannerFinishMessage(harness.requestId(), 'mobile-commit-request'));
+    await flushPromises();
+
+    expect(mockCommitQrScannerSession).toHaveBeenCalledWith(redeemedSession.credentials, 'mobile-commit-request');
+    expect(mockCancelQrScannerSession).not.toHaveBeenCalled();
+    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('committed');
+  });
+
   test('commits Finish once and applies the authoritative field update', async () => {
     const harness = createHarness();
     expect(harness.hook.openScanner()).toBe(true);

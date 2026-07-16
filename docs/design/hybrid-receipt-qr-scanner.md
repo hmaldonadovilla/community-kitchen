@@ -16,7 +16,7 @@ The implementation uses Firebase Hosting for the scanner page and Apps Script fo
 6. The scanner shows a configured instruction, the camera, and one row per scanned receipt with checking, accepted, duplicate, rejected, or retryable feedback.
 7. **Finish and add receipts** revalidates accepted files and performs one idempotent, field-scoped Apps Script append. **Cancel** writes nothing.
 8. The scanner notifies the retained origin tab. The origin updates its local record and file overlay from the committed session result without navigating or reloading the application.
-9. On iOS the page-owned Close control is hidden. The native browser X remains the exit control. Android and desktop may use the page-owned close action when no commit is running.
+9. On iOS the page-owned Close control is hidden and the scanner never calls `window.close()`. After a successful Finish, the scanner stops the camera, confirms that the receipts were added, and waits for the user to use the native browser X. Android and desktop close the scanner programmatically after success and may use the page-owned close action when no commit is running.
 
 ## Security and data integrity
 
@@ -39,6 +39,7 @@ The existing `linkCapture.validation` object remains the source for authoritativ
 - `instruction`: localized, field-specific sentence shown above the camera.
 - `sessionTtlMinutes`: bounded session lifetime.
 - `hideCloseOnIos`: hides only the scanner page's own Close control.
+- `allowedMimeTypes`: optional captured-link MIME policy independent from uploads. An explicit list replaces upload MIME/extension restrictions for scanned Drive files; `*/*` permits any non-folder file that passes the Drive scope policy.
 
 Existing labels and validation messages continue to be configuration-driven. Meal Production supplies the receipt-specific instruction.
 
@@ -48,6 +49,7 @@ Existing labels and validation messages continue to be configuration-driven. Mea
 - If the opener is temporarily suspended, the scanner session and checked candidates remain in Apps Script. The origin reconciles on `message`, `focus`, and `pageshow`.
 - If the opener was discarded, no unsafe client-side save is attempted. The committed field remains authoritative and the normal record reload shows it.
 - Closing the native browser surface before Finish leaves an expiring session and does not mutate the record.
+- On iOS, closing the native browser surface after a confirmed Finish returns to the already-updated form without a scripted close or navigation.
 - A lost commit response is reconciled with the same commit request ID.
 
 ## Implementation slices

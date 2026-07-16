@@ -378,6 +378,19 @@ export const fileTypeMatches = (name: string, mimeType: string, config: FileUplo
   return true;
 };
 
+/**
+ * Applies a link-capture MIME policy independently from upload validation.
+ * Existing configurations inherit upload MIME/extension rules; an explicit
+ * linkCapture.allowedMimeTypes list replaces both for captured Drive files.
+ */
+export const linkCaptureFileTypeMatches = (name: string, mimeType: string, config: FileUploadConfig): boolean => {
+  const linkCaptureMimeTypes = config.linkCapture?.allowedMimeTypes;
+  if (Array.isArray(linkCaptureMimeTypes)) {
+    return fileTypeMatches(name, mimeType, { allowedMimeTypes: linkCaptureMimeTypes });
+  }
+  return fileTypeMatches(name, mimeType, config);
+};
+
 export const isFolderMimeType = (mimeType: string): boolean => mimeType === DRIVE_FOLDER_MIME_TYPE;
 
 export const candidateStatusForCode = (code: QrScannerResultCode): StoredQrScannerCandidate['status'] => {

@@ -84,6 +84,7 @@ describe('staging integrity dialogs and list legend config', () => {
           mode: 'driveQr',
           allowManualPaste: false,
           dedupeBy: 'driveFileId',
+          allowedMimeTypes: ['*/*'],
           instruction: {
             en: 'Point the camera at each QR code on the ingredient receipts.'
           },

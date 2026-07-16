@@ -6,6 +6,7 @@ export type UploadLinkCaptureConfig = {
   mode?: UploadLinkCaptureMode;
   allowManualPaste?: boolean;
   dedupeBy?: UploadLinkCaptureDedupeBy;
+  allowedMimeTypes?: string[];
   instruction?: unknown;
   sessionTtlMinutes?: number;
   hideCloseOnIos?: boolean;

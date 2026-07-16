@@ -1586,6 +1586,13 @@ export interface FileUploadLinkCaptureConfig {
    */
   dedupeBy?: 'url' | 'driveFileId';
   /**
+   * Optional MIME policy for captured Drive links. When present, this replaces
+   * the upload field's MIME/extension restrictions for link capture only.
+   * Use the all-MIME wildcard to allow any non-folder Drive file that passes
+   * scope checks.
+   */
+  allowedMimeTypes?: string[];
+  /**
    * Field-specific sentence shown above the continuous scanner camera.
    */
   instruction?: LocalizedString;

@@ -4,6 +4,7 @@ import {
   canonicalizeQrScannerCommitLinks,
   dedupeUploadLinksByFileId,
   fileTypeMatches,
+  linkCaptureFileTypeMatches,
   parseDriveQrPayload,
   resolveQrScannerInstruction,
   splitUploadLinks
@@ -38,6 +39,22 @@ describe('Apps Script QR scanner domain', () => {
     expect(fileTypeMatches('receipt.bin', 'application/pdf', config)).toBe(true);
     expect(fileTypeMatches('receipt.jpg', 'application/octet-stream', config)).toBe(true);
     expect(fileTypeMatches('receipt.png', 'image/png', config)).toBe(false);
+  });
+
+  test('uses a link-capture MIME policy independently from upload file types', () => {
+    const config = {
+      allowedMimeTypes: ['image/*'],
+      allowedExtensions: ['jpg'],
+      linkCapture: { allowedMimeTypes: ['application/pdf'] }
+    };
+    expect(linkCaptureFileTypeMatches('receipt.pdf', 'application/pdf', config)).toBe(true);
+    expect(linkCaptureFileTypeMatches('receipt.jpg', 'image/jpeg', config)).toBe(false);
+    expect(
+      linkCaptureFileTypeMatches('receipt.txt', 'text/plain', {
+        ...config,
+        linkCapture: { allowedMimeTypes: ['*/*'] }
+      })
+    ).toBe(true);
   });
 
   test('resolves localized scanner instructions with English fallback and a bounded projection', () => {

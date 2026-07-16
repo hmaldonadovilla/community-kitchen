@@ -9,7 +9,7 @@ import {
   QR_SCANNER_MESSAGE_TYPES,
   type QrScannerCandidateMessage
 } from './openerProtocol';
-import { isIosLikeScannerPlatform } from './platform';
+import { isIosLikeScannerPlatform, resolveScannerCloseMode } from './platform';
 import {
   appendCheckingCandidate,
   applyCandidateResult,
@@ -23,6 +23,7 @@ import {
 type StatusTone = 'neutral' | 'success' | 'error';
 
 const params = new URLSearchParams(window.location.search);
+const openerWindow = window.opener;
 const requestId = (params.get('requestId') || '').trim();
 const provisionalInstruction = (params.get('instruction') || '').trim().slice(0, 300);
 const targetOrigin = (() => {
@@ -66,11 +67,13 @@ const scanFingerprints = new Map<string, string>();
 const scanCanvas = document.createElement('canvas');
 const detector = createNativeQrDetector();
 
-const isIosLike = isIosLikeScannerPlatform({
+const scannerPlatform = {
   userAgent: navigator.userAgent,
   platform: navigator.platform,
   maxTouchPoints: navigator.maxTouchPoints
-});
+};
+const isIosLike = isIosLikeScannerPlatform(scannerPlatform);
+const scannerCloseMode = resolveScannerCloseMode(scannerPlatform);
 
 const createMessageId = (prefix: string): string => {
   idSequence += 1;
@@ -98,12 +101,14 @@ const applyCloseVisibility = (): void => {
 };
 
 const postToOpener = (message: unknown): boolean => {
-  if (!targetOrigin || !window.opener || window.opener.closed) {
+  if (!targetOrigin || !openerWindow) {
     failScannerConnection('The form connection is unavailable. Return to the form and try again.');
     return false;
   }
   try {
-    window.opener.postMessage(message, targetOrigin);
+    // WindowProxy.closed is advisory on mobile browser-owned tab surfaces. A
+    // strict-origin postMessage attempt is the reliable liveness check.
+    openerWindow.postMessage(message, targetOrigin);
     return true;
   } catch {
     failScannerConnection('The form connection is unavailable. Return to the form and try again.');
@@ -198,6 +203,7 @@ function failScannerConnection(message: string): void {
 }
 
 const closeScannerWindow = (): void => {
+  if (scannerCloseMode === 'native') return;
   const tryClose = (): void => {
     try {
       window.close();
@@ -322,7 +328,7 @@ const handleCandidate = (message: QrScannerCandidateMessage): void => {
 };
 
 const handleOpenerMessage = (event: MessageEvent): void => {
-  if (!window.opener || event.source !== window.opener || event.origin !== targetOrigin) return;
+  if (!openerWindow || event.source !== openerWindow || event.origin !== targetOrigin) return;
   const message = parseQrScannerFromOpenerMessage(event.data, requestId);
   if (!message) return;
 
@@ -352,12 +358,15 @@ const handleOpenerMessage = (event: MessageEvent): void => {
         closing = true;
         stopCamera();
         const linkedCount = Number(message.linkedCount || 0);
-        setStatus(
+        const successMessage =
           message.message ||
-            (linkedCount === 1 ? '1 receipt added.' : `${linkedCount} receipts added.`),
-          'success'
-        );
-        window.setTimeout(closeScannerWindow, 350);
+          (linkedCount === 1 ? '1 receipt added.' : `${linkedCount} receipts added.`);
+        if (scannerCloseMode === 'native') {
+          setStatus(`${successMessage} Use the browser X to return to the form.`, 'success');
+        } else {
+          setStatus(successMessage, 'success');
+          window.setTimeout(closeScannerWindow, 350);
+        }
       } else {
         commitInFlight = false;
         finishRequested = false;
@@ -369,7 +378,11 @@ const handleOpenerMessage = (event: MessageEvent): void => {
     case QR_SCANNER_MESSAGE_TYPES.cancelled:
       closing = true;
       stopCamera();
-      setStatus(message.message || 'Scan cancelled.');
+      setStatus(
+        scannerCloseMode === 'native'
+          ? `${message.message || 'Scan cancelled.'} Use the browser X to return to the form.`
+          : message.message || 'Scan cancelled.'
+      );
       closeScannerWindow();
       break;
     case QR_SCANNER_MESSAGE_TYPES.error:

@@ -6849,6 +6849,9 @@
           "mode": "driveQr",
           "allowManualPaste": false,
           "dedupeBy": "driveFileId",
+          "allowedMimeTypes": [
+            "*/*"
+          ],
           "instruction": {
             "en": "Point the camera at each QR code on the ingredient receipts."
           },
@@ -10532,6 +10535,9 @@
             "mode": "driveQr",
             "allowManualPaste": false,
             "dedupeBy": "driveFileId",
+            "allowedMimeTypes": [
+              "*/*"
+            ],
             "instruction": {
               "en": "Point the camera at each QR code on the ingredient receipts."
             },

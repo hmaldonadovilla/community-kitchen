@@ -39,7 +39,7 @@ class FakeCrypto implements QrScannerCrypto {
   }
 }
 
-const config = (): any => ({
+const config = (linkCaptureAllowedMimeTypes?: string[]): any => ({
   formKey: 'Config: Receipts',
   form: { configSheet: 'Config: Receipts' },
   questions: [
@@ -56,6 +56,7 @@ const config = (): any => ({
         linkCapture: {
           enabled: true,
           mode: 'driveQr',
+          ...(linkCaptureAllowedMimeTypes ? { allowedMimeTypes: linkCaptureAllowedMimeTypes } : {}),
           instruction: {
             en: 'Point the camera at each QR code on the ingredient receipts.'
           },
@@ -74,7 +75,7 @@ const config = (): any => ({
   validationErrors: []
 });
 
-const makeAuthoritative = () => {
+const makeAuthoritative = (linkCaptureAllowedMimeTypes?: string[]) => {
   const record: any = {
     formKey: 'Config: Receipts',
     id: 'REC-1',
@@ -114,7 +115,7 @@ const makeAuthoritative = () => {
       idempotent: false
     };
   });
-  const fetchFormConfig = jest.fn(() => config());
+  const fetchFormConfig = jest.fn(() => config(linkCaptureAllowedMimeTypes));
   const fetchSubmissionById = jest.fn(() => JSON.parse(JSON.stringify(record)));
   const service: QrScannerAuthoritativeService = {
     fetchFormConfig,
@@ -154,7 +155,7 @@ const makeDrive = (overrides: Partial<Record<string, Partial<DriveAuthorizationM
   return repository;
 };
 
-const makeHarness = (drive = makeDrive()) => {
+const makeHarness = (drive = makeDrive(), linkCaptureAllowedMimeTypes?: string[]) => {
   const properties: Record<string, string> = {};
   const sessions = new AppsScriptQrScannerSessionStore({
     properties: {
@@ -170,7 +171,7 @@ const makeHarness = (drive = makeDrive()) => {
     lock: null,
     nowMs: () => NOW.getTime()
   });
-  const authoritative = makeAuthoritative();
+  const authoritative = makeAuthoritative(linkCaptureAllowedMimeTypes);
   const crypto = new FakeCrypto();
   const runtime: QrScannerRuntime = {
     now: () => new Date(NOW),
@@ -465,6 +466,21 @@ describe('billing-free Apps Script QR scanner service', () => {
       rawValue: LINK_1
     });
     expect(result.candidate).toMatchObject({ status: 'REJECTED', code });
+  });
+
+  test('accepts any non-folder MIME type when link capture has an explicit wildcard policy', () => {
+    const { service } = makeHarness(
+      makeDrive({ [FILE_1]: { mimeType: 'text/plain', name: 'receipt.txt' } }),
+      ['*/*']
+    );
+    const credentials = launchAndRedeem(service);
+    const result = service.addCandidate({
+      sessionId: credentials.sessionId,
+      accessToken: credentials.accessToken,
+      scanId: 'scan-any-mime',
+      rawValue: LINK_1
+    });
+    expect(result.candidate).toMatchObject({ status: 'AUTHORISED', code: 'ACCEPTED' });
   });
 
   test('cancels idempotently and returns to the exact record', () => {

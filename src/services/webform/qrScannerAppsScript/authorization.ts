@@ -1,5 +1,5 @@
 import { FileUploadConfig } from '../../../types';
-import { fileTypeMatches, isFolderMimeType, normalizeFileId } from './domain';
+import { isFolderMimeType, linkCaptureFileTypeMatches, normalizeFileId } from './domain';
 import { qrScannerError } from './errors';
 import { QrScannerDriveRepositoryError } from './driveRepository';
 import { QrScannerDriveRepository } from './types';
@@ -94,7 +94,7 @@ export class QrScannerFileAuthorizationService {
       if (metadata.shortcut || isFolderMimeType(metadata.mimeType)) {
         return { ok: false, code: 'NOT_AUTHORISED_OR_UNAVAILABLE', retryable: false };
       }
-      if (!fileTypeMatches(metadata.name, metadata.mimeType, uploadConfig)) {
+      if (!linkCaptureFileTypeMatches(metadata.name, metadata.mimeType, uploadConfig)) {
         return { ok: false, code: 'UNSUPPORTED_TYPE', retryable: false };
       }
       if (!this.belongsToAllowedScope(metadata.parentIds, metadata.driveId, policy)) {

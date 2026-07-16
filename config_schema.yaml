@@ -1148,6 +1148,13 @@ components:
           enum: [url, driveFileId]
           description: |
             Duplicate policy for captured links. Use `driveFileId` when the same invoice may be scanned from different Drive URL shapes.
+        allowedMimeTypes:
+          type: array
+          items:
+            type: string
+          description: |
+            Optional MIME types for captured Drive links, independent from the upload field's `allowedMimeTypes` and `allowedExtensions`.
+            When present, this list replaces the upload type policy for link capture only. Supports wildcards such as `image/*`; use `*/*` to accept any non-folder Drive file that passes the configured scope checks.
         instruction:
           $ref: '#/components/schemas/LocalizedString'
           description: |
