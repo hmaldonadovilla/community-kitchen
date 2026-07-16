@@ -16,7 +16,7 @@ The implementation uses Firebase Hosting for the scanner page and Apps Script fo
 6. The origin applies the returned authoritative field value, links, and record version before reporting success to the scanner. **Accepted** therefore means **Added**, not “ready to add later.”
 7. The camera continues and the scanner lists added, duplicate, rejected, and retryable results for multiple receipts.
 8. On iOS the user returns with the native browser X. Android and desktop show one page-owned **Close** action. Neither action commits, cancels, reloads, or otherwise changes server data.
-9. If the user returns while a scan transaction is unresolved, the file overlay remains locked until the queued work settles, then displays the latest authoritative receipt list.
+9. If the user returns while a scan transaction is unresolved, the file overlay shows the same non-dismissible wait overlay used for add/remove transactions until every queued scan settles, then displays the latest authoritative receipt list.
 
 ## Security and data integrity
 
@@ -41,8 +41,11 @@ The existing `linkCapture.validation` object remains the source for authoritativ
 - `hideCloseOnIos`: retained configuration for hiding the scanner page's Close control; the incremental UI always relies on the native iOS X.
 - `allowedMimeTypes`: optional captured-link MIME policy independent from uploads. An explicit list replaces upload MIME/extension restrictions for scanned Drive files; `*/*` permits any non-folder file that passes the Drive scope policy.
 - `commitOnReturnOnIos`: accepted only for backward-compatible configuration and cached scanner URLs. The incremental flow does not infer native return or perform a batch commit.
+- `waitMessages.scan` and `waitMessages.scanTitle`: optional localized copy for the originating form's blocking overlay while scan transactions are queued or in flight. A blank title hides the title line.
 
 Existing labels and validation messages continue to be configuration-driven. Meal Production supplies the receipt-specific instruction.
+
+On phone-width portrait screens, the rendered camera preview is capped at 32% of the dynamic viewport and 280 px, with a 180 px minimum. QR decoding continues to use the camera stream's intrinsic resolution, so the smaller display leaves more room for scan results without reducing decoder input quality.
 
 ## Failure and recovery behavior
 
@@ -73,7 +76,7 @@ Existing labels and validation messages continue to be configuration-driven. Mea
 - Ten distinct receipts can be scanned without restarting the camera.
 - Every receipt receives an authoritative user-facing result; **Added** means its link is already durable.
 - Two valid scans produce two ordered `addCandidate` transactions and no batch commit/cancel transaction.
-- Returning while a transaction is in flight locks only the relevant file overlay until it settles.
+- Returning while a transaction is in flight shows configurable blocking copy over only the relevant file overlay until every scan settles.
 - iOS native X and Android/desktop Close do not reload or mutate the originating application.
 - Android Chrome/Samsung Internet, iPhone browser surface, desktop Chromium, and desktop Firefox pass the lifecycle checks.
 - Runtime traffic is limited to Firebase Hosting and Apps Script.

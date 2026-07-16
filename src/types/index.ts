@@ -1606,8 +1606,8 @@ export interface FileUploadLinkCaptureConfig {
    */
   hideCloseOnIos?: boolean;
   /**
-   * On iOS, hide Finish and commit the accepted batch when the originating
-   * form becomes active again after the native scanner surface is closed.
+   * Retained for compatibility with older configuration and cached scanner
+   * URLs. Incremental scanner persistence does not depend on native return.
    */
   commitOnReturnOnIos?: boolean;
   /**
@@ -1739,7 +1739,7 @@ export interface FileUploadHelperTextConfig {
 
 export interface FileUploadWaitMessages {
   /**
-   * Shared title shown while a blocking upload/remove transaction is in progress.
+   * Shared title shown while a blocking upload, removal, or scanner transaction is in progress.
    * Set the localized value to an empty string to hide the title line.
    */
   title?: LocalizedString;
@@ -1754,6 +1754,11 @@ export interface FileUploadWaitMessages {
    */
   removeSelectedTitle?: LocalizedString;
   /**
+   * Scanner-specific title. Falls back to `title`, then the generic wait title.
+   * Set the localized value to an empty string to hide the title line.
+   */
+  scanTitle?: LocalizedString;
+  /**
    * Message shown while an upload + record-save transaction is in progress.
    */
   save?: LocalizedString;
@@ -1761,6 +1766,10 @@ export interface FileUploadWaitMessages {
    * Message shown while a remove-one or remove-all transaction is in progress.
    */
   removeSelected?: LocalizedString;
+  /**
+   * Message shown while one or more QR scan transactions are queued or in flight.
+   */
+  scan?: LocalizedString;
 }
 
 export interface FileUploadUiConfig {

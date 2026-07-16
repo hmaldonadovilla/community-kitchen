@@ -2,7 +2,7 @@ import { resolveLocalizedString, resolveOptionalLocalizedString } from '../../i1
 import { tSystem, tSystemOptional } from '../../systemStrings';
 import type { LangCode, LocalizedString } from '../../types';
 
-export type UploadWaitMessageKind = 'save' | 'removeSelected';
+export type UploadWaitMessageKind = 'save' | 'removeSelected' | 'scan';
 
 const resolveWaitMessagesConfig = (uploadConfig: any): any =>
   uploadConfig?.waitMessages ??
@@ -19,25 +19,37 @@ export const resolveUploadWaitMessage = (
   kind: UploadWaitMessageKind
 ): string => {
   const waitMessages = resolveWaitMessagesConfig(uploadConfig);
-  const custom =
-    kind === 'save'
-      ? waitMessages?.save ??
+  const custom = (() => {
+    if (kind === 'save') {
+      return (
+        waitMessages?.save ??
         waitMessages?.upload ??
         uploadConfig?.waitSave ??
         uploadConfig?.wait_save ??
         uploadConfig?.uploadWaitMessage ??
         uploadConfig?.upload_wait_message
-      : waitMessages?.removeSelected ??
-        waitMessages?.remove ??
-        waitMessages?.removeAll ??
-        uploadConfig?.waitRemoveSelected ??
-        uploadConfig?.wait_remove_selected ??
-        uploadConfig?.removeWaitMessage ??
-        uploadConfig?.remove_wait_message;
-  const fallback =
-    kind === 'save'
-      ? tSystem('files.waitSave', language, 'Please wait while we save your file(s)')
-      : tSystem('files.waitRemoveSelected', language, 'Please wait while we remove selected file(s)');
+      );
+    }
+    if (kind === 'scan') {
+      return waitMessages?.scan;
+    }
+    return (
+      waitMessages?.removeSelected ??
+      waitMessages?.remove ??
+      waitMessages?.removeAll ??
+      uploadConfig?.waitRemoveSelected ??
+      uploadConfig?.wait_remove_selected ??
+      uploadConfig?.removeWaitMessage ??
+      uploadConfig?.remove_wait_message
+    );
+  })();
+  const fallback = (() => {
+    if (kind === 'save') return tSystem('files.waitSave', language, 'Please wait while we save your file(s)');
+    if (kind === 'scan') {
+      return tSystem('files.waitScans', language, 'Please wait until all scans have finished processing.');
+    }
+    return tSystem('files.waitRemoveSelected', language, 'Please wait while we remove selected file(s)');
+  })();
   const resolved = custom ? resolveLocalizedString(custom as LocalizedString, language, '').trim() : '';
   return resolved || fallback;
 };
@@ -48,23 +60,32 @@ export const resolveUploadWaitTitle = (
   kind: UploadWaitMessageKind
 ): string => {
   const waitMessages = resolveWaitMessagesConfig(uploadConfig);
-  const custom =
-    kind === 'save'
-      ? waitMessages?.saveTitle ??
+  const custom = (() => {
+    if (kind === 'save') {
+      return (
+        waitMessages?.saveTitle ??
         waitMessages?.uploadTitle ??
         waitMessages?.title ??
         uploadConfig?.waitSaveTitle ??
         uploadConfig?.wait_save_title ??
         uploadConfig?.uploadWaitTitle ??
         uploadConfig?.upload_wait_title
-      : waitMessages?.removeSelectedTitle ??
-        waitMessages?.removeTitle ??
-        waitMessages?.removeAllTitle ??
-        waitMessages?.title ??
-        uploadConfig?.waitRemoveSelectedTitle ??
-        uploadConfig?.wait_remove_selected_title ??
-        uploadConfig?.removeWaitTitle ??
-        uploadConfig?.remove_wait_title;
+      );
+    }
+    if (kind === 'scan') {
+      return waitMessages?.scanTitle ?? waitMessages?.title;
+    }
+    return (
+      waitMessages?.removeSelectedTitle ??
+      waitMessages?.removeTitle ??
+      waitMessages?.removeAllTitle ??
+      waitMessages?.title ??
+      uploadConfig?.waitRemoveSelectedTitle ??
+      uploadConfig?.wait_remove_selected_title ??
+      uploadConfig?.removeWaitTitle ??
+      uploadConfig?.remove_wait_title
+    );
+  })();
   const fallback = tSystemOptional('navigation.waitTitle', language, '');
   return resolveOptionalLocalizedString(custom as LocalizedString | undefined, language, fallback).trim();
 };

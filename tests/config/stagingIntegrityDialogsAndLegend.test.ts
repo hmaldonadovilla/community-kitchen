@@ -98,6 +98,14 @@ describe('staging integrity dialogs and list legend config', () => {
           })
         })
       );
+      expect(uploadConfig?.waitMessages).toEqual(
+        expect.objectContaining({
+          title: { en: '' },
+          scan: {
+            en: 'Please wait until all receipt scans have finished processing. Accepted receipts will be added automatically.'
+          }
+        })
+      );
     });
   });
 

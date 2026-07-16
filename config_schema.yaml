@@ -1037,12 +1037,12 @@ components:
         waitMessages:
           $ref: '#/components/schemas/FileUploadWaitMessages'
           description: |
-            Optional localized wait title/message copy used when `blockUntilSaved` is true.
+            Optional localized wait title/message copy for blocking file mutations and in-flight QR scan transactions.
 
             Example:
-            - `{ "title": { "en": "" }, "save": { "en": "Do not leave the screen while we save your photo(s)" }, "removeSelected": { "en": "Do not leave the screen while we remove selected photo(s)" } }`
+            - `{ "title": { "en": "" }, "save": { "en": "Do not leave the screen while we save your photo(s)" }, "removeSelected": { "en": "Do not leave the screen while we remove selected photo(s)" }, "scan": { "en": "Please wait until all scans have finished processing." } }`
 
-            Set `title.en` (or `saveTitle.en` / `removeSelectedTitle.en`) to an empty string to hide the wait overlay title.
+            Set `title.en` (or `saveTitle.en` / `removeSelectedTitle.en` / `scanTitle.en`) to an empty string to hide the wait overlay title.
             When omitted, the UI falls back to generic file-based system strings and the generic wait title.
         linkLabel:
           $ref: '#/components/schemas/LocalizedString'
@@ -1118,6 +1118,11 @@ components:
           description: |
             Remove-specific title. Falls back to `title`, then the generic wait title.
             Set the localized value to an empty string to hide the title line.
+        scanTitle:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Scanner-specific title. Falls back to `title`, then the generic wait title.
+            Set the localized value to an empty string to hide the title line.
         save:
           $ref: '#/components/schemas/LocalizedString'
           description: |
@@ -1126,7 +1131,11 @@ components:
           $ref: '#/components/schemas/LocalizedString'
           description: |
             Message shown while a remove-one or remove-all transaction is in progress.
-      description: Optional per-field overrides for blocking upload wait messages.
+        scan:
+          $ref: '#/components/schemas/LocalizedString'
+          description: |
+            Message shown while one or more QR scan transactions are queued or in flight.
+      description: Optional per-field overrides for blocking upload, removal, and scanner wait messages.
 
     FileUploadLinkCaptureConfig:
       type: object
@@ -1174,9 +1183,8 @@ components:
         commitOnReturnOnIos:
           type: boolean
           description: |
-            When true, iOS hides Finish and treats the native browser X return as completion of the current accepted batch.
-            The originating form commits after it returns to the foreground, preserving continuous multi-receipt scanning without a background-tab Finish message.
-            Android and desktop keep the explicit Finish action.
+            Compatibility-only key retained for older configuration and cached scanner URLs.
+            Incremental scanner persistence does not infer native return or perform a batch commit on any platform.
         validation:
           $ref: '#/components/schemas/FileUploadLinkCaptureValidationConfig'
           description: |
@@ -1209,7 +1217,7 @@ components:
               $ref: '#/components/schemas/LocalizedString'
               description: Message shown when QR camera scanning is unavailable and paste should be used.
       description: |
-        Link capture settings for FILE_UPLOAD fields. In `driveQr` mode, non-Drive content is rejected and `dedupeBy: driveFileId` prevents duplicate references to the same Drive document. The continuous scanner opens immediately from the external Firebase web asset host so the camera runs in a top-level HTTPS document while the originating form stays loaded. Apps Script resolves the authoritative field configuration and validates each candidate. Finish revalidates and appends accepted links once through a field-scoped idempotent commit; Cancel or closing before Finish does not change the record. This scanner flow uses Firebase Hosting and Apps Script only and does not require Cloud Run.
+        Link capture settings for FILE_UPLOAD fields. In `driveQr` mode, non-Drive content is rejected and `dedupeBy: driveFileId` prevents duplicate references to the same Drive document. The continuous scanner opens immediately from the external Firebase web asset host so the camera runs in a top-level HTTPS document while the originating form stays loaded. Apps Script resolves the authoritative field configuration, validates each candidate, and durably appends each accepted link in the same idempotent per-scan transaction. Closing the scanner does not commit, cancel, or interrupt already queued work. This scanner flow uses Firebase Hosting and Apps Script only and does not require Cloud Run.
 
     FileUploadLinkCaptureValidationConfig:
       type: object

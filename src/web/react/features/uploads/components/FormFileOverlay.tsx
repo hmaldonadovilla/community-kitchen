@@ -20,6 +20,7 @@ import { resolveUploadBlockUntilSaved } from '../../../app/uploadTransaction';
 import { resolveUploadWaitMessage, resolveUploadWaitTitle } from '../../../app/uploadWaitMessages';
 import { FileOverlay } from '../../../components/form/overlays/FileOverlay';
 import { describeUploadItem } from '../../../components/form/utils';
+import { BlockingOverlay } from '../../overlays/BlockingOverlay';
 import {
   appendCapturedUploadLink,
   resolveUploadLinkCaptureConfig,
@@ -64,6 +65,19 @@ const fileOverlayMatchesQrScannerUpdate = (
 ): boolean => matchesExternalQrScannerOverlayTarget(
   { open: state.open, scope: state.scope, fieldId: state.question?.id },
   update
+);
+
+export const QrScannerPendingBlockingOverlay: React.FC<{
+  pendingCount: number;
+  uploadConfig: unknown;
+  language: LangCode;
+}> = ({ pendingCount, uploadConfig, language }) => (
+  <BlockingOverlay
+    open={pendingCount > 0}
+    title={resolveUploadWaitTitle(uploadConfig, language, 'scan')}
+    message={resolveUploadWaitMessage(uploadConfig, language, 'scan')}
+    zIndex={12047}
+  />
 );
 
 export const FormFileOverlay: React.FC<{
@@ -134,6 +148,7 @@ export const FormFileOverlay: React.FC<{
   onDiagnostic
 }) => {
   const fileOverlayRef = React.useRef(fileOverlay);
+  const [scannerPendingByField, setScannerPendingByField] = React.useState<Record<string, number>>({});
   fileOverlayRef.current = fileOverlay;
 
   const scannerIsTop = fileOverlay.scope === 'top' && !!fileOverlay.question;
@@ -147,7 +162,15 @@ export const FormFileOverlay: React.FC<{
     ? resolveLocalizedString(scannerLinkCaptureConfig.instruction as any, language, '')
     : '';
   const updateScannerPendingOverlay = (pendingCount: number): void => {
-    const saving = pendingCount > 0;
+    const normalizedPendingCount = Number.isFinite(pendingCount) ? Math.max(0, Math.floor(pendingCount)) : 0;
+    const saving = normalizedPendingCount > 0;
+    setScannerPendingByField(previous => {
+      if ((previous[scannerFieldPath] || 0) === normalizedPendingCount) return previous;
+      const next = { ...previous };
+      if (normalizedPendingCount > 0) next[scannerFieldPath] = normalizedPendingCount;
+      else delete next[scannerFieldPath];
+      return next;
+    });
     const matchesScannerField = (state: FileOverlayState): boolean =>
       Boolean(
         state.open &&
@@ -178,10 +201,7 @@ export const FormFileOverlay: React.FC<{
     enabled:
       fileOverlay.open &&
       scannerIsTop &&
-      Boolean(scannerLinkCaptureConfig) &&
-      !submitting &&
-      !(fileOverlay.question as any)?.readOnly &&
-      !fileOverlay.saving,
+      Boolean(scannerLinkCaptureConfig),
     fieldId: scannerFieldId,
     fieldPath: scannerFieldPath,
     instruction: scannerInstruction,
@@ -270,6 +290,7 @@ export const FormFileOverlay: React.FC<{
   const maxed = uploadConfig?.maxFiles ? items.length >= uploadConfig.maxFiles : false;
   const linkCaptureConfig = resolveUploadLinkCaptureConfig(uploadConfig);
   const qrScanSupported = externalQrScanner.available;
+  const scannerPendingCount = scannerIsTop ? scannerPendingByField[fieldPath] || 0 : 0;
 
   const resolveLinkCaptureText = (raw: unknown, fallback: string): string => {
     const configured = raw ? resolveLocalizedString(raw as any, language, '') : '';
@@ -743,7 +764,8 @@ export const FormFileOverlay: React.FC<{
     : null;
 
   return (
-    <FileOverlay
+    <>
+      <FileOverlay
         open={fileOverlay.open}
         language={language}
         title={title}
@@ -780,6 +802,12 @@ export const FormFileOverlay: React.FC<{
         onClearAll={onClearAll}
         onRemoveAt={onRemoveAt}
         onClose={closeWithInvalidCleanup}
-    />
+      />
+      <QrScannerPendingBlockingOverlay
+        pendingCount={scannerPendingCount}
+        uploadConfig={uploadConfig}
+        language={language}
+      />
+    </>
   );
 };

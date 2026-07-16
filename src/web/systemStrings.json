@@ -612,6 +612,9 @@
     "waitRemoveSelected": {
       "en": "Please wait while we remove selected file(s)"
     },
+    "waitScans": {
+      "en": "Please wait until all scans have finished processing."
+    },
     "maxSelected": {
       "en": "Required photos added."
     },

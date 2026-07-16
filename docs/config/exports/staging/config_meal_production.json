@@ -6932,6 +6932,9 @@
           },
           "removeSelected": {
             "en": "Do not leave the screen while we remove selected receipt evidence"
+          },
+          "scan": {
+            "en": "Please wait until all receipt scans have finished processing. Accepted receipts will be added automatically."
           }
         }
       }
@@ -10619,6 +10622,9 @@
             },
             "removeSelected": {
               "en": "Do not leave the screen while we remove selected receipt evidence"
+            },
+            "scan": {
+              "en": "Please wait until all receipt scans have finished processing. Accepted receipts will be added automatically."
             }
           }
         }

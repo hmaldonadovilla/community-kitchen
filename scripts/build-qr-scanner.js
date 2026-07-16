@@ -58,6 +58,9 @@ const htmlFor = (scriptFileName) => `<!doctype html>
     @media (max-height: 650px) {
       .preview { height: min(40vh, 300px); min-height: 170px; }
     }
+    @media (max-width: 600px) and (orientation: portrait) {
+      .preview { height: min(32vh, 280px); height: min(32dvh, 280px); min-height: 180px; }
+    }
   </style>
 </head>
 <body>
