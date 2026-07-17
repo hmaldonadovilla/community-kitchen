@@ -47,6 +47,8 @@ Existing labels and validation messages continue to be configuration-driven. Mea
 
 On phone-width portrait screens, the rendered camera preview is capped at 32% of the dynamic viewport and 280 px, with a 180 px minimum. QR decoding continues to use the camera stream's intrinsic resolution, so the smaller display leaves more room for scan results without reducing decoder input quality.
 
+Camera startup requests a high-detail rear stream with 1920 x 1080 as a non-blocking preference. Browsers that advertise detail content hints or continuous focus receive those settings; older Safari versions keep their native autofocus. Live decoding checks tight and medium source-resolution regions in the centre before periodically checking a bounded full-frame image. Standard black-on-white labels use the fast non-inverted path, while an occasional inverted pass preserves support for reversed codes without imposing its decoding cost on every frame.
+
 ## Failure and recovery behavior
 
 - Camera startup is independent from server preparation. Opening the scanner or waiting before the first scan consumes no session and starts no expiry clock.
