@@ -20,6 +20,24 @@ type CropRegion = {
   upscale: boolean;
 };
 
+type QrInversionAttempts = 'attemptBoth' | 'dontInvert' | 'onlyInvert';
+
+export type VideoFrameDecodeOptions = {
+  frameSequence?: number;
+};
+
+export type VideoFrameRegion = {
+  sx: number;
+  sy: number;
+  sw: number;
+  sh: number;
+  maxDimension: number;
+  inversionAttempts: QrInversionAttempts;
+};
+
+const FULL_FRAME_INTERVAL = 3;
+const INVERTED_FRAME_INTERVAL = 8;
+
 export const isLiveCameraSupported = (): boolean => {
   const mediaDevices = typeof navigator !== 'undefined' ? navigator.mediaDevices : undefined;
   return typeof mediaDevices?.getUserMedia === 'function';
@@ -57,7 +75,10 @@ const detectNativeQrValue = async (detector: NativeQrDetector | null, source: Ca
   }
 };
 
-const decodeQrFromCanvas = (canvas: HTMLCanvasElement): string => {
+const decodeQrFromCanvas = (
+  canvas: HTMLCanvasElement,
+  inversionAttempts: QrInversionAttempts = 'attemptBoth'
+): string => {
   const width = canvas.width;
   const height = canvas.height;
   if (!width || !height) return '';
@@ -66,13 +87,78 @@ const decodeQrFromCanvas = (canvas: HTMLCanvasElement): string => {
   if (!ctx) return '';
 
   const imageData = ctx.getImageData(0, 0, width, height);
-  return jsQR(imageData.data, width, height, { inversionAttempts: 'attemptBoth' })?.data.trim() || '';
+  return jsQR(imageData.data, width, height, { inversionAttempts })?.data.trim() || '';
+};
+
+const centeredSquareRegion = (
+  sourceWidth: number,
+  sourceHeight: number,
+  ratio: number,
+  inversionAttempts: QrInversionAttempts = 'dontInvert'
+): VideoFrameRegion => {
+  const side = Math.max(1, Math.min(sourceWidth, sourceHeight) * ratio);
+  return {
+    sx: (sourceWidth - side) / 2,
+    sy: (sourceHeight - side) / 2,
+    sw: side,
+    sh: side,
+    maxDimension: Math.ceil(side),
+    inversionAttempts
+  };
+};
+
+/**
+ * Prioritizes centered source-resolution detail for small labels while sampling
+ * the whole frame and inverted codes less frequently to keep older phones responsive.
+ */
+export const buildVideoFrameRegions = (
+  sourceWidth: number,
+  sourceHeight: number,
+  frameSequence = 0
+): VideoFrameRegion[] => {
+  if (!sourceWidth || !sourceHeight) return [];
+  const regions = [
+    centeredSquareRegion(sourceWidth, sourceHeight, 0.48),
+    centeredSquareRegion(sourceWidth, sourceHeight, 0.72)
+  ];
+  if (frameSequence % FULL_FRAME_INTERVAL === 0) {
+    regions.push({
+      sx: 0,
+      sy: 0,
+      sw: sourceWidth,
+      sh: sourceHeight,
+      maxDimension: 1280,
+      inversionAttempts: 'dontInvert'
+    });
+  }
+  if (frameSequence % INVERTED_FRAME_INTERVAL === 0) {
+    regions.push(centeredSquareRegion(sourceWidth, sourceHeight, 0.72, 'onlyInvert'));
+  }
+  return regions;
+};
+
+const drawVideoFrameRegion = (
+  video: HTMLVideoElement,
+  canvas: HTMLCanvasElement,
+  region: VideoFrameRegion
+): boolean => {
+  const scale = Math.min(1, region.maxDimension / Math.max(region.sw, region.sh));
+  const width = Math.max(1, Math.round(region.sw * scale));
+  const height = Math.max(1, Math.round(region.sh * scale));
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return false;
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(video, region.sx, region.sy, region.sw, region.sh, 0, 0, width, height);
+  return true;
 };
 
 export const decodeQrFromVideoFrame = async (
   video: HTMLVideoElement,
   canvas: HTMLCanvasElement,
-  detector: NativeQrDetector | null = null
+  detector: NativeQrDetector | null = null,
+  options: VideoFrameDecodeOptions = {}
 ): Promise<string> => {
   const nativeValue = await detectNativeQrValue(detector, video);
   if (nativeValue) return nativeValue;
@@ -81,13 +167,13 @@ export const decodeQrFromVideoFrame = async (
   const height = video.videoHeight;
   if (!width || !height) return '';
 
-  canvas.width = width;
-  canvas.height = height;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return '';
-
-  ctx.drawImage(video, 0, 0, width, height);
-  return decodeQrFromCanvas(canvas);
+  const regions = buildVideoFrameRegions(width, height, options.frameSequence || 0);
+  for (const region of regions) {
+    if (!drawVideoFrameRegion(video, canvas, region)) return '';
+    const value = decodeQrFromCanvas(canvas, region.inversionAttempts);
+    if (value) return value;
+  }
+  return '';
 };
 
 const loadImageFromFile = (file: File): Promise<HTMLImageElement> =>

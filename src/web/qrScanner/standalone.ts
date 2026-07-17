@@ -1,4 +1,5 @@
 import { createNativeQrDetector, decodeQrFromVideoFrame, isLiveCameraSupported } from './decoder';
+import { buildQrCameraConstraints, optimiseQrCameraTrack } from './camera';
 import {
   buildQrScannerClosedMessage,
   buildQrScannerReadyMessage,
@@ -51,6 +52,7 @@ let setupReceived = false;
 let connectionFailed = false;
 let closedPosted = false;
 let cameraReady = false;
+let frameSequence = 0;
 let candidates: ScannerCandidateView[] = [];
 let maxFiles = 10;
 let existingCount = 0;
@@ -59,6 +61,8 @@ const scanFingerprints = new Map<string, string>();
 
 const scanCanvas = document.createElement('canvas');
 const detector = createNativeQrDetector();
+const CAMERA_WARMUP_MS = 350;
+const SCAN_INTERVAL_MS = 100;
 
 const scannerPlatform = {
   userAgent: navigator.userAgent,
@@ -224,9 +228,17 @@ const postClosed = (): void => {
   postToOpener(buildQrScannerClosedMessage(requestId));
 };
 
-const scheduleNextFrame = (): void => {
+const scheduleNextFrame = (delayMs = 0): void => {
   if (closing || connectionFailed || !cameraReady) return;
+  if (delayMs > 0) {
+    resumeTimer = window.setTimeout(() => {
+      resumeTimer = 0;
+      scheduleNextFrame();
+    }, delayMs);
+    return;
+  }
   frameId = window.requestAnimationFrame(() => {
+    frameId = 0;
     void scanLoop();
   });
 };
@@ -258,14 +270,15 @@ const sendDetectedValue = (value: string): void => {
 
 async function scanLoop(): Promise<void> {
   if (!video || closing || connectionFailed || !cameraReady) return;
-  const value = await decodeQrFromVideoFrame(video, scanCanvas, detector);
+  frameSequence += 1;
+  const value = await decodeQrFromVideoFrame(video, scanCanvas, detector, { frameSequence });
   if (closing || connectionFailed || !cameraReady) return;
   if (value) {
     sendDetectedValue(value);
     resumeTimer = window.setTimeout(scheduleNextFrame, 700);
     return;
   }
-  scheduleNextFrame();
+  scheduleNextFrame(SCAN_INTERVAL_MS);
 }
 
 const beginScanning = (): void => {
@@ -283,14 +296,7 @@ const startCamera = async (): Promise<void> => {
 
   setStatus('Starting camera...');
   try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { ideal: 'environment' },
-        width: { ideal: 1280 },
-        height: { ideal: 720 }
-      },
-      audio: false
-    });
+    stream = await navigator.mediaDevices.getUserMedia(buildQrCameraConstraints());
     if (closing || connectionFailed) {
       stopCamera();
       return;
@@ -301,9 +307,22 @@ const startCamera = async (): Promise<void> => {
       stopCamera();
       return;
     }
+    const track = stream.getVideoTracks()[0];
+    const diagnostics = track ? await optimiseQrCameraTrack(track) : null;
+    if (closing || connectionFailed || !stream) {
+      stopCamera();
+      return;
+    }
+    console.info('[QrScanner][camera] ready', diagnostics || { focusMode: 'browser-default' });
+    console.info('[QrScanner][decoder] configured', {
+      strategy: 'center-detail-first',
+      fullFrameInterval: 3,
+      invertedFrameInterval: 8,
+      scanIntervalMs: SCAN_INTERVAL_MS
+    });
     cameraReady = true;
-    setStatus('Camera ready.');
-    beginScanning();
+    setStatus('Camera ready. Hold one QR code steady in the centre.');
+    scheduleNextFrame(CAMERA_WARMUP_MS);
   } catch {
     stopCamera();
     if (!connectionFailed) {
