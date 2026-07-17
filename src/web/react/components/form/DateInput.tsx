@@ -78,10 +78,11 @@ export const DateInput: React.FC<{
   // - the user is not actively typing (date pickers don't trigger keydown)
   const showOverlay = Boolean(isValidYmd && (!focused || !typing));
 
-  const display = useMemo(() => {
-    if (!showOverlay) return '';
+  const formattedDisplay = useMemo(() => {
+    if (!isValidYmd) return '';
     return formatDateEeeDdMmmYyyy(renderedValue, language);
-  }, [language, renderedValue, showOverlay]);
+  }, [isValidYmd, language, renderedValue]);
+  const display = showOverlay ? formattedDisplay : '';
 
   useEffect(() => {
     return () => {
@@ -176,7 +177,9 @@ export const DateInput: React.FC<{
 
   return (
     <div className="ck-date-input-wrap">
-      <div className="ck-date-input-control">
+      <div
+        className={`ck-date-input-control${formattedDisplay ? ' ck-date-input-control--content-sized' : ''}`}
+      >
         <input
           ref={inputRef}
           id={id}
@@ -224,6 +227,11 @@ export const DateInput: React.FC<{
             setTyping(true);
           }}
         />
+        {formattedDisplay ? (
+          <span className="ck-date-overlay-sizer" aria-hidden="true">
+            {formattedDisplay}
+          </span>
+        ) : null}
         {showOverlay && display ? (
           <div className="ck-date-overlay" aria-hidden="true">
             {display}

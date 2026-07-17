@@ -12,6 +12,8 @@ src/services/webform/followup/bundledHtmlTemplates.ts
 perf-results/
 playwright-report/
 test-results/
+.playwright-cli/
+output/playwright/
 
 # Snyk Security Extension - AI Rules (auto-generated)
 .cursor/rules/snyk_rules.mdc
