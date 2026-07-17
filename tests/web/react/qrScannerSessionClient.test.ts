@@ -5,6 +5,7 @@ jest.mock('../../../src/web/react/api', () => ({
 import { qrScannerSessionRpcApi } from '../../../src/web/react/api';
 import {
   addQrScannerCandidate,
+  addQrScannerCandidates,
   QrScannerSessionError,
   readQrScannerLaunchCredentials
 } from '../../../src/web/react/features/uploads/services/qrScannerSessionClient';
@@ -93,5 +94,59 @@ describe('QR scanner session client', () => {
         retryable: false
       })
     );
+  });
+
+  test('sends one ordered candidate batch with its stable request ID', async () => {
+    const session = { id: 'session-1', maxFiles: 10, existingCount: 0, status: 'ACTIVE' as const };
+    rpcMock.mockResolvedValue({
+      ok: true,
+      result: {
+        results: [
+          { candidate: { id: 'candidate-1', status: 'REJECTED', code: 'INVALID_PAYLOAD' } },
+          { candidate: { id: 'candidate-2', status: 'REJECTED', code: 'INVALID_PAYLOAD' } }
+        ],
+        session
+      }
+    } as never);
+
+    await expect(
+      addQrScannerCandidates(
+        { sessionId: 'session-1', accessToken: 'access-1' },
+        {
+          requestId: 'batch-request-1',
+          candidates: [
+            { scanId: 'scan-1', rawValue: 'value-1' },
+            { scanId: 'scan-2', rawValue: 'value-2' }
+          ]
+        }
+      )
+    ).resolves.toEqual(expect.objectContaining({ transport: 'batch', session }));
+    expect(rpcMock).toHaveBeenCalledWith({
+      method: 'qrScanner.addCandidates',
+      params: {
+        sessionId: 'session-1',
+        accessToken: 'access-1',
+        requestId: 'batch-request-1',
+        candidates: [
+          { scanId: 'scan-1', rawValue: 'value-1' },
+          { scanId: 'scan-2', rawValue: 'value-2' }
+        ]
+      }
+    });
+  });
+
+  test('does not reinterpret INVALID_REQUEST as an unsupported batch method', async () => {
+    rpcMock.mockResolvedValue({
+      ok: false,
+      error: { code: 'INVALID_REQUEST', message: 'The batch request ID was reused.', retryable: false }
+    } as never);
+
+    await expect(
+      addQrScannerCandidates(
+        { sessionId: 'session-1', accessToken: 'access-1' },
+        { requestId: 'batch-request-1', candidates: [{ scanId: 'scan-1', rawValue: 'value-1' }] }
+      )
+    ).rejects.toEqual(expect.objectContaining({ code: 'INVALID_REQUEST', retryable: false }));
+    expect(rpcMock).toHaveBeenCalledTimes(1);
   });
 });

@@ -11,6 +11,7 @@ import {
   type QrScannerScanMessage
 } from '../../../../qrScanner/openerProtocol';
 import { resolveExternalQrScannerLaunch } from '../domain/externalQrScanner';
+import { isReusableQrScannerOutcome, qrScannerCandidateIdentity } from '../domain/qrScannerBatching';
 import type {
   ApplyQrScannerCommittedUpdate,
   BeginQrScannerInteraction,
@@ -21,8 +22,10 @@ import type {
 } from '../qrScannerTypes';
 import {
   addQrScannerCandidate,
+  addQrScannerCandidates,
   redeemQrScannerSession,
   QrScannerSessionError,
+  type QrScannerCandidateBatchResult,
   type QrScannerCandidateResult,
   type QrScannerCommittedFieldResult,
   type QrScannerSessionCredentials,
@@ -31,7 +34,22 @@ import {
 
 const SCANNER_WINDOW_NAME = 'ckReceiptQrScanner';
 const MAX_PENDING_SCANS = 20;
+const MAX_CANDIDATES_PER_BATCH = 3;
+const BATCH_COLLECTION_WINDOW_MS = 75;
 const ADD_CANDIDATE_MAX_ATTEMPTS = 2;
+
+type PendingScanMember = { message: QrScannerScanMessage; sequence: number };
+
+type PendingScanGroup = {
+  identity: string | null;
+  leader: QrScannerScanMessage;
+  members: PendingScanMember[];
+};
+
+type RetainedBatchRecovery = {
+  requestId: string;
+  groups: PendingScanGroup[];
+};
 
 type ActiveScannerCleanup = (reason: 'replaced' | 'unmounted') => void;
 
@@ -197,6 +215,15 @@ export const useExternalQrScannerSession = (args: {
     } | null = null;
     const pendingScanIds = new Set<string>();
     const candidateMessages = new Map<string, QrScannerCandidateMessage>();
+    const queuedScanGroups: PendingScanGroup[] = [];
+    const pendingGroupsByIdentity = new Map<string, PendingScanGroup>();
+    const reusableResultsByIdentity = new Map<string, QrScannerCandidateResult>();
+    let scanSequence = 0;
+    let batchDrainScheduled = false;
+    let batchInFlight = false;
+    let releaseBatchWindow: (() => void) | null = null;
+    let batchWindowTimer: number | null = null;
+    let retainedBatchRecovery: RetainedBatchRecovery | null = null;
 
     const post = (message: unknown): boolean => {
       if (disposed || !scannerWindow) return false;
@@ -299,43 +326,424 @@ export const useExternalQrScannerSession = (args: {
       }
     };
 
-    const addCandidateWithRetry = async (
+    const latestCommittedResult = (batch: QrScannerCandidateBatchResult): QrScannerCommittedFieldResult | undefined => {
+      if (batch.committed) return batch.committed;
+      return batch.results.reduce<QrScannerCommittedFieldResult | undefined>((latest, result) => {
+        if (!result.committed) return latest;
+        if (!latest) return result.committed;
+        const latestVersion = typeof latest.dataVersion === 'number' ? latest.dataVersion : -1;
+        const candidateVersion = typeof result.committed.dataVersion === 'number' ? result.committed.dataVersion : -1;
+        return candidateVersion >= latestVersion ? result.committed : latest;
+      }, undefined);
+    };
+
+    const addCandidateBatchWithRetry = async (
       credentials: QrScannerSessionCredentials,
-      message: QrScannerScanMessage
-    ): Promise<QrScannerCandidateResult> => {
+      supportsBatch: boolean,
+      batchRequestId: string,
+      groups: PendingScanGroup[]
+    ): Promise<QrScannerCandidateBatchResult> => {
+      const candidates = groups.map(group => ({ scanId: group.leader.scanId, rawValue: group.leader.value }));
       let lastError: unknown;
       for (let attempt = 1; attempt <= ADD_CANDIDATE_MAX_ATTEMPTS; attempt += 1) {
         try {
-          const result = await addQrScannerCandidate(credentials, {
-            scanId: message.scanId,
-            rawValue: message.value
-          });
+          const result = supportsBatch
+            ? await addQrScannerCandidates(credentials, {
+                requestId: batchRequestId,
+                candidates
+              })
+            : await (async (): Promise<QrScannerCandidateBatchResult> => {
+                const results: QrScannerCandidateResult[] = [];
+                for (const candidate of candidates) results.push(await addQrScannerCandidate(credentials, candidate));
+                const last = results[results.length - 1];
+                if (!last) throw new QrScannerSessionError('INVALID_REQUEST', 'The scanner batch was empty.');
+                return {
+                  results,
+                  session: last.session,
+                  ...(last.committed ? { committed: last.committed } : {}),
+                  transport: 'legacy'
+                };
+              })();
+          // Item-level retryable outcomes are surfaced so a later scan can
+          // retry them with a new request. Only an ambiguous accepted result
+          // without its authoritative commit warrants replaying this exact batch.
           const retryableResult =
-            result.candidate.status === 'RETRYABLE_ERROR' ||
-            (result.candidate.status === 'AUTHORISED' && !result.committed);
-          if (!retryableResult || attempt === ADD_CANDIDATE_MAX_ATTEMPTS) {
+            result.results.some(entry => entry.candidate.status === 'AUTHORISED') && !latestCommittedResult(result);
+          if (!retryableResult) return result;
+          if (attempt === ADD_CANDIDATE_MAX_ATTEMPTS) {
+            if (supportsBatch) {
+              throw new QrScannerSessionError(
+                'TEMPORARY_ERROR',
+                'The scanner batch commit could not be confirmed.',
+                true
+              );
+            }
             return result;
           }
-          latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.candidateRetry', {
-            fieldPath: launchTarget.fieldPath,
-            scanId: message.scanId,
-            code: result.candidate.code,
-            attempt
-          });
+          latestRef.current.onDiagnostic?.(
+            supportsBatch
+              ? 'upload.linkCapture.externalScanner.batchRetry'
+              : 'upload.linkCapture.externalScanner.candidateRetry',
+            supportsBatch
+              ? {
+                  fieldPath: launchTarget.fieldPath,
+                  requestId: batchRequestId,
+                  scanIds: groups.map(group => group.leader.scanId),
+                  code: 'RETRYABLE_RESULT',
+                  attempt
+                }
+              : {
+                  fieldPath: launchTarget.fieldPath,
+                  scanId: groups[0]?.leader.scanId,
+                  code: result.results[0]?.candidate.code || 'RETRYABLE_RESULT',
+                  attempt
+                }
+          );
         } catch (error) {
           lastError = error;
           const failure = errorDetails(error);
           if (!failure.retryable || attempt === ADD_CANDIDATE_MAX_ATTEMPTS) throw error;
-          latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.candidateRetry', {
-            fieldPath: launchTarget.fieldPath,
-            scanId: message.scanId,
-            code: failure.code,
-            attempt
-          });
+          latestRef.current.onDiagnostic?.(
+            supportsBatch
+              ? 'upload.linkCapture.externalScanner.batchRetry'
+              : 'upload.linkCapture.externalScanner.candidateRetry',
+            supportsBatch
+              ? {
+                  fieldPath: launchTarget.fieldPath,
+                  requestId: batchRequestId,
+                  scanIds: groups.map(group => group.leader.scanId),
+                  code: failure.code,
+                  attempt
+                }
+              : {
+                  fieldPath: launchTarget.fieldPath,
+                  scanId: groups[0]?.leader.scanId,
+                  code: failure.code,
+                  attempt
+                }
+          );
         }
       }
       throw lastError || new QrScannerSessionError('TEMPORARY_ERROR', 'The receipt could not be checked.', true);
     };
+
+    const aliasResult = (result: QrScannerCandidateResult): QrScannerCandidateResult => {
+      if (['AUTHORISED', 'DUPLICATE'].includes(result.candidate.status)) {
+        return {
+          candidate: {
+            ...result.candidate,
+            status: 'DUPLICATE',
+            code: result.candidate.status === 'AUTHORISED' ? 'DUPLICATE_SESSION' : result.candidate.code,
+            retryable: false
+          },
+          session: result.session
+        };
+      }
+      return { candidate: { ...result.candidate }, session: result.session };
+    };
+
+    const publishCandidate = (
+      member: PendingScanMember,
+      result: QrScannerCandidateResult,
+      context: { requestId?: string; local: boolean; alias: boolean; committed: boolean }
+    ): void => {
+      const projected = context.alias ? aliasResult(result) : result;
+      const response = candidateMessage(requestId, member.message.scanId, projected);
+      candidateMessages.set(member.message.scanId, response);
+      const posted = post(response);
+      if (response.status !== 'accepted') {
+        launchCallbacks.onCandidateOutcome?.({
+          scanId: response.scanId,
+          status: response.status,
+          code: response.code || 'INTERNAL_ERROR',
+          message: response.message || 'This receipt could not be added.'
+        });
+      }
+      latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.candidate', {
+        fieldPath: launchTarget.fieldPath,
+        scanId: member.message.scanId,
+        code: projected.candidate.code,
+        status: projected.candidate.status,
+        posted,
+        committed: context.committed,
+        local: context.local,
+        alias: context.alias,
+        ...(context.requestId ? { requestId: context.requestId } : {})
+      });
+    };
+
+    const completePendingMember = (scanId: string): void => {
+      pendingScanIds.delete(scanId);
+      notifyPendingWork();
+    };
+
+    const failGroups = (groups: PendingScanGroup[], error: unknown): void => {
+      const failure = errorDetails(error);
+      if (['SESSION_EXPIRED', 'SESSION_NOT_ACTIVE', 'INVALID_CREDENTIAL', 'NOT_FOUND'].includes(failure.code)) {
+        sessionPromise = null;
+        sessionState = null;
+      }
+      if (!sessionState) releaseSessionHold('failed');
+      groups
+        .flatMap(group => group.members.map(member => ({ group, member })))
+        .sort((left, right) => left.member.sequence - right.member.sequence)
+        .forEach(({ group, member }) => {
+          const response = buildQrScannerCandidateMessage(requestId, {
+            scanId: member.message.scanId,
+            status: 'error',
+            code: failure.code,
+            message: failure.retryable ? 'This receipt could not be checked. Scan it again.' : failure.message
+          });
+          candidateMessages.set(member.message.scanId, response);
+          post(response);
+          launchCallbacks.onCandidateOutcome?.({
+            scanId: response.scanId,
+            status: 'error',
+            code: response.code || failure.code,
+            message: response.message || failure.message
+          });
+          latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.candidateFailed', {
+            fieldPath: launchTarget.fieldPath,
+            scanId: member.message.scanId,
+            code: failure.code,
+            retryable: failure.retryable,
+            coalesced: member.message.scanId !== group.leader.scanId
+          });
+          completePendingMember(member.message.scanId);
+        });
+      groups.forEach(group => {
+        if (group.identity && pendingGroupsByIdentity.get(group.identity) === group) {
+          pendingGroupsByIdentity.delete(group.identity);
+        }
+      });
+    };
+
+    const applyBatchResponse = (
+      groups: PendingScanGroup[],
+      batch: QrScannerCandidateBatchResult,
+      batchRequestId: string,
+      completePending: boolean,
+      recovery: boolean
+    ): void => {
+      if (batch.results.length !== groups.length) {
+        throw new QrScannerSessionError('INTERNAL_ERROR', 'The scanner batch response was incomplete.');
+      }
+      const normalizedResults: QrScannerCandidateResult[] = batch.results.map(result => ({
+        candidate: result.candidate,
+        session: batch.session,
+        ...(result.committed ? { committed: result.committed } : {})
+      }));
+      if (sessionState) sessionState = { ...sessionState, session: batch.session };
+      const committed = latestCommittedResult(batch);
+      if (normalizedResults.some(result => result.candidate.status === 'AUTHORISED') && !committed) {
+        throw new QrScannerSessionError(
+          'INTERNAL_ERROR',
+          'The receipts were checked but their saved field update was missing.'
+        );
+      }
+      // Apply one authoritative record state before publishing any accepted
+      // candidate from this batch.
+      if (committed) applyCommittedUpdate(committed);
+      sendSetup();
+
+      groups.forEach((group, index) => {
+        const result = normalizedResults[index];
+        if (group.identity && isReusableQrScannerOutcome(result)) {
+          reusableResultsByIdentity.set(group.identity, {
+            candidate: { ...result.candidate },
+            session: result.session
+          });
+        }
+      });
+      groups
+        .flatMap((group, index) =>
+          group.members.map(member => ({ group, member, result: normalizedResults[index] }))
+        )
+        .sort((left, right) => left.member.sequence - right.member.sequence)
+        .forEach(({ group, member, result }) => {
+          publishCandidate(member, result, {
+            requestId: batchRequestId,
+            local: false,
+            alias: member.message.scanId !== group.leader.scanId,
+            committed: Boolean(committed)
+          });
+          if (completePending) completePendingMember(member.message.scanId);
+        });
+      groups.forEach(group => {
+        if (group.identity && pendingGroupsByIdentity.get(group.identity) === group) {
+          pendingGroupsByIdentity.delete(group.identity);
+        }
+      });
+      latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.batchDone', {
+        fieldPath: launchTarget.fieldPath,
+        requestId: batchRequestId,
+        size: groups.length,
+        transport: batch.transport,
+        committed: Boolean(committed),
+        recovery
+      });
+    };
+
+    const settleReusableQueuedGroups = (): void => {
+      const remaining: PendingScanGroup[] = [];
+      queuedScanGroups.forEach(group => {
+        const reusable = group.identity ? reusableResultsByIdentity.get(group.identity) : undefined;
+        if (!reusable) {
+          remaining.push(group);
+          return;
+        }
+        group.members
+          .slice()
+          .sort((left, right) => left.sequence - right.sequence)
+          .forEach(member => {
+            publishCandidate(member, reusable, { local: true, alias: true, committed: false });
+            completePendingMember(member.message.scanId);
+          });
+        if (group.identity && pendingGroupsByIdentity.get(group.identity) === group) {
+          pendingGroupsByIdentity.delete(group.identity);
+        }
+      });
+      queuedScanGroups.splice(0, queuedScanGroups.length, ...remaining);
+    };
+
+    const finishBatchWindow = (): void => {
+      releaseBatchWindow?.();
+    };
+
+    const createBatchWindow = (enabled: boolean): Promise<void> => {
+      if (!enabled) return Promise.resolve();
+      return new Promise(resolve => {
+        let settled = false;
+        const finish = (): void => {
+          if (settled) return;
+          settled = true;
+          if (batchWindowTimer !== null) window.clearTimeout(batchWindowTimer);
+          batchWindowTimer = null;
+          releaseBatchWindow = null;
+          resolve();
+        };
+        releaseBatchWindow = finish;
+        batchWindowTimer = window.setTimeout(finish, BATCH_COLLECTION_WINDOW_MS);
+      });
+    };
+
+    function scheduleBatchDrain(waitForCollection: boolean): void {
+      if (batchDrainScheduled || (queuedScanGroups.length === 0 && !retainedBatchRecovery)) return;
+      batchDrainScheduled = true;
+      const batchWindow = createBatchWindow(waitForCollection);
+      scanChain = scanChain.then(async () => {
+        let groups: PendingScanGroup[] = [];
+        let supportsBatch = false;
+        let batchRequestId = '';
+        try {
+          await batchWindow;
+          const ready = await ensureSession();
+          beginSessionHold();
+          supportsBatch = ready.session.capabilities?.addCandidates === true;
+
+          if (retainedBatchRecovery) {
+            if (!supportsBatch) {
+              retainedBatchRecovery = null;
+              throw new QrScannerSessionError(
+                'INTERNAL_ERROR',
+                'The scanner session no longer supports batch recovery.'
+              );
+            }
+            const recovery = retainedBatchRecovery;
+            batchInFlight = true;
+            latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.batchRecoveryStart', {
+              fieldPath: launchTarget.fieldPath,
+              requestId: recovery.requestId,
+              size: recovery.groups.length,
+              scanIds: recovery.groups.map(group => group.leader.scanId)
+            });
+            try {
+              const recovered = await addCandidateBatchWithRetry(
+                ready.credentials,
+                true,
+                recovery.requestId,
+                recovery.groups
+              );
+              applyBatchResponse(recovery.groups, recovered, recovery.requestId, false, true);
+              retainedBatchRecovery = null;
+              settleReusableQueuedGroups();
+              latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.batchRecoveryDone', {
+                fieldPath: launchTarget.fieldPath,
+                requestId: recovery.requestId
+              });
+            } catch (error) {
+              const failure = errorDetails(error);
+              if (!failure.retryable) retainedBatchRecovery = null;
+              const blockedGroups = queuedScanGroups.splice(0, queuedScanGroups.length);
+              failGroups(blockedGroups, error);
+              latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.batchRecoveryFailed', {
+                fieldPath: launchTarget.fieldPath,
+                requestId: recovery.requestId,
+                code: failure.code,
+                retryable: failure.retryable,
+                retained: Boolean(retainedBatchRecovery)
+              });
+              return;
+            } finally {
+              batchInFlight = false;
+            }
+          }
+
+          if (queuedScanGroups.length === 0) return;
+          const advertisedBatchSize = Number(ready.session.capabilities?.maxCandidateBatchSize);
+          const batchSize = supportsBatch
+            ? Math.min(
+                MAX_CANDIDATES_PER_BATCH,
+                Number.isSafeInteger(advertisedBatchSize) && advertisedBatchSize > 0
+                  ? advertisedBatchSize
+                  : MAX_CANDIDATES_PER_BATCH
+              )
+            : 1;
+          groups = queuedScanGroups.splice(0, batchSize);
+          if (groups.length === 0) return;
+          batchInFlight = true;
+          batchRequestId = createSecureRequestId();
+          latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.batchStart', {
+            fieldPath: launchTarget.fieldPath,
+            requestId: batchRequestId,
+            size: groups.length,
+            scanIds: groups.map(group => group.leader.scanId)
+          });
+          const batch = await addCandidateBatchWithRetry(
+            ready.credentials,
+            supportsBatch,
+            batchRequestId,
+            groups
+          );
+          applyBatchResponse(groups, batch, batchRequestId, true, false);
+        } catch (error) {
+          if (groups.length === 0) groups = queuedScanGroups.splice(0, MAX_CANDIDATES_PER_BATCH);
+          const failure = errorDetails(error);
+          if (supportsBatch && batchRequestId && groups.length > 0 && failure.retryable) {
+            retainedBatchRecovery = { requestId: batchRequestId, groups };
+            latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.batchRecoveryRetained', {
+              fieldPath: launchTarget.fieldPath,
+              requestId: batchRequestId,
+              size: groups.length,
+              scanIds: groups.map(group => group.leader.scanId)
+            });
+          }
+          failGroups(groups, error);
+          if (retainedBatchRecovery && queuedScanGroups.length > 0) {
+            const blockedGroups = queuedScanGroups.splice(0, queuedScanGroups.length);
+            failGroups(blockedGroups, error);
+          }
+        } finally {
+          batchInFlight = false;
+          batchDrainScheduled = false;
+          releaseBatchWindow = null;
+          if (batchWindowTimer !== null) window.clearTimeout(batchWindowTimer);
+          batchWindowTimer = null;
+          if (queuedScanGroups.length > 0 && !retainedBatchRecovery) scheduleBatchDrain(false);
+          finishDetachedSessionIfIdle();
+        }
+      });
+    }
 
     const enqueueScan = (message: QrScannerScanMessage): void => {
       const completed = candidateMessages.get(message.scanId);
@@ -344,6 +752,17 @@ export const useExternalQrScannerSession = (args: {
         return;
       }
       if (!acceptingScans || pendingScanIds.has(message.scanId)) return;
+      const identity = qrScannerCandidateIdentity(message.value);
+      const reusable = identity ? reusableResultsByIdentity.get(identity) : undefined;
+      if (reusable) {
+        scanSequence += 1;
+        publishCandidate(
+          { message, sequence: scanSequence },
+          reusable,
+          { local: true, alias: true, committed: false }
+        );
+        return;
+      }
       if (pendingScanIds.size >= MAX_PENDING_SCANS) {
         post(
           buildQrScannerCandidateMessage(requestId, {
@@ -358,82 +777,23 @@ export const useExternalQrScannerSession = (args: {
 
       pendingScanIds.add(message.scanId);
       notifyPendingWork();
-      scanChain = scanChain
-        .then(async () => {
-          const ready = await ensureSession();
-          beginSessionHold();
-          const result = await addCandidateWithRetry(ready.credentials, message);
-          if (sessionState) sessionState = { ...sessionState, session: result.session };
-          if (result.candidate.status === 'AUTHORISED') {
-            if (!result.committed) {
-              throw new QrScannerSessionError(
-                'INTERNAL_ERROR',
-                'The receipt was checked but its saved field update was missing.'
-              );
-            }
-            // Apply the authoritative record state before telling the camera
-            // page that the receipt was added.
-            applyCommittedUpdate(result.committed);
-          }
-          const response = candidateMessage(requestId, message.scanId, result);
-          candidateMessages.set(message.scanId, response);
-          sendSetup();
-          const posted = post(response);
-          if (response.status !== 'accepted') {
-            launchCallbacks.onCandidateOutcome?.({
-              scanId: response.scanId,
-              status: response.status,
-              code: response.code || 'INTERNAL_ERROR',
-              message: response.message || 'This receipt could not be added.'
-            });
-          }
-          latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.candidate', {
-            fieldPath: launchTarget.fieldPath,
-            scanId: message.scanId,
-            code: result.candidate.code,
-            status: result.candidate.status,
-            posted,
-            committed: Boolean(result.committed)
-          });
-        })
-        .catch(error => {
-          const failure = errorDetails(error);
-          if (['SESSION_EXPIRED', 'SESSION_NOT_ACTIVE', 'INVALID_CREDENTIAL', 'NOT_FOUND'].includes(failure.code)) {
-            sessionPromise = null;
-            sessionState = null;
-          }
-          // A failed prepare/redeem or invalidated session must not keep the
-          // autosave hold across the next queued attempt: preparation needs to
-          // flush the latest form state before creating fresh credentials.
-          if (!sessionState) releaseSessionHold('failed');
-          const response = buildQrScannerCandidateMessage(requestId, {
-            scanId: message.scanId,
-            status: 'error',
-            code: failure.code,
-            message: failure.retryable
-              ? 'This receipt could not be checked. Scan it again.'
-              : failure.message
-          });
-          candidateMessages.set(message.scanId, response);
-          post(response);
-          launchCallbacks.onCandidateOutcome?.({
-            scanId: response.scanId,
-            status: 'error',
-            code: response.code || failure.code,
-            message: response.message || failure.message
-          });
-          latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.candidateFailed', {
-            fieldPath: launchTarget.fieldPath,
-            scanId: message.scanId,
-            code: failure.code,
-            retryable: failure.retryable
-          });
-        })
-        .finally(() => {
-          pendingScanIds.delete(message.scanId);
-          notifyPendingWork();
-          finishDetachedSessionIfIdle();
+      scanSequence += 1;
+      const member = { message, sequence: scanSequence };
+      const pendingGroup = identity ? pendingGroupsByIdentity.get(identity) : undefined;
+      if (pendingGroup) {
+        pendingGroup.members.push(member);
+        latestRef.current.onDiagnostic?.('upload.linkCapture.externalScanner.candidateCoalesced', {
+          fieldPath: launchTarget.fieldPath,
+          scanId: message.scanId,
+          leaderScanId: pendingGroup.leader.scanId
         });
+        return;
+      }
+      const group: PendingScanGroup = { identity, leader: message, members: [member] };
+      queuedScanGroups.push(group);
+      if (identity) pendingGroupsByIdentity.set(identity, group);
+      scheduleBatchDrain(Boolean(sessionState) && !batchInFlight);
+      if (queuedScanGroups.length >= MAX_CANDIDATES_PER_BATCH) finishBatchWindow();
     };
 
     const removeListeners = (): void => {
@@ -455,7 +815,16 @@ export const useExternalQrScannerSession = (args: {
       finishAckScheduled = true;
       acceptingScans = false;
       post(buildQrScannerCommitMessage(requestId, { status: 'committing', message: 'Finishing scans...' }));
-      void scanChain.finally(() => {
+      scheduleBatchDrain(false);
+      const waitForPendingScans = async (): Promise<void> => {
+        while (true) {
+          const activeChain = scanChain;
+          await activeChain;
+          if (activeChain === scanChain && pendingScanIds.size === 0) return;
+          await Promise.resolve();
+        }
+      };
+      void waitForPendingScans().finally(() => {
         if (!disposed) {
           const linkedCount = Array.from(candidateMessages.values()).filter(message => message.status === 'accepted').length;
           post(
@@ -494,7 +863,8 @@ export const useExternalQrScannerSession = (args: {
           break;
         case QR_SCANNER_MESSAGE_TYPES.finish:
           // Compatibility for a scanner page cached before incremental saves.
-          // All candidates are already durable, so no commit RPC is needed.
+          // Drain any retained ambiguous batch before acknowledging the
+          // incremental results; no separate commit RPC is needed.
           handleLegacyFinish();
           break;
         case QR_SCANNER_MESSAGE_TYPES.cancel:

@@ -19,6 +19,7 @@ export type QrScannerSessionMethod =
   | 'qrScanner.redeem'
   | 'qrScanner.getSession'
   | 'qrScanner.addCandidate'
+  | 'qrScanner.addCandidates'
   | 'qrScanner.commit'
   | 'qrScanner.cancel';
 
@@ -76,6 +77,7 @@ const normalizeSessionRequest = (request: unknown): QrScannerSessionRequest | nu
     'qrScanner.redeem',
     'qrScanner.getSession',
     'qrScanner.addCandidate',
+    'qrScanner.addCandidates',
     'qrScanner.commit',
     'qrScanner.cancel'
   ]);
@@ -104,6 +106,9 @@ export const createQrScannerSessionDispatcher = (
         break;
       case 'qrScanner.addCandidate':
         result = service.addCandidate(normalized.params as any);
+        break;
+      case 'qrScanner.addCandidates':
+        result = service.addCandidates(normalized.params as any);
         break;
       case 'qrScanner.commit':
         result = service.commit(normalized.params as any);

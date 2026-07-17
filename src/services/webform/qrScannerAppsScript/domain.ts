@@ -1,5 +1,6 @@
 import { FileUploadConfig, FormConfigExport, LocalizedString, QrScanSessionReturnContext, WebFormSubmission } from '../../../types';
 import {
+  QR_SCANNER_MAX_CANDIDATE_BATCH_SIZE,
   QrScannerCandidateProjection,
   QrScannerResultCode,
   QrScannerSessionProjection,
@@ -363,6 +364,10 @@ export const projectSession = (session: StoredQrScannerSession): QrScannerSessio
   maxFiles: session.maxFiles,
   existingCount: session.existingCount,
   returnUrl: session.returnUrl,
+  capabilities: {
+    addCandidates: true,
+    maxCandidateBatchSize: QR_SCANNER_MAX_CANDIDATE_BATCH_SIZE
+  },
   candidates: (session.candidates || []).map(projectCandidate),
   counts: candidateCounts(session),
   revision: session.revision,

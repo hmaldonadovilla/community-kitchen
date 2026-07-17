@@ -50,22 +50,40 @@ export type QrScannerSessionProjection = {
   existingCount: number;
   status: QrScannerSessionStatus;
   commitResult?: QrScannerCommittedFieldResult;
+  capabilities?: {
+    addCandidates?: boolean;
+    maxCandidateBatchSize?: number;
+  };
   [key: string]: unknown;
 };
 
+export type QrScannerCandidateProjection = {
+  id: string;
+  status: 'AUTHORISED' | 'DUPLICATE' | 'REJECTED' | 'RETRYABLE_ERROR';
+  code: string;
+  fileId?: string;
+  canonicalUrl?: string;
+  displayName?: string;
+  mimeType?: string;
+  retryable?: boolean;
+};
+
 export type QrScannerCandidateResult = {
-  candidate: {
-    id: string;
-    status: 'AUTHORISED' | 'DUPLICATE' | 'REJECTED' | 'RETRYABLE_ERROR';
-    code: string;
-    fileId?: string;
-    canonicalUrl?: string;
-    displayName?: string;
-    mimeType?: string;
-    retryable?: boolean;
-  };
+  candidate: QrScannerCandidateProjection;
   session: QrScannerSessionProjection;
   committed?: QrScannerCommittedFieldResult;
+};
+
+export type QrScannerCandidateRequest = {
+  scanId: string;
+  rawValue: string;
+};
+
+export type QrScannerCandidateBatchResult = {
+  results: Array<{ candidate: QrScannerCandidateProjection; committed?: QrScannerCommittedFieldResult }>;
+  session: QrScannerSessionProjection;
+  committed?: QrScannerCommittedFieldResult;
+  transport: 'batch' | 'legacy';
 };
 
 export type QrScannerCommitResult = {
@@ -146,13 +164,25 @@ export const redeemQrScannerSession = async (
 
 export const addQrScannerCandidate = (
   credentials: QrScannerSessionCredentials,
-  request: { scanId: string; rawValue: string }
+  request: QrScannerCandidateRequest
 ): Promise<QrScannerCandidateResult> =>
   callRpc<QrScannerCandidateResult>('qrScanner.addCandidate', {
     ...credentials,
     scanId: request.scanId,
     rawValue: request.rawValue
   });
+
+export const addQrScannerCandidates = async (
+  credentials: QrScannerSessionCredentials,
+  request: { requestId: string; candidates: QrScannerCandidateRequest[] }
+): Promise<QrScannerCandidateBatchResult> => {
+  const batch = await callRpc<Omit<QrScannerCandidateBatchResult, 'transport'>>('qrScanner.addCandidates', {
+    ...credentials,
+    requestId: request.requestId,
+    candidates: request.candidates
+  });
+  return { ...batch, transport: 'batch' };
+};
 
 export const commitQrScannerSession = (
   credentials: QrScannerSessionCredentials,

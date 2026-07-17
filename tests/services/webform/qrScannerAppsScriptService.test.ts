@@ -1,6 +1,9 @@
 import { QrScannerFileAuthorizationService } from '../../../src/services/webform/qrScannerAppsScript/authorization';
 import { AppsScriptQrScannerService } from '../../../src/services/webform/qrScannerAppsScript/service';
-import { AppsScriptQrScannerSessionStore } from '../../../src/services/webform/qrScannerAppsScript/sessionStore';
+import {
+  AppsScriptQrScannerSessionStore,
+  MAX_QR_SCANNER_SESSION_BYTES
+} from '../../../src/services/webform/qrScannerAppsScript/sessionStore';
 import {
   DriveAuthorizationMetadata,
   QrScannerAuthoritativeService,
@@ -14,6 +17,7 @@ const FILE_1 = '1AbCdEfGhIjKlMnOpQrStUvWxYz';
 const FILE_2 = '2AbCdEfGhIjKlMnOpQrStUvWxYz';
 const FOLDER = '9AbCdEfGhIjKlMnOpQrStUvWxYz';
 const LINK_1 = `https://drive.google.com/file/d/${FILE_1}/view`;
+const LINK_1_OPEN = `https://drive.google.com/open?id=${FILE_1}`;
 const LINK_2 = `https://drive.google.com/file/d/${FILE_2}/view`;
 
 class FakeCrypto implements QrScannerCrypto {
@@ -39,7 +43,34 @@ class FakeCrypto implements QrScannerCrypto {
   }
 }
 
-const config = (linkCaptureAllowedMimeTypes?: string[]): any => ({
+class RealisticFakeCrypto implements QrScannerCrypto {
+  private sequence = 0;
+  private readonly hashes = new Map<string, string>();
+
+  hash(value: string): string {
+    if (!this.hashes.has(value)) {
+      const prefix = `h${(this.hashes.size + 1).toString(36).padStart(6, '0')}`;
+      this.hashes.set(value, prefix.padEnd(43, 'x'));
+    }
+    return this.hashes.get(value)!;
+  }
+
+  deriveAccessToken(launchToken: string, sessionId: string, clientNonce: string): string {
+    return this.hash(`${launchToken}|${sessionId}|${clientNonce}`);
+  }
+
+  matches(value: string, expectedHash?: string): boolean {
+    return this.hash(value) === expectedHash;
+  }
+
+  randomToken(byteLength = 24): string {
+    this.sequence += 1;
+    const length = Math.max(22, Math.ceil((byteLength * 4) / 3));
+    return `t${this.sequence.toString(36).padStart(6, '0')}`.padEnd(length, 'x');
+  }
+}
+
+const config = (linkCaptureAllowedMimeTypes?: string[], configuredMaxFiles = 3): any => ({
   formKey: 'Config: Receipts',
   form: { configSheet: 'Config: Receipts' },
   questions: [
@@ -50,7 +81,7 @@ const config = (linkCaptureAllowedMimeTypes?: string[]): any => ({
       qEn: 'Ingredients receipt photos',
       uploadConfig: {
         destinationFolderId: FOLDER,
-        maxFiles: 3,
+        maxFiles: configuredMaxFiles,
         allowedMimeTypes: ['image/*'],
         allowedExtensions: ['jpg'],
         linkCapture: {
@@ -75,7 +106,7 @@ const config = (linkCaptureAllowedMimeTypes?: string[]): any => ({
   validationErrors: []
 });
 
-const makeAuthoritative = (linkCaptureAllowedMimeTypes?: string[]) => {
+const makeAuthoritative = (linkCaptureAllowedMimeTypes?: string[], configuredMaxFiles = 3) => {
   const record: any = {
     formKey: 'Config: Receipts',
     id: 'REC-1',
@@ -115,7 +146,7 @@ const makeAuthoritative = (linkCaptureAllowedMimeTypes?: string[]) => {
       idempotent: false
     };
   });
-  const fetchFormConfig = jest.fn(() => config(linkCaptureAllowedMimeTypes));
+  const fetchFormConfig = jest.fn(() => config(linkCaptureAllowedMimeTypes, configuredMaxFiles));
   const fetchSubmissionById = jest.fn(() => JSON.parse(JSON.stringify(record)));
   const service: QrScannerAuthoritativeService = {
     fetchFormConfig,
@@ -155,7 +186,12 @@ const makeDrive = (overrides: Partial<Record<string, Partial<DriveAuthorizationM
   return repository;
 };
 
-const makeHarness = (drive = makeDrive(), linkCaptureAllowedMimeTypes?: string[]) => {
+const makeHarness = (
+  drive = makeDrive(),
+  linkCaptureAllowedMimeTypes?: string[],
+  crypto: QrScannerCrypto = new FakeCrypto(),
+  configuredMaxFiles = 3
+) => {
   const properties: Record<string, string> = {};
   const sessions = new AppsScriptQrScannerSessionStore({
     properties: {
@@ -171,8 +207,7 @@ const makeHarness = (drive = makeDrive(), linkCaptureAllowedMimeTypes?: string[]
     lock: null,
     nowMs: () => NOW.getTime()
   });
-  const authoritative = makeAuthoritative(linkCaptureAllowedMimeTypes);
-  const crypto = new FakeCrypto();
+  const authoritative = makeAuthoritative(linkCaptureAllowedMimeTypes, configuredMaxFiles);
   const runtime: QrScannerRuntime = {
     now: () => new Date(NOW),
     getScriptProperty: () => null,
@@ -352,6 +387,412 @@ describe('billing-free Apps Script QR scanner service', () => {
     expect(persisted).not.toContain(credentials.accessToken);
   });
 
+  test('micro-batches unique canonical files and suppresses URL aliases in request order', () => {
+    const { append, drive, record, service, sessions } = makeHarness();
+    const credentials = launchAndRedeem(service);
+    const auth = { sessionId: credentials.sessionId, accessToken: credentials.accessToken };
+
+    const result = service.addCandidates({
+      ...auth,
+      requestId: 'batch-1',
+      candidates: [
+        { scanId: 'scan-a', rawValue: LINK_1 },
+        { scanId: 'scan-a-alias', rawValue: LINK_1_OPEN },
+        { scanId: 'scan-b', rawValue: LINK_2 }
+      ]
+    });
+
+    expect(result.results.map(entry => entry.candidate.code)).toEqual([
+      'ACCEPTED',
+      'DUPLICATE_SESSION',
+      'ACCEPTED'
+    ]);
+    expect(result.committed).toMatchObject({ linkedCount: 2, dataVersion: 8, idempotent: false });
+    expect(result.session.capabilities).toEqual({ addCandidates: true, maxCandidateBatchSize: 3 });
+    expect(record.values.RECEIPTS).toBe(`${LINK_1}, ${LINK_2}`);
+    expect(record.dataVersion).toBe(8);
+    expect(append).toHaveBeenCalledTimes(1);
+    expect(append).toHaveBeenCalledWith({
+      formKey: 'Config: Receipts',
+      recordId: 'REC-1',
+      fieldId: 'RECEIPTS',
+      links: [LINK_1, LINK_2],
+      expectedDataVersion: 7
+    });
+    expect((drive.fetchMetadata as jest.Mock).mock.calls.filter(call => call[0] === FILE_1)).toHaveLength(1);
+    expect((drive.fetchMetadata as jest.Mock).mock.calls.filter(call => call[0] === FILE_2)).toHaveLength(1);
+    const stored = sessions.get(credentials.sessionId)!;
+    expect(stored).toMatchObject({ attempts: 2, incrementalAcceptedCount: 2 });
+    const authorised = stored.candidates.filter(candidate => candidate.status === 'AUTHORISED');
+    expect(authorised).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ fileId: FILE_1 }),
+        expect.objectContaining({ fileId: FILE_2 })
+      ])
+    );
+    expect(authorised.every(candidate => !Object.prototype.hasOwnProperty.call(candidate, 'fileIdHash'))).toBe(
+      true
+    );
+  });
+
+  test('replays a completed micro-batch authoritatively without another append', () => {
+    const { append, record, service, sessions } = makeHarness();
+    const credentials = launchAndRedeem(service);
+    const request = {
+      sessionId: credentials.sessionId,
+      accessToken: credentials.accessToken,
+      requestId: 'stable-batch',
+      candidates: [
+        { scanId: 'scan-a', rawValue: LINK_1 },
+        { scanId: 'scan-b', rawValue: LINK_2 }
+      ]
+    };
+
+    const first = service.addCandidates(request);
+    const receiptBeforeReplay = sessions.get(credentials.sessionId)?.lastIncrementalBatch;
+    const replay = service.addCandidates(request);
+
+    expect(first.committed).toMatchObject({ linkedCount: 2, dataVersion: 8, idempotent: false });
+    expect(replay.results.map(entry => entry.candidate.code)).toEqual(['ACCEPTED', 'ACCEPTED']);
+    expect(replay.committed).toMatchObject({ linkedCount: 2, dataVersion: 8, idempotent: true });
+    expect(append).toHaveBeenCalledTimes(1);
+    expect(record.dataVersion).toBe(8);
+    expect(sessions.get(credentials.sessionId)?.lastIncrementalBatch).toEqual(receiptBeforeReplay);
+  });
+
+  test('suppresses a canonical receipt duplicate across batches without server reprocessing', () => {
+    const { append, drive, fetchFormConfig, fetchSubmissionById, service, sessions } = makeHarness();
+    const credentials = launchAndRedeem(service);
+    const auth = { sessionId: credentials.sessionId, accessToken: credentials.accessToken };
+    service.addCandidates({
+      ...auth,
+      requestId: 'batch-a',
+      candidates: [{ scanId: 'scan-a', rawValue: LINK_1 }]
+    });
+    append.mockClear();
+    (drive.fetchMetadata as jest.Mock).mockClear();
+    fetchFormConfig.mockClear();
+    fetchSubmissionById.mockClear();
+    const attemptsBefore = sessions.get(credentials.sessionId)?.attempts;
+
+    const duplicate = service.addCandidates({
+      ...auth,
+      requestId: 'batch-b',
+      candidates: [{ scanId: 'scan-a-again', rawValue: LINK_1_OPEN }]
+    });
+
+    expect(duplicate.results[0].candidate).toMatchObject({
+      status: 'DUPLICATE',
+      code: 'DUPLICATE_SESSION'
+    });
+    expect(duplicate.committed).toBeUndefined();
+    expect(append).not.toHaveBeenCalled();
+    expect(drive.fetchMetadata).not.toHaveBeenCalled();
+    expect(fetchFormConfig).not.toHaveBeenCalled();
+    expect(fetchSubmissionById).not.toHaveBeenCalled();
+    expect(sessions.get(credentials.sessionId)?.attempts).toBe(attemptsBefore);
+  });
+
+  test('reuses a permanent rejection across canonical URL variants without another Drive read', () => {
+    const { append, drive, fetchFormConfig, fetchSubmissionById, service } = makeHarness(
+      makeDrive({ [FILE_1]: { trashed: true } })
+    );
+    const credentials = launchAndRedeem(service);
+    const auth = { sessionId: credentials.sessionId, accessToken: credentials.accessToken };
+    const first = service.addCandidates({
+      ...auth,
+      requestId: 'rejected-a',
+      candidates: [{ scanId: 'scan-a', rawValue: LINK_1 }]
+    });
+    expect(first.results[0].candidate.code).toBe('TRASHED');
+    (drive.fetchMetadata as jest.Mock).mockClear();
+    fetchFormConfig.mockClear();
+    fetchSubmissionById.mockClear();
+
+    const repeated = service.addCandidates({
+      ...auth,
+      requestId: 'rejected-b',
+      candidates: [{ scanId: 'scan-a-again', rawValue: LINK_1_OPEN }]
+    });
+
+    expect(repeated.results[0].candidate.code).toBe('TRASHED');
+    expect(append).not.toHaveBeenCalled();
+    expect(drive.fetchMetadata).not.toHaveBeenCalled();
+    expect(fetchFormConfig).not.toHaveBeenCalled();
+    expect(fetchSubmissionById).not.toHaveBeenCalled();
+  });
+
+  test('rebinds a reused invalid-payload outcome to the new scan ID', () => {
+    const { service, sessions } = makeHarness();
+    const credentials = launchAndRedeem(service);
+    const auth = { sessionId: credentials.sessionId, accessToken: credentials.accessToken };
+    const first = service.addCandidates({
+      ...auth,
+      requestId: 'invalid-a',
+      candidates: [{ scanId: 'invalid-scan-a', rawValue: 'not-a-drive-url' }]
+    });
+    const attempts = sessions.get(credentials.sessionId)?.attempts;
+    const repeated = service.addCandidates({
+      ...auth,
+      requestId: 'invalid-b',
+      candidates: [{ scanId: 'invalid-scan-b', rawValue: 'not-a-drive-url' }]
+    });
+
+    expect(repeated.results[0].candidate.code).toBe('INVALID_PAYLOAD');
+    expect(repeated.results[0].candidate.id).not.toBe(first.results[0].candidate.id);
+    expect(repeated.session.candidates).toHaveLength(2);
+    expect(sessions.get(credentials.sessionId)?.attempts).toBe(attempts);
+  });
+
+  test('binds a micro-batch request ID to the exact ordered candidate members', () => {
+    const { append, drive, service } = makeHarness();
+    const credentials = launchAndRedeem(service);
+    const auth = { sessionId: credentials.sessionId, accessToken: credentials.accessToken };
+    service.addCandidates({
+      ...auth,
+      requestId: 'stable-batch',
+      candidates: [
+        { scanId: 'scan-a', rawValue: LINK_1 },
+        { scanId: 'scan-b', rawValue: LINK_2 }
+      ]
+    });
+    append.mockClear();
+    (drive.fetchMetadata as jest.Mock).mockClear();
+
+    expect(() =>
+      service.addCandidates({
+        ...auth,
+        requestId: 'stable-batch',
+        candidates: [
+          { scanId: 'scan-b', rawValue: LINK_2 },
+          { scanId: 'scan-a', rawValue: LINK_1 }
+        ]
+      })
+    ).toThrow(expect.objectContaining({ code: 'INVALID_REQUEST' }));
+    expect(() =>
+      service.addCandidates({
+        ...auth,
+        requestId: 'stable-batch',
+        candidates: [
+          { scanId: 'scan-a', rawValue: LINK_1 },
+          { scanId: 'scan-c', rawValue: LINK_2 }
+        ]
+      })
+    ).toThrow(expect.objectContaining({ code: 'INVALID_REQUEST' }));
+    expect(append).not.toHaveBeenCalled();
+    expect(drive.fetchMetadata).not.toHaveBeenCalled();
+  });
+
+  test('applies capacity after canonical de-duplication and skips validation beyond the limit', () => {
+    const { append, drive, record, service, sessions } = makeHarness();
+    const credentials = launchAndRedeem(service);
+    const auth = { sessionId: credentials.sessionId, accessToken: credentials.accessToken };
+    sessions.mutate(credentials.sessionId, current => ({ ...current, maxFiles: 1 }));
+
+    const result = service.addCandidates({
+      ...auth,
+      requestId: 'capacity-batch',
+      candidates: [
+        { scanId: 'scan-a', rawValue: LINK_1 },
+        { scanId: 'scan-a-alias', rawValue: LINK_1_OPEN },
+        { scanId: 'scan-b', rawValue: LINK_2 }
+      ]
+    });
+
+    expect(result.results.map(entry => entry.candidate.code)).toEqual([
+      'ACCEPTED',
+      'DUPLICATE_SESSION',
+      'LIMIT_REACHED'
+    ]);
+    expect(result.committed).toMatchObject({ linkedCount: 1, dataVersion: 8 });
+    expect(record.values.RECEIPTS).toBe(LINK_1);
+    expect(append).toHaveBeenCalledTimes(1);
+    expect((drive.fetchMetadata as jest.Mock).mock.calls.filter(call => call[0] === FILE_1)).toHaveLength(1);
+    expect((drive.fetchMetadata as jest.Mock).mock.calls.filter(call => call[0] === FILE_2)).toHaveLength(0);
+  });
+
+  test('fans a non-temporary atomic append failure out to canonical aliases', () => {
+    const { append, record, service } = makeHarness();
+    const credentials = launchAndRedeem(service);
+    (append as jest.Mock).mockReturnValueOnce({
+      success: false,
+      code: 'LIMIT_REACHED',
+      message: 'The upload field is full.'
+    });
+
+    const result = service.addCandidates({
+      sessionId: credentials.sessionId,
+      accessToken: credentials.accessToken,
+      requestId: 'failed-alias-batch',
+      candidates: [
+        { scanId: 'scan-a', rawValue: LINK_1 },
+        { scanId: 'scan-a-alias', rawValue: LINK_1_OPEN }
+      ]
+    });
+
+    expect(result.results.map(entry => entry.candidate.code)).toEqual(['LIMIT_REACHED', 'LIMIT_REACHED']);
+    expect(result.results.map(entry => entry.candidate.status)).toEqual(['REJECTED', 'REJECTED']);
+    expect(result.committed).toBeUndefined();
+    expect(result.session.candidates.map(candidate => candidate.code)).toEqual(['LIMIT_REACHED', 'LIMIT_REACHED']);
+    expect(append).toHaveBeenCalledTimes(1);
+    expect(record.values.RECEIPTS).toBe('');
+    expect(record.dataVersion).toBe(7);
+  });
+
+  test('does not charge duplicate aliases against the remaining attempt budget', () => {
+    const { append, service, sessions } = makeHarness();
+    const credentials = launchAndRedeem(service);
+    const auth = { sessionId: credentials.sessionId, accessToken: credentials.accessToken };
+    sessions.mutate(credentials.sessionId, current => ({
+      ...current,
+      attempts: current.maxAttempts - 1
+    }));
+
+    const result = service.addCandidates({
+      ...auth,
+      requestId: 'last-attempt-batch',
+      candidates: [
+        { scanId: 'scan-a', rawValue: LINK_1 },
+        { scanId: 'scan-a-alias', rawValue: LINK_1_OPEN }
+      ]
+    });
+
+    expect(result.results.map(entry => entry.candidate.code)).toEqual(['ACCEPTED', 'DUPLICATE_SESSION']);
+    expect(append).toHaveBeenCalledTimes(1);
+    const stored = sessions.get(credentials.sessionId)!;
+    expect(stored.attempts).toBe(stored.maxAttempts);
+  });
+
+  test('admits unique candidates in order when only one processing attempt remains', () => {
+    const { append, drive, service, sessions } = makeHarness();
+    const credentials = launchAndRedeem(service);
+    const auth = { sessionId: credentials.sessionId, accessToken: credentials.accessToken };
+    sessions.mutate(credentials.sessionId, current => ({
+      ...current,
+      attempts: current.maxAttempts - 1
+    }));
+
+    const result = service.addCandidates({
+      ...auth,
+      requestId: 'bounded-attempt-batch',
+      candidates: [
+        { scanId: 'scan-a', rawValue: LINK_1 },
+        { scanId: 'scan-b', rawValue: LINK_2 }
+      ]
+    });
+
+    expect(result.results.map(entry => entry.candidate.code)).toEqual(['ACCEPTED', 'LIMIT_REACHED']);
+    expect(result.committed).toMatchObject({ linkedCount: 1 });
+    expect(append).toHaveBeenCalledTimes(1);
+    expect((drive.fetchMetadata as jest.Mock).mock.calls.filter(call => call[0] === FILE_1)).toHaveLength(1);
+    expect((drive.fetchMetadata as jest.Mock).mock.calls.filter(call => call[0] === FILE_2)).toHaveLength(0);
+  });
+
+  test.each([
+    [
+      'valid first',
+      [
+        { scanId: 'scan-valid', rawValue: LINK_1 },
+        { scanId: 'scan-invalid', rawValue: 'not-a-drive-url' }
+      ],
+      ['ACCEPTED', 'LIMIT_REACHED']
+    ],
+    [
+      'invalid first',
+      [
+        { scanId: 'scan-invalid', rawValue: 'not-a-drive-url' },
+        { scanId: 'scan-valid', rawValue: LINK_1 }
+      ],
+      ['INVALID_PAYLOAD', 'LIMIT_REACHED']
+    ]
+  ])('allocates the final processing attempt in input order: %s', (_label, candidates, expectedCodes) => {
+    const { append, drive, service, sessions } = makeHarness();
+    const credentials = launchAndRedeem(service);
+    sessions.mutate(credentials.sessionId, current => ({
+      ...current,
+      attempts: current.maxAttempts - 1
+    }));
+
+    const result = service.addCandidates({
+      sessionId: credentials.sessionId,
+      accessToken: credentials.accessToken,
+      requestId: `ordered-attempt-${_label}`,
+      candidates: candidates as Array<{ scanId: string; rawValue: string }>
+    });
+
+    expect(result.results.map(entry => entry.candidate.code)).toEqual(expectedCodes);
+    expect((drive.fetchMetadata as jest.Mock).mock.calls.filter(call => call[0] === FILE_1)).toHaveLength(
+      _label === 'valid first' ? 1 : 0
+    );
+    expect(append).toHaveBeenCalledTimes(_label === 'valid first' ? 1 : 0);
+  });
+
+  test('recovers a durable micro-batch when final session persistence fails', () => {
+    const { append, record, service, sessions } = makeHarness();
+    const credentials = launchAndRedeem(service);
+    const request = {
+      sessionId: credentials.sessionId,
+      accessToken: credentials.accessToken,
+      requestId: 'recoverable-batch',
+      candidates: [
+        { scanId: 'scan-a', rawValue: LINK_1 },
+        { scanId: 'scan-b', rawValue: LINK_2 }
+      ]
+    };
+    const mutate = sessions.mutate.bind(sessions);
+    let failCompletion = true;
+    jest.spyOn(sessions, 'mutate').mockImplementation((sessionId, update) =>
+      mutate(sessionId, current => {
+        const next = update(current);
+        if (failCompletion && next?.lastIncrementalBatch?.requestHash) {
+          failCompletion = false;
+          throw new Error('batch completion unavailable');
+        }
+        return next;
+      })
+    );
+
+    expect(() => service.addCandidates(request)).toThrow('batch completion unavailable');
+    expect(record.dataVersion).toBe(8);
+    expect(sessions.get(credentials.sessionId)?.incrementalBatch?.fileIds).toEqual([FILE_1, FILE_2]);
+
+    const recovered = service.addCandidates(request);
+    expect(recovered.committed).toMatchObject({ linkedCount: 2, dataVersion: 8, idempotent: true });
+    expect(recovered.results.map(entry => entry.candidate.code)).toEqual(['ACCEPTED', 'ACCEPTED']);
+    expect(append).toHaveBeenCalledTimes(1);
+    expect(record.dataVersion).toBe(8);
+  });
+
+  test('reconciles a durable micro-batch when successful append metadata is malformed', () => {
+    const { append, record, service } = makeHarness();
+    const credentials = launchAndRedeem(service);
+    const durableAppend = append.getMockImplementation()!;
+    append.mockImplementationOnce(request => {
+      durableAppend(request);
+      return {
+        success: true,
+        message: 'saved but response metadata was truncated',
+        appendedCount: 2,
+        links: [LINK_1, LINK_2]
+      } as any;
+    });
+
+    const result = service.addCandidates({
+      sessionId: credentials.sessionId,
+      accessToken: credentials.accessToken,
+      requestId: 'malformed-response-batch',
+      candidates: [
+        { scanId: 'scan-a', rawValue: LINK_1 },
+        { scanId: 'scan-b', rawValue: LINK_2 }
+      ]
+    });
+
+    expect(result.committed).toMatchObject({ linkedCount: 2, dataVersion: 8, idempotent: true });
+    expect(result.results.map(entry => entry.candidate.code)).toEqual(['ACCEPTED', 'ACCEPTED']);
+    expect(append).toHaveBeenCalledTimes(1);
+    expect(record.dataVersion).toBe(8);
+  });
+
   test('compacts acknowledged candidates while preserving counts for larger scanner limits', () => {
     const drive: QrScannerDriveRepository = {
       fetchMetadata: jest.fn(fileId => ({
@@ -383,9 +824,82 @@ describe('billing-free Apps Script QR scanner service', () => {
     }
 
     expect(latest?.counts).toMatchObject({ accepted: 15, authorised: 15, remaining: 5 });
-    expect(latest?.session.candidates).toHaveLength(12);
+    expect(latest?.session.candidates).toHaveLength(10);
     expect((record.values.RECEIPTS || '').split(', ')).toHaveLength(15);
     expect(record.dataVersion).toBe(22);
+  });
+
+  test('keeps a bounded default 10-file session below the ScriptProperties byte ceiling', () => {
+    const fileIds = Array.from({ length: 10 }, (_, index) =>
+      `1Receipt${index.toString().padStart(2, '0')}`.padEnd(44, 'X')
+    );
+    const drive: QrScannerDriveRepository = {
+      fetchMetadata: jest.fn(fileId => ({
+        id: fileId,
+        name: `${'🧾'.repeat(60)}.jpg`,
+        mimeType: 'image/jpeg',
+        trashed: false,
+        parentIds: [FOLDER],
+        shortcut: false
+      }))
+    };
+    const { properties, service, sessions } = makeHarness(
+      drive,
+      undefined,
+      new RealisticFakeCrypto(),
+      10
+    );
+    const credentials = launchAndRedeem(service);
+    const auth = { sessionId: credentials.sessionId, accessToken: credentials.accessToken };
+    sessions.mutate(credentials.sessionId, current => ({
+      ...current,
+      fieldLabel: 'é'.repeat(80),
+      displayTitle: 'é'.repeat(80),
+      instruction: '🧾'.repeat(75),
+      returnContext: {
+        app: 'a'.repeat(80),
+        page: 'p'.repeat(80),
+        stepId: 's'.repeat(80),
+        overlay: 'files'
+      }
+    }));
+    service.addCandidates({
+      ...auth,
+      requestId: 'rejected-prefill',
+      candidates: [
+        { scanId: 'invalid-1', rawValue: 'not-a-drive-url-1' },
+        { scanId: 'invalid-2', rawValue: 'not-a-drive-url-2' }
+      ]
+    });
+
+    for (let offset = 0; offset < fileIds.length; offset += 3) {
+      service.addCandidates({
+        ...auth,
+        requestId: `bounded-batch-${offset}`,
+        candidates: fileIds.slice(offset, offset + 3).map((fileId, index) => ({
+          scanId: `scan-${offset + index}`,
+          rawValue: `https://drive.google.com/file/d/${fileId}/view`
+        }))
+      });
+    }
+
+    const active = sessions.get(credentials.sessionId)!;
+    const activeRaw = Object.values(properties)[0];
+    expect(new TextEncoder().encode(activeRaw).length).toBeLessThanOrEqual(MAX_QR_SCANNER_SESSION_BYTES);
+    expect(active.candidates).toHaveLength(10);
+    expect(active.incrementalAcceptedCount).toBe(10);
+    active.candidates.forEach(candidate => {
+      expect(candidate.mimeType).toBeUndefined();
+      expect(new TextEncoder().encode(candidate.displayName || '').length).toBeLessThanOrEqual(160);
+    });
+
+    const completed = service.commit({ ...auth, requestId: 'bounded-terminal-commit' });
+    const completedRaw = Object.values(properties)[0];
+    expect(completed.status).toBe('COMPLETED');
+    expect(new TextEncoder().encode(completedRaw).length).toBeLessThanOrEqual(MAX_QR_SCANNER_SESSION_BYTES);
+    expect(sessions.get(credentials.sessionId)?.candidates.some(candidate => candidate.status === 'AUTHORISED')).toBe(
+      false
+    );
   });
 
   test('reconciles a lost commit response by Drive file ID and returns authoritative field state', () => {
