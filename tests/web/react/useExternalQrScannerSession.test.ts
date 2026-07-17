@@ -359,7 +359,7 @@ describe('external QR scanner incremental session hook', () => {
     expectNoTerminalSessionRpc();
   });
 
-  test('queues two scans, persists each authoritative update in order, and holds only for pending mutations', async () => {
+  test('queues two scans, persists each authoritative update in order, and holds until the scanner closes', async () => {
     const launch = deferred<typeof successfulLaunch>();
     const redeemed = deferred<typeof redeemedSession>();
     const first = deferred<ReturnType<typeof candidateResult>>();
@@ -424,13 +424,11 @@ describe('external QR scanner incremental session hook', () => {
       'add:scan-1',
       'apply:8',
       'add:scan-2',
-      'apply:9',
-      'hold:settled'
+      'apply:9'
     ]);
     expect(harness.callbacks.onPendingWorkChange.mock.calls.map(([count]) => count)).toEqual([1, 2, 1, 0]);
     expect(onSessionReady).toHaveBeenCalledTimes(1);
-    expect(onSessionEnd).toHaveBeenCalledTimes(1);
-    expect(onSessionEnd).toHaveBeenCalledWith('settled');
+    expect(onSessionEnd).not.toHaveBeenCalled();
     expect(onCommitted.mock.calls.map(([update]) => update)).toEqual([
       {
         fieldId: 'ING_EVD',
@@ -452,6 +450,11 @@ describe('external QR scanner incremental session hook', () => {
       }
     ]);
     expect(harness.callbacks.onCandidateOutcome).not.toHaveBeenCalled();
+
+    harness.dispatch(buildQrScannerClosedMessage(requestId));
+    await flushPromises();
+    expect(onSessionEnd).toHaveBeenCalledTimes(1);
+    expect(onSessionEnd).toHaveBeenCalledWith('closed');
     expectNoTerminalSessionRpc();
   });
 
@@ -525,8 +528,7 @@ describe('external QR scanner incremental session hook', () => {
     ]);
     expect(harness.callbacks.onPendingWorkChange.mock.calls.map(([count]) => count)).toEqual([1, 0]);
     expect(harness.callbacks.onSessionReady).toHaveBeenCalledTimes(1);
-    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledTimes(1);
-    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('settled');
+    expect(harness.callbacks.onSessionEnd).not.toHaveBeenCalled();
     expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(1);
     expect(harness.callbacks.onDiagnostic).toHaveBeenCalledWith(
       'upload.linkCapture.externalScanner.candidateRetry',
@@ -537,57 +539,67 @@ describe('external QR scanner incremental session hook', () => {
         attempt: 1
       }
     );
+
+    harness.dispatch(buildQrScannerClosedMessage(harness.requestId()));
+    await flushPromises();
+    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('closed');
     expectNoTerminalSessionRpc();
   });
 
   test.each([
-    ['CANCEL', (requestId: string) => buildQrScannerCancelMessage(requestId)],
-    ['CLOSED', (requestId: string) => buildQrScannerClosedMessage(requestId)]
-  ] as const)('%s detaches the scanner but lets an in-flight add settle before releasing the hold', async (_label, message) => {
-    const add = deferred<ReturnType<typeof candidateResult>>();
-    mockAddQrScannerCandidate.mockReturnValueOnce(add.promise);
+    ['CANCEL', (requestId: string) => buildQrScannerCancelMessage(requestId), 'cancelled'],
+    ['CLOSED', (requestId: string) => buildQrScannerClosedMessage(requestId), 'closed']
+  ] as const)(
+    '%s detaches the scanner but lets an in-flight add settle before releasing the hold',
+    async (_label, message, expectedReason) => {
+      const add = deferred<ReturnType<typeof candidateResult>>();
+      mockAddQrScannerCandidate.mockReturnValueOnce(add.promise);
+      const harness = createHarness();
+      expect(harness.hook.openScanner()).toBe(true);
+      const requestId = harness.requestId();
+      harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-pending', 'receipt-pending'));
+      await flushPromises();
+      expect(mockAddQrScannerCandidate).toHaveBeenCalledTimes(1);
+      expect(harness.callbacks.onSessionReady).toHaveBeenCalledTimes(1);
+
+      harness.dispatch(message(requestId));
+      await flushPromises();
+
+      expect(harness.callbacks.onSessionEnd).not.toHaveBeenCalled();
+      expect(harness.callbacks.onCommitted).not.toHaveBeenCalled();
+      expect(harness.callbacks.onPendingWorkChange.mock.calls.map(([count]) => count)).toEqual([1]);
+      expectNoTerminalSessionRpc();
+
+      add.resolve(candidateResult('scan-pending', 1));
+      await flushPromises();
+
+      expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(1);
+      expect(harness.callbacks.onPendingWorkChange.mock.calls.map(([count]) => count)).toEqual([1, 0]);
+      expect(harness.callbacks.onSessionEnd).toHaveBeenCalledTimes(1);
+      expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith(expectedReason);
+      expectNoTerminalSessionRpc();
+    }
+  );
+
+  test('keeps the session active after a duplicate and accepts a different scan after the queue is idle', async () => {
+    mockAddQrScannerCandidate
+      .mockResolvedValueOnce({
+        candidate: {
+          id: 'candidate-duplicate',
+          status: 'DUPLICATE',
+          code: 'ALREADY_LINKED',
+          fileId: '1AbCdEfGhIjKlMnOpQrStUvWxY1',
+          canonicalUrl: receiptUrl(1),
+          displayName: 'Receipt 1.jpg'
+        },
+        session: redeemedSession.session
+      } satisfies QrScannerCandidateResult)
+      .mockResolvedValueOnce(candidateResult('scan-after-idle', 2));
     const harness = createHarness();
     expect(harness.hook.openScanner()).toBe(true);
     const requestId = harness.requestId();
-    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-pending', 'receipt-pending'));
-    await flushPromises();
-    expect(mockAddQrScannerCandidate).toHaveBeenCalledTimes(1);
-    expect(harness.callbacks.onSessionReady).toHaveBeenCalledTimes(1);
 
-    harness.dispatch(message(requestId));
-    await flushPromises();
-
-    expect(harness.callbacks.onSessionEnd).not.toHaveBeenCalled();
-    expect(harness.callbacks.onCommitted).not.toHaveBeenCalled();
-    expect(harness.callbacks.onPendingWorkChange.mock.calls.map(([count]) => count)).toEqual([1]);
-    expectNoTerminalSessionRpc();
-
-    add.resolve(candidateResult('scan-pending', 1));
-    await flushPromises();
-
-    expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(1);
-    expect(harness.callbacks.onPendingWorkChange.mock.calls.map(([count]) => count)).toEqual([1, 0]);
-    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledTimes(1);
-    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('settled');
-    expectNoTerminalSessionRpc();
-  });
-
-  test('reports a server duplicate to the originating form without applying a field update', async () => {
-    mockAddQrScannerCandidate.mockResolvedValueOnce({
-      candidate: {
-        id: 'candidate-duplicate',
-        status: 'DUPLICATE',
-        code: 'DUPLICATE',
-        fileId: '1AbCdEfGhIjKlMnOpQrStUvWxY1',
-        canonicalUrl: receiptUrl(1),
-        displayName: 'Receipt 1.jpg'
-      },
-      session: redeemedSession.session
-    } satisfies QrScannerCandidateResult);
-    const harness = createHarness();
-    expect(harness.hook.openScanner()).toBe(true);
-
-    harness.dispatch(buildQrScannerScanMessage(harness.requestId(), 'scan-duplicate', 'receipt-duplicate'));
+    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-duplicate', 'receipt-duplicate'));
     await flushPromises();
 
     expect(harness.callbacks.onCommitted).not.toHaveBeenCalled();
@@ -595,11 +607,24 @@ describe('external QR scanner incremental session hook', () => {
     expect(harness.callbacks.onCandidateOutcome).toHaveBeenCalledWith({
       scanId: 'scan-duplicate',
       status: 'duplicate',
-      code: 'DUPLICATE',
+      code: 'ALREADY_LINKED',
       message: 'This receipt was already scanned or linked.'
     });
     expect(harness.callbacks.onPendingWorkChange.mock.calls.map(([count]) => count)).toEqual([1, 0]);
-    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('settled');
+    expect(harness.callbacks.onSessionEnd).not.toHaveBeenCalled();
+
+    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-after-idle', 'receipt-after-idle'));
+    await flushPromises();
+
+    expect(mockAddQrScannerCandidate).toHaveBeenCalledTimes(2);
+    expect(mockRedeemQrScannerSession).toHaveBeenCalledTimes(1);
+    expect(harness.callbacks.onPendingWorkChange.mock.calls.map(([count]) => count)).toEqual([1, 0, 1, 0]);
+    expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(1);
+    expect(harness.callbacks.onSessionEnd).not.toHaveBeenCalled();
+
+    harness.dispatch(buildQrScannerClosedMessage(requestId));
+    await flushPromises();
+    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('closed');
     expectNoTerminalSessionRpc();
   });
 
@@ -631,7 +656,7 @@ describe('external QR scanner incremental session hook', () => {
       message: 'The form changed while this receipt was being added. Return to the form and reopen the scanner.'
     });
     expect(harness.callbacks.onPendingWorkChange.mock.calls.map(([count]) => count)).toEqual([1, 0]);
-    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('settled');
+    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('closed');
     expectNoTerminalSessionRpc();
   });
 
@@ -662,7 +687,7 @@ describe('external QR scanner incremental session hook', () => {
     await flushPromises();
 
     expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(1);
-    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('settled');
+    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('committed');
     expect(harness.popup.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({
         type: QR_SCANNER_MESSAGE_TYPES.commit,

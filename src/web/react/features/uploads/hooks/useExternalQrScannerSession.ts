@@ -183,8 +183,8 @@ export const useExternalQrScannerSession = (args: {
     let acceptingScans = true;
     let detached = false;
     let disposed = false;
-    let mutationHoldActive = false;
-    let workHadFailure = false;
+    let sessionHoldActive = false;
+    let detachedEndReason: Parameters<EndQrScannerInteraction>[0] = 'closed';
     let finishAckScheduled = false;
     let scanChain: Promise<void> = Promise.resolve();
     let sessionPromise: Promise<{
@@ -214,24 +214,22 @@ export const useExternalQrScannerSession = (args: {
       launchCallbacks.onPendingWorkChange?.(pendingScanIds.size);
     };
 
-    const beginMutationHold = (): void => {
-      if (mutationHoldActive) return;
-      mutationHoldActive = true;
+    const beginSessionHold = (): void => {
+      if (sessionHoldActive) return;
+      sessionHoldActive = true;
       launchCallbacks.onSessionReady?.();
     };
 
-    const releaseMutationHold = (reason: 'settled' | 'failed'): void => {
-      if (!mutationHoldActive) return;
-      mutationHoldActive = false;
+    const releaseSessionHold = (reason: Parameters<EndQrScannerInteraction>[0]): void => {
+      if (!sessionHoldActive) return;
+      sessionHoldActive = false;
       launchCallbacks.onSessionEnd?.(reason);
-      workHadFailure = false;
     };
 
-    const finishMutationHoldIfIdle = (): void => {
-      if (pendingScanIds.size > 0) return;
-      releaseMutationHold(workHadFailure ? 'failed' : 'settled');
-      workHadFailure = false;
-      if (detached) disposed = true;
+    const finishDetachedSessionIfIdle = (): void => {
+      if (!detached || pendingScanIds.size > 0) return;
+      releaseSessionHold(detachedEndReason);
+      disposed = true;
     };
 
     const sendSetup = (): void => {
@@ -262,9 +260,10 @@ export const useExternalQrScannerSession = (args: {
           fieldPath: launchTarget.fieldPath
         });
         if (!launch.success) throw launchError(launch);
-        // Preparation flushes pending form edits. Hold autosave from this
-        // point until every queued scanner mutation has settled.
-        beginMutationHold();
+        // Preparation flushes pending form edits. Keep the origin record
+        // stable until the scanner UI actually closes; an idle camera remains
+        // the same multi-scan interaction and may send another code later.
+        beginSessionHold();
         const redeemed = await redeemQrScannerSession(launch);
         sessionState = redeemed;
         sendSetup();
@@ -357,13 +356,12 @@ export const useExternalQrScannerSession = (args: {
         return;
       }
 
-      if (pendingScanIds.size === 0) workHadFailure = false;
       pendingScanIds.add(message.scanId);
       notifyPendingWork();
       scanChain = scanChain
         .then(async () => {
           const ready = await ensureSession();
-          beginMutationHold();
+          beginSessionHold();
           const result = await addCandidateWithRetry(ready.credentials, message);
           if (sessionState) sessionState = { ...sessionState, session: result.session };
           if (result.candidate.status === 'AUTHORISED') {
@@ -399,7 +397,6 @@ export const useExternalQrScannerSession = (args: {
           });
         })
         .catch(error => {
-          workHadFailure = true;
           const failure = errorDetails(error);
           if (['SESSION_EXPIRED', 'SESSION_NOT_ACTIVE', 'INVALID_CREDENTIAL', 'NOT_FOUND'].includes(failure.code)) {
             sessionPromise = null;
@@ -408,7 +405,7 @@ export const useExternalQrScannerSession = (args: {
           // A failed prepare/redeem or invalidated session must not keep the
           // autosave hold across the next queued attempt: preparation needs to
           // flush the latest form state before creating fresh credentials.
-          if (!sessionState) releaseMutationHold('failed');
+          if (!sessionState) releaseSessionHold('failed');
           const response = buildQrScannerCandidateMessage(requestId, {
             scanId: message.scanId,
             status: 'error',
@@ -435,7 +432,7 @@ export const useExternalQrScannerSession = (args: {
         .finally(() => {
           pendingScanIds.delete(message.scanId);
           notifyPendingWork();
-          finishMutationHoldIfIdle();
+          finishDetachedSessionIfIdle();
         });
     };
 
@@ -444,15 +441,13 @@ export const useExternalQrScannerSession = (args: {
       if (activeCleanupRef.current === cleanup) activeCleanupRef.current = null;
     };
 
-    const detach = (): void => {
+    const detach = (reason: Parameters<EndQrScannerInteraction>[0]): void => {
       if (detached) return;
       acceptingScans = false;
       detached = true;
+      detachedEndReason = reason;
       removeListeners();
-      if (pendingScanIds.size === 0) {
-        finishMutationHoldIfIdle();
-        disposed = true;
-      }
+      finishDetachedSessionIfIdle();
     };
 
     const handleLegacyFinish = (): void => {
@@ -471,7 +466,7 @@ export const useExternalQrScannerSession = (args: {
             })
           );
         }
-        detach();
+        detach('committed');
       });
     };
 
@@ -503,10 +498,14 @@ export const useExternalQrScannerSession = (args: {
           handleLegacyFinish();
           break;
         case QR_SCANNER_MESSAGE_TYPES.cancel:
+          // Cancelling only detaches the camera UI. It must never cancel a
+          // durable link or interrupt an addCandidate request in flight.
+          detach('cancelled');
+          break;
         case QR_SCANNER_MESSAGE_TYPES.closed:
           // Closing only detaches the camera UI. It must never cancel durable
           // links or interrupt an addCandidate request already in flight.
-          detach();
+          detach('closed');
           break;
         default:
           break;
@@ -514,7 +513,7 @@ export const useExternalQrScannerSession = (args: {
     }
 
     const cleanup: ActiveScannerCleanup = () => {
-      detach();
+      detach('closed');
     };
 
     window.addEventListener('message', handleMessage);

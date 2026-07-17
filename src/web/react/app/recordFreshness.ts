@@ -5,6 +5,7 @@ export const DEFAULT_RECORD_FRESHNESS_QUIET_WINDOW_MS = 30_000;
 export const MIN_RECORD_FRESHNESS_QUIET_WINDOW_MS = 5_000;
 export const MAX_RECORD_FRESHNESS_QUIET_WINDOW_MS = 10 * 60_000;
 export const RECORD_FRESHNESS_RECENT_INTERACTION_WINDOW_MS = 5_000;
+export const RECORD_FRESHNESS_BLOCKED_RETRY_MS = 1_000;
 
 export interface ResolvedRecordFreshnessConfig {
   enabled: boolean;
@@ -78,6 +79,14 @@ export const resolveRecordFreshnessTimerDelay = (args: {
   const ageMs = Math.max(0, args.now - lastServerActivityAt);
   return Math.max(0, args.config.quietWindowMs - ageMs);
 };
+
+export const resolveRecordFreshnessBlockedRetryMs = (args: {
+  blockers: string[];
+  quietWindowMs: number;
+}): number =>
+  args.blockers.includes('qrScanner.inFlight')
+    ? Math.max(RECORD_FRESHNESS_BLOCKED_RETRY_MS, Math.floor(args.quietWindowMs))
+    : RECORD_FRESHNESS_BLOCKED_RETRY_MS;
 
 export const shouldDeferRecordFreshnessSync = (args: {
   dirty: boolean;

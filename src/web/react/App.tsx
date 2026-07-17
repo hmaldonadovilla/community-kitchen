@@ -149,6 +149,7 @@ import {
 import {
   resolveDeferredRecordFreshnessResumeAction,
   resolveRecordFreshnessMetaOnlyAdoptionRule,
+  resolveRecordFreshnessBlockedRetryMs,
   resolveRecordFreshnessConfig,
   resolveRecordFreshnessSyncBlockers,
   resolveRecordFreshnessTimerDelay,
@@ -2653,7 +2654,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
   }, []);
 
   const scheduleRecordFreshnessCheck = useCallback(
-    (reason: string) => {
+    (reason: string, minimumDelayMs = 1000) => {
       clearRecordFreshnessTimer();
       const currentDataVersion = getCurrentKnownClientDataVersion();
       const delayMs = resolveRecordFreshnessTimerDelay({
@@ -2666,7 +2667,7 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
         lastServerActivityAt: lastRecordServerActivityAtRef.current || null
       });
       if (delayMs === null) return;
-      const nextDelayMs = Math.max(1000, Math.floor(delayMs));
+      const nextDelayMs = Math.max(minimumDelayMs, Math.floor(delayMs));
       recordFreshnessTimerRef.current = globalThis.setTimeout(() => {
         recordFreshnessTimerRef.current = null;
         void performRecordFreshnessCheckRef.current('heartbeat');
@@ -2757,7 +2758,13 @@ const App: React.FC<BootstrapContext> = ({ definition, formKey, record, analytic
           draftSavePhase: draftSave.phase,
           autoSaveQueued: autoSaveQueuedRef.current
         });
-        scheduleRecordFreshnessCheck(`${reason}.syncBlocked`);
+        scheduleRecordFreshnessCheck(
+          `${reason}.syncBlocked`,
+          resolveRecordFreshnessBlockedRetryMs({
+            blockers: syncBlockersAtStart,
+            quietWindowMs: recordFreshnessConfigRef.current.quietWindowMs
+          })
+        );
         return;
       }
       if (
