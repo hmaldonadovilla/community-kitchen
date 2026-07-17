@@ -41,6 +41,17 @@ describe('WebFormTemplate', () => {
     expect(html).toContain('window.__CK_SERVICE_URL__ = "https://script.google.com/macros/s/example-deployment/exec"');
   });
 
+  test('marks Home Screen installs as standalone web apps', () => {
+    const html = buildWebFormHtml(null, 'Config: Test', null, 'meal-production');
+
+    expect(html).toContain('<meta name="application-name" content="Community Kitchen" />');
+    expect(html).toContain('<meta name="apple-mobile-web-app-capable" content="yes" />');
+    expect(html).toContain('<meta name="apple-mobile-web-app-title" content="Community Kitchen" />');
+    expect(html).toContain('<meta name="apple-mobile-web-app-status-bar-style" content="default" />');
+    expect(html).toContain('<meta name="mobile-web-app-capable" content="yes" />');
+    expect(html).toContain('<meta name="theme-color" content="#ffffff" />');
+  });
+
   test('suppresses the second boot wait copy for app-opening navigation from the landing page', () => {
     const html = buildWebFormHtml(null, 'Config: Test', null, 'meal-production', { ckNav: 'open-app' });
 

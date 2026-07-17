@@ -1,11 +1,11 @@
 import React, { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import remarkGfmIos15 from '../../app/remarkGfmIos15';
 
 /**
  * Responsibility:
  * - Render Markdown as React elements (no HTML string building)
- * - Apply GFM extensions (tables, task lists, strikethrough)
+ * - Apply iOS 15-compatible GFM extensions (footnotes, tables, task lists, strikethrough)
  * - Ensure links open in a new tab
  *
  * Styling is provided via the scoped `.markdown-body` CSS (github-markdown-css) plus CK overrides.
@@ -33,12 +33,11 @@ export const MarkdownPreview: React.FC<{
   return (
     <div className="ck-markdown-scroll">
       <div className="markdown-body ck-markdown-body">
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+        <ReactMarkdown remarkPlugins={[remarkGfmIos15]} components={components}>
           {text}
         </ReactMarkdown>
       </div>
     </div>
   );
 };
-
 
