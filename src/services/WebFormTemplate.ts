@@ -211,7 +211,7 @@ export function buildWebFormHtml(
         /* Typography */
         --ck-font-family: ${SYSTEM_FONT_STACK};
       }
-      * { box-sizing: border-box; }
+      *
       html {
         /* Prevent automatic text inflation on iOS; keep sizing consistent and intentional. */
         -webkit-text-size-adjust: 100%;
