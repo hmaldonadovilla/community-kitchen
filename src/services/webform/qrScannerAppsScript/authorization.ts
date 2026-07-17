@@ -70,7 +70,7 @@ export class QrScannerFileAuthorizationService {
     const policy = resolveQrScannerAuthorizationPolicy(uploadConfig || {});
     if (policy.includeDestinationDrive && policy.destinationFolderId) {
       try {
-        const destination = this.driveRepository.fetchMetadata(policy.destinationFolderId);
+        const destination = this.driveRepository.fetchMetadata(policy.destinationFolderId, 'folder');
         if (destination.driveId) {
           policy.allowedSharedDriveIds = uniqueIds([...policy.allowedSharedDriveIds, destination.driveId]);
         }
@@ -138,7 +138,7 @@ export class QrScannerFileAuthorizationService {
       inspected += 1;
       if (inspected > MAX_ANCESTRY_NODES) return false;
 
-      const parent = this.driveRepository.fetchMetadata(current.id);
+      const parent = this.driveRepository.fetchMetadata(current.id, 'folder');
       if (parent.trashed) return false;
       if (parent.driveId && allowedDrives.has(parent.driveId)) return true;
       if (!isFolderMimeType(parent.mimeType)) continue;

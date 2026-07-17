@@ -42,8 +42,15 @@ class FakeElement {
   async play(): Promise<void> {}
 }
 
-const createHarness = (options?: { ios?: boolean; commitOnReturnOnIos?: boolean }) => {
+const createHarness = (options?: {
+  ios?: boolean;
+  commitOnReturnOnIos?: boolean;
+  liveCamera?: boolean;
+  decodeFrames?: Array<string | Error>;
+}) => {
   const windowListeners = new Map<string, Listener>();
+  const animationFrames = new Map<number, FrameRequestCallback>();
+  let animationFrameSequence = 100;
   const opener = { postMessage: jest.fn() };
   const status = new FakeElement();
   const instruction = new FakeElement();
@@ -51,6 +58,16 @@ const createHarness = (options?: { ios?: boolean; commitOnReturnOnIos?: boolean 
   const candidateList = new FakeElement();
   const candidateSummary = new FakeElement();
   const close = new FakeElement();
+  const cameraTrack = {
+    stop: jest.fn(),
+    getSettings: jest.fn(() => ({ width: 1920, height: 1080, frameRate: 24, facingMode: 'environment' })),
+    getCapabilities: jest.fn(() => ({})),
+    applyConstraints: jest.fn(async () => undefined)
+  };
+  const cameraStream = {
+    getTracks: jest.fn(() => [cameraTrack]),
+    getVideoTracks: jest.fn(() => [cameraTrack])
+  };
   const elements = new Map<string, FakeElement>([
     ['[data-role="status"]', status],
     ['[data-role="instruction"]', instruction],
@@ -79,8 +96,14 @@ const createHarness = (options?: { ios?: boolean; commitOnReturnOnIos?: boolean 
     }),
     setTimeout: jest.fn((listener: TimerHandler, delay?: number) => globalThis.setTimeout(listener, delay)),
     clearTimeout: jest.fn((timer: ReturnType<typeof setTimeout>) => globalThis.clearTimeout(timer)),
-    requestAnimationFrame: jest.fn(() => 101),
-    cancelAnimationFrame: jest.fn(),
+    requestAnimationFrame: jest.fn((listener: FrameRequestCallback) => {
+      animationFrameSequence += 1;
+      animationFrames.set(animationFrameSequence, listener);
+      return animationFrameSequence;
+    }),
+    cancelAnimationFrame: jest.fn((frameId: number) => {
+      animationFrames.delete(frameId);
+    }),
     close: jest.fn()
   };
 
@@ -93,7 +116,10 @@ const createHarness = (options?: { ios?: boolean; commitOnReturnOnIos?: boolean 
         ? 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_4 like Mac OS X)'
         : 'Mozilla/5.0 (Linux; Android 15)',
       platform: options?.ios ? 'iPhone' : 'Linux armv8l',
-      maxTouchPoints: options?.ios ? 5 : 1
+      maxTouchPoints: options?.ios ? 5 : 1,
+      mediaDevices: {
+        getUserMedia: jest.fn(async () => cameraStream)
+      }
     }
   });
   Object.defineProperty(globalThis, 'crypto', {
@@ -103,7 +129,20 @@ const createHarness = (options?: { ios?: boolean; commitOnReturnOnIos?: boolean 
     }
   });
 
+  let decodeQrFromVideoFrameMock: jest.Mock;
   jest.isolateModules(() => {
+    const decoder = jest.requireMock('../../../src/web/qrScanner/decoder') as {
+      decodeQrFromVideoFrame: jest.Mock;
+      isLiveCameraSupported: jest.Mock;
+    };
+    const decodeFrames = [...(options?.decodeFrames || [])];
+    decoder.isLiveCameraSupported.mockReturnValue(options?.liveCamera === true);
+    decoder.decodeQrFromVideoFrame.mockImplementation(async () => {
+      const next = decodeFrames.shift() || '';
+      if (next instanceof Error) throw next;
+      return next;
+    });
+    decodeQrFromVideoFrameMock = decoder.decodeQrFromVideoFrame;
     jest.requireActual('../../../src/web/qrScanner/standalone');
   });
 
@@ -117,6 +156,12 @@ const createHarness = (options?: { ios?: boolean; commitOnReturnOnIos?: boolean 
   const dispatchFromOpener = (data: unknown): void => dispatchFromSource(data);
   const dispatchPageHide = (): void => {
     windowListeners.get('pagehide')?.({ type: 'pagehide' });
+  };
+  const runNextAnimationFrame = (): void => {
+    const next = animationFrames.entries().next().value as [number, FrameRequestCallback] | undefined;
+    if (!next) throw new Error('No animation frame is scheduled.');
+    animationFrames.delete(next[0]);
+    next[1](Date.now());
   };
   const messagesOfType = (type: string): any[] =>
     opener.postMessage.mock.calls.map(call => call[0]).filter(message => message?.type === type);
@@ -136,12 +181,14 @@ const createHarness = (options?: { ios?: boolean; commitOnReturnOnIos?: boolean 
   return {
     opener,
     fakeWindow,
+    decodeQrFromVideoFrameMock: decodeQrFromVideoFrameMock!,
     status,
     candidateSummary,
     close,
     dispatchFromOpener,
     dispatchFromSource,
     dispatchPageHide,
+    runNextAnimationFrame,
     messagesOfType,
     acceptCandidate
   };
@@ -242,6 +289,34 @@ describe('standalone incremental QR scanner lifecycle', () => {
 
     const types = harness.opener.postMessage.mock.calls.map(call => call[0]?.type);
     expect(types).toEqual([QR_SCANNER_MESSAGE_TYPES.ready, QR_SCANNER_MESSAGE_TYPES.ready]);
+  });
+
+  test('continues scanning after a transient video-frame decode failure', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const harness = createHarness({
+      liveCamera: true,
+      decodeFrames: [new Error('transient-canvas-read'), 'receipt-after-error']
+    });
+    for (let index = 0; index < 12; index += 1) await Promise.resolve();
+
+    jest.advanceTimersByTime(350);
+    harness.runNextAnimationFrame();
+    for (let index = 0; index < 12; index += 1) await Promise.resolve();
+
+    expect(harness.decodeQrFromVideoFrameMock).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      '[QrScanner][decoder] frame failed; continuing',
+      expect.objectContaining({ consecutiveErrors: 1, message: 'transient-canvas-read' })
+    );
+
+    jest.advanceTimersByTime(200);
+    harness.runNextAnimationFrame();
+    for (let index = 0; index < 12; index += 1) await Promise.resolve();
+
+    expect(harness.decodeQrFromVideoFrameMock).toHaveBeenCalledTimes(2);
+    expect(harness.messagesOfType(QR_SCANNER_MESSAGE_TYPES.scan)).toHaveLength(1);
+    harness.dispatchPageHide();
+    warn.mockRestore();
   });
 
   test('still consumes a cached legacy committed response', () => {

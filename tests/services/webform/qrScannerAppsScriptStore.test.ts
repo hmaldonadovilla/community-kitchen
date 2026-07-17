@@ -68,6 +68,16 @@ describe('Apps Script QR scanner session store', () => {
     expect(lock.releaseLock).toHaveBeenCalledTimes(3);
   });
 
+  test('reads one session without enumerating every stored session', () => {
+    const { properties, getProperties } = makeProperties();
+    const store = new AppsScriptQrScannerSessionStore({ properties, lock: null, nowMs: () => NOW });
+    store.create(session('one'));
+    getProperties.mockClear();
+
+    expect(store.get('one')?.id).toBe('one');
+    expect(getProperties).not.toHaveBeenCalled();
+  });
+
   test('fails retryably when ScriptLock cannot be acquired', () => {
     const { properties } = makeProperties();
     const store = new AppsScriptQrScannerSessionStore({

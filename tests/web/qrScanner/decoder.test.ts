@@ -92,4 +92,29 @@ describe('QR scanner live-frame decoder', () => {
     expect(jsQrMock).toHaveBeenCalledTimes(3);
     expect(jsQrMock.mock.calls[2]?.[3]).toEqual({ inversionAttempts: 'onlyInvert' });
   });
+
+  test('uses stable per-region canvases to avoid resizing one backing store for every pass', async () => {
+    const fallback = createCanvas();
+    const tight = createCanvas();
+    const medium = createCanvas();
+    const full = createCanvas();
+    jsQrMock.mockReturnValue(null);
+
+    await decodeQrFromVideoFrame(video, fallback.canvas, null, {
+      frameSequence: 3,
+      regionCanvases: [tight.canvas, medium.canvas, full.canvas]
+    });
+    await decodeQrFromVideoFrame(video, fallback.canvas, null, {
+      frameSequence: 6,
+      regionCanvases: [tight.canvas, medium.canvas, full.canvas]
+    });
+
+    expect(fallback.context.drawImage).not.toHaveBeenCalled();
+    expect(tight.canvas).toMatchObject({ width: 518, height: 518 });
+    expect(medium.canvas).toMatchObject({ width: 778, height: 778 });
+    expect(full.canvas).toMatchObject({ width: 1280, height: 720 });
+    expect(tight.context.drawImage).toHaveBeenCalledTimes(2);
+    expect(medium.context.drawImage).toHaveBeenCalledTimes(2);
+    expect(full.context.drawImage).toHaveBeenCalledTimes(2);
+  });
 });

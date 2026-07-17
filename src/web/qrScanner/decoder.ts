@@ -24,6 +24,7 @@ type QrInversionAttempts = 'attemptBoth' | 'dontInvert' | 'onlyInvert';
 
 export type VideoFrameDecodeOptions = {
   frameSequence?: number;
+  regionCanvases?: HTMLCanvasElement[];
 };
 
 export type VideoFrameRegion = {
@@ -145,8 +146,8 @@ const drawVideoFrameRegion = (
   const scale = Math.min(1, region.maxDimension / Math.max(region.sw, region.sh));
   const width = Math.max(1, Math.round(region.sw * scale));
   const height = Math.max(1, Math.round(region.sh * scale));
-  canvas.width = width;
-  canvas.height = height;
+  if (canvas.width !== width) canvas.width = width;
+  if (canvas.height !== height) canvas.height = height;
   const ctx = canvas.getContext('2d');
   if (!ctx) return false;
   ctx.imageSmoothingEnabled = false;
@@ -168,9 +169,11 @@ export const decodeQrFromVideoFrame = async (
   if (!width || !height) return '';
 
   const regions = buildVideoFrameRegions(width, height, options.frameSequence || 0);
-  for (const region of regions) {
-    if (!drawVideoFrameRegion(video, canvas, region)) return '';
-    const value = decodeQrFromCanvas(canvas, region.inversionAttempts);
+  for (let index = 0; index < regions.length; index += 1) {
+    const region = regions[index];
+    const regionCanvas = options.regionCanvases?.[index] || canvas;
+    if (!drawVideoFrameRegion(video, regionCanvas, region)) return '';
+    const value = decodeQrFromCanvas(regionCanvas, region.inversionAttempts);
     if (value) return value;
   }
   return '';

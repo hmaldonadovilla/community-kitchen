@@ -2,6 +2,7 @@ import {
   DEFAULT_RECORD_FRESHNESS_QUIET_WINDOW_MS,
   RECORD_FRESHNESS_RECENT_INTERACTION_WINDOW_MS,
   resolveDeferredRecordFreshnessResumeAction,
+  resolveRecordFreshnessBlockedRetryMs,
   resolveRecordFreshnessMetaOnlyAdoptionRule,
   resolveRecordFreshnessConfig,
   resolveRecordFreshnessSyncBlockers,
@@ -96,6 +97,21 @@ describe('recordFreshness helpers', () => {
         lastServerActivityAt: 75_000
       })
     ).toBe(15_000);
+  });
+
+  test('backs off heartbeat retries for a long-lived active QR scanner', () => {
+    expect(
+      resolveRecordFreshnessBlockedRetryMs({
+        blockers: ['qrScanner.inFlight'],
+        quietWindowMs: 30_000
+      })
+    ).toBe(30_000);
+    expect(
+      resolveRecordFreshnessBlockedRetryMs({
+        blockers: ['upload.inFlight'],
+        quietWindowMs: 30_000
+      })
+    ).toBe(1_000);
   });
 
   test('does not schedule when the record is not eligible for freshness checks', () => {

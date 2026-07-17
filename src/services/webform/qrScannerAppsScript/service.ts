@@ -46,6 +46,20 @@ const DEFAULT_MAX_ATTEMPTS = 20;
 // leave room for commit recovery state while covering the configured 10-file flow.
 const MAX_STORED_CANDIDATES = 12;
 
+type CandidateTiming = {
+  startedAt: number;
+  stages: Record<string, number>;
+};
+
+const timeCandidateStage = <T>(timing: CandidateTiming, stage: string, operation: () => T): T => {
+  const startedAt = Date.now();
+  try {
+    return operation();
+  } finally {
+    timing.stages[stage] = (timing.stages[stage] || 0) + Math.max(0, Date.now() - startedAt);
+  }
+};
+
 const normalizeIdentifier = (value: unknown, maxLength = 160): string => {
   const normalized = (value ?? '').toString().trim();
   if (!normalized || normalized.length > maxLength) return '';
@@ -295,7 +309,8 @@ export class AppsScriptQrScannerService {
     session: QrScannerSessionProjection;
     committed?: QrScannerIncrementalCommitResult;
   } {
-    const snapshot = this.authenticate(request);
+    const timing: CandidateTiming = { startedAt: Date.now(), stages: {} };
+    const snapshot = timeCandidateStage(timing, 'sessionRead', () => this.authenticate(request));
     if (snapshot.status !== 'ACTIVE') throw qrScannerError('SESSION_NOT_ACTIVE');
     const scanId = normalizeIdentifier(request?.scanId, 256);
     const rawValue = normalizeIdentifier(request?.rawValue, 2048);
@@ -307,9 +322,11 @@ export class AppsScriptQrScannerService {
       throw qrScannerError('INVALID_REQUEST');
     }
     if (prior && prior.status !== 'RETRYABLE_ERROR') {
-      return prior.status === 'AUTHORISED' && prior.fileId
-        ? this.candidateResponse(snapshot, prior, this.resolveCommittedCandidate(snapshot, prior))
-        : this.candidateResponse(snapshot, prior);
+      const committed = prior.status === 'AUTHORISED' && prior.fileId
+        ? timeCandidateStage(timing, 'replayReconcile', () => this.resolveCommittedCandidate(snapshot, prior))
+        : undefined;
+      this.logCheckedCandidate(snapshot, prior, committed, timing);
+      return this.candidateResponse(snapshot, prior, committed);
     }
     // A retry of an existing scan ID must always be able to reconcile a write
     // whose response or final session update was lost.
@@ -322,11 +339,13 @@ export class AppsScriptQrScannerService {
     if (!parsed.ok) {
       candidate = makeCandidate(this.crypto, scanIdHash, payloadHash, 'INVALID_PAYLOAD', this.runtime.now());
     } else {
-      target = resolveAuthoritativeTarget(
-        this.authoritative,
-        snapshot.formKey,
-        snapshot.recordId,
-        snapshot.fieldId
+      target = timeCandidateStage(timing, 'targetRead', () =>
+        resolveAuthoritativeTarget(
+          this.authoritative,
+          snapshot.formKey,
+          snapshot.recordId,
+          snapshot.fieldId
+        )
       );
       if (!target) throw qrScannerError('CONFIGURATION_ERROR');
       retryingIncrementalAppend = Boolean(
@@ -348,14 +367,18 @@ export class AppsScriptQrScannerService {
       const accepted = snapshot.candidates.filter(entry => entry.status === 'AUTHORISED');
       if (target.currentFileIds.includes(parsed.fileId)) {
         candidate = retryingIncrementalAppend
-          ? this.authoriseCandidate(scanIdHash, payloadHash, parsed.fileId, target)
+          ? timeCandidateStage(timing, 'driveAuthorization', () =>
+              this.authoriseCandidate(scanIdHash, payloadHash, parsed.fileId, target!)
+            )
           : makeCandidate(this.crypto, scanIdHash, payloadHash, 'ALREADY_LINKED', this.runtime.now());
       } else if (accepted.some(entry => entry.fileId === parsed.fileId)) {
         candidate = makeCandidate(this.crypto, scanIdHash, payloadHash, 'DUPLICATE_SESSION', this.runtime.now());
       } else if (target.currentLinks.length >= snapshot.maxFiles) {
         candidate = makeCandidate(this.crypto, scanIdHash, payloadHash, 'LIMIT_REACHED', this.runtime.now());
       } else {
-        const result = this.authorization.authorize(parsed.fileId, target.uploadConfig);
+        const result = timeCandidateStage(timing, 'driveAuthorization', () =>
+          this.authorization.authorize(parsed.fileId, target!.uploadConfig)
+        );
         candidate = result.ok
           ? makeCandidate(this.crypto, scanIdHash, payloadHash, 'ACCEPTED', this.runtime.now(), {
               fileId: result.file.id,
@@ -369,9 +392,11 @@ export class AppsScriptQrScannerService {
     }
 
     if (candidate.status !== 'AUTHORISED' || !candidate.fileId || !target) {
-      const updated = this.storeCandidate(snapshot, request.accessToken, scanIdHash, payloadHash, candidate);
+      const updated = timeCandidateStage(timing, 'candidateStateWrite', () =>
+        this.storeCandidate(snapshot, request.accessToken, scanIdHash, payloadHash, candidate)
+      );
       const storedCandidate = updated.candidates.find(entry => entry.scanIdHash === scanIdHash) || candidate;
-      this.logCheckedCandidate(updated, storedCandidate);
+      this.logCheckedCandidate(updated, storedCandidate, undefined, timing);
       return this.candidateResponse(updated, storedCandidate);
     }
 
@@ -382,41 +407,49 @@ export class AppsScriptQrScannerService {
       retryable: true,
       incremental: { state: 'PENDING', updatedAt: this.runtime.now().toISOString() }
     };
-    const pendingSession = this.storeCandidate(
-      snapshot,
-      request.accessToken,
-      scanIdHash,
-      payloadHash,
-      pendingCandidate
+    const pendingSession = timeCandidateStage(timing, 'candidateStateWrite', () =>
+      this.storeCandidate(
+        snapshot,
+        request.accessToken,
+        scanIdHash,
+        payloadHash,
+        pendingCandidate
+      )
     );
     const storedPending = pendingSession.candidates.find(entry => entry.scanIdHash === scanIdHash);
     if (storedPending?.status === 'AUTHORISED' && storedPending.fileId) {
-      const committed = this.resolveCommittedCandidate(pendingSession, storedPending);
-      this.logCheckedCandidate(pendingSession, storedPending);
+      const committed = timeCandidateStage(timing, 'replayReconcile', () =>
+        this.resolveCommittedCandidate(pendingSession, storedPending)
+      );
+      this.logCheckedCandidate(pendingSession, storedPending, committed, timing);
       return this.candidateResponse(pendingSession, storedPending, committed);
     }
     if (storedPending?.incremental?.state !== 'PENDING' || storedPending.fileId !== candidate.fileId) {
       const resolved = storedPending || pendingCandidate;
-      this.logCheckedCandidate(pendingSession, resolved);
+      this.logCheckedCandidate(pendingSession, resolved, undefined, timing);
       return this.candidateResponse(pendingSession, resolved);
     }
 
     const canonicalUrl = canonicalDriveFileUrl(candidate.fileId);
     let append: QrScannerFieldAppendResult;
     try {
-      append = this.authoritative.appendQrScannerUploadLinks({
-        formKey: snapshot.formKey,
-        recordId: snapshot.recordId,
-        fieldId: snapshot.fieldId,
-        links: [canonicalUrl],
-        expectedDataVersion: snapshot.expectedDataVersion
-      });
+      append = timeCandidateStage(timing, 'recordAppend', () =>
+        this.authoritative.appendQrScannerUploadLinks({
+          formKey: snapshot.formKey,
+          recordId: snapshot.recordId,
+          fieldId: snapshot.fieldId,
+          links: [canonicalUrl],
+          expectedDataVersion: snapshot.expectedDataVersion
+        })
+      );
     } catch {
       append = { success: false, code: 'TEMPORARY_ERROR', message: 'The receipt could not be attached.' };
     }
 
     if (!append.success) {
-      const recovered = this.recoverIncrementalAppend(snapshot, candidate.fileId);
+      const recovered = timeCandidateStage(timing, 'appendRecovery', () =>
+        this.recoverIncrementalAppend(snapshot, candidate.fileId!)
+      );
       if (recovered) append = recovered;
     }
 
@@ -435,15 +468,17 @@ export class AppsScriptQrScannerService {
           : { fileId: undefined, displayName: undefined, mimeType: undefined }),
         checkedAt: this.runtime.now().toISOString()
       };
-      const failedSession = this.replaceCandidate(
-        snapshot.id,
-        request.accessToken,
-        scanIdHash,
-        payloadHash,
-        failedCandidate
+      const failedSession = timeCandidateStage(timing, 'candidateFinalWrite', () =>
+        this.replaceCandidate(
+          snapshot.id,
+          request.accessToken,
+          scanIdHash,
+          payloadHash,
+          failedCandidate
+        )
       );
       const storedFailure = failedSession.candidates.find(entry => entry.scanIdHash === scanIdHash) || failedCandidate;
-      this.logCheckedCandidate(failedSession, storedFailure);
+      this.logCheckedCandidate(failedSession, storedFailure, undefined, timing);
       return this.candidateResponse(failedSession, storedFailure);
     }
 
@@ -467,16 +502,18 @@ export class AppsScriptQrScannerService {
           : { fileId: undefined, displayName: undefined, mimeType: undefined }),
         checkedAt: this.runtime.now().toISOString()
       };
-      const unresolvedSession = this.replaceCandidate(
-        snapshot.id,
-        request.accessToken,
-        scanIdHash,
-        payloadHash,
-        unresolvedCandidate
+      const unresolvedSession = timeCandidateStage(timing, 'candidateFinalWrite', () =>
+        this.replaceCandidate(
+          snapshot.id,
+          request.accessToken,
+          scanIdHash,
+          payloadHash,
+          unresolvedCandidate
+        )
       );
       const storedUnresolved =
         unresolvedSession.candidates.find(entry => entry.scanIdHash === scanIdHash) || unresolvedCandidate;
-      this.logCheckedCandidate(unresolvedSession, storedUnresolved);
+      this.logCheckedCandidate(unresolvedSession, storedUnresolved, undefined, timing);
       return this.candidateResponse(unresolvedSession, storedUnresolved);
     }
     const completedCandidate: StoredQrScannerCandidate = {
@@ -484,32 +521,34 @@ export class AppsScriptQrScannerService {
       incremental: { state: 'COMPLETED', updatedAt: this.runtime.now().toISOString() },
       checkedAt: this.runtime.now().toISOString()
     };
-    const updated = this.sessions.mutate(snapshot.id, current => {
-      this.requireAuthenticatedCurrent(current, request.accessToken);
-      if (current.status !== 'ACTIVE') throw qrScannerError('SESSION_NOT_ACTIVE');
-      const existing = current.candidates.find(entry => entry.scanIdHash === scanIdHash);
-      if (existing?.status === 'AUTHORISED' && existing.payloadHash === payloadHash) return null;
-      if (!existing || existing.payloadHash !== payloadHash) throw qrScannerError('INVALID_REQUEST');
-      if (current.expectedDataVersion !== snapshot.expectedDataVersion) {
-        throw qrScannerError('RECORD_CHANGED');
-      }
-      const nextCandidate = { ...completedCandidate, id: existing.id };
-      const candidates = current.candidates.map(entry => (entry.id === existing.id ? nextCandidate : entry));
-      const retainedAuthorised = current.candidates.filter(entry => entry.status === 'AUTHORISED').length;
-      const acceptedBefore = Math.max(Number(current.incrementalAcceptedCount) || 0, retainedAuthorised);
-      return {
-        ...current,
-        candidates,
-        expectedDataVersion: committed.dataVersion,
-        existingFileIds: Array.from(new Set([...current.existingFileIds, candidate.fileId!])).slice(
-          -MAX_STORED_CANDIDATES
-        ),
-        incrementalAcceptedCount: acceptedBefore + 1,
-        updatedAt: this.runtime.now().toISOString()
-      };
-    });
+    const updated = timeCandidateStage(timing, 'candidateFinalWrite', () =>
+      this.sessions.mutate(snapshot.id, current => {
+        this.requireAuthenticatedCurrent(current, request.accessToken);
+        if (current.status !== 'ACTIVE') throw qrScannerError('SESSION_NOT_ACTIVE');
+        const existing = current.candidates.find(entry => entry.scanIdHash === scanIdHash);
+        if (existing?.status === 'AUTHORISED' && existing.payloadHash === payloadHash) return null;
+        if (!existing || existing.payloadHash !== payloadHash) throw qrScannerError('INVALID_REQUEST');
+        if (current.expectedDataVersion !== snapshot.expectedDataVersion) {
+          throw qrScannerError('RECORD_CHANGED');
+        }
+        const nextCandidate = { ...completedCandidate, id: existing.id };
+        const candidates = current.candidates.map(entry => (entry.id === existing.id ? nextCandidate : entry));
+        const retainedAuthorised = current.candidates.filter(entry => entry.status === 'AUTHORISED').length;
+        const acceptedBefore = Math.max(Number(current.incrementalAcceptedCount) || 0, retainedAuthorised);
+        return {
+          ...current,
+          candidates,
+          expectedDataVersion: committed.dataVersion,
+          existingFileIds: Array.from(new Set([...current.existingFileIds, candidate.fileId!])).slice(
+            -MAX_STORED_CANDIDATES
+          ),
+          incrementalAcceptedCount: acceptedBefore + 1,
+          updatedAt: this.runtime.now().toISOString()
+        };
+      })
+    );
     const storedCandidate = updated.candidates.find(entry => entry.scanIdHash === scanIdHash) || completedCandidate;
-    this.logCheckedCandidate(updated, storedCandidate, committed);
+    this.logCheckedCandidate(updated, storedCandidate, committed, timing);
     return this.candidateResponse(updated, storedCandidate, committed);
   }
 
@@ -963,14 +1002,21 @@ export class AppsScriptQrScannerService {
   private logCheckedCandidate(
     session: StoredQrScannerSession,
     candidate: StoredQrScannerCandidate,
-    committed?: QrScannerIncrementalCommitResult
+    committed?: QrScannerIncrementalCommitResult,
+    timing?: CandidateTiming
   ): void {
     debugLog('qrScanner.appsScript.candidate.checked', {
       sessionId: session.id,
       candidateId: candidate.id,
       code: candidate.code,
       incrementallyCommitted: Boolean(committed),
-      dataVersion: committed?.dataVersion || null
+      dataVersion: committed?.dataVersion || null,
+      ...(timing
+        ? {
+            durationMs: Math.max(0, Date.now() - timing.startedAt),
+            stageMs: timing.stages
+          }
+        : {})
     });
   }
 

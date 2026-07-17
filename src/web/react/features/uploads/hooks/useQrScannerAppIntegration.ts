@@ -7,7 +7,7 @@ import { createQrScanSessionLaunchApi } from '../../../api';
 import { resolveExistingRecordId } from '../../../app/submission';
 import type { LineItemState } from '../../../types';
 import type { UploadedFieldValueOverride } from '../domain/uploadedFieldOverrides';
-import type { QrScannerCommittedUpdate } from '../qrScannerTypes';
+import type { EndQrScannerInteraction, QrScannerCommittedUpdate } from '../qrScannerTypes';
 
 export type QrScannerSubmissionMeta = {
   id?: string;
@@ -182,7 +182,7 @@ export const useQrScannerAppIntegration = (args: UseQrScannerAppIntegrationArgs)
   }, [setAutoSaveHoldFromUi]);
 
   const handleQrScannerSessionEnd = React.useCallback(
-    (reason: 'settled' | 'committed' | 'cancelled' | 'closed' | 'failed') => {
+    (reason: Parameters<EndQrScannerInteraction>[0]) => {
       setAutoSaveHoldFromUi(false, { reason: 'qrScannerSession' });
       if (autoSaveDirtyRef.current || autoSaveQueuedRef.current) {
         scheduleLatestAutoSave(`qrScanner.${reason}.release`, 0);

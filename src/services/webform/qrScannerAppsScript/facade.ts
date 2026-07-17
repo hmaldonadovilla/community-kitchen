@@ -89,6 +89,7 @@ export const createQrScannerSessionDispatcher = (
   authoritative: QrScannerAuthoritativeService,
   dependencies: QrScannerServiceDependencies = {}
 ) => (request: unknown): QrScannerRpcEnvelope<unknown> => {
+  const startedAt = Date.now();
   const normalized = normalizeSessionRequest(request);
   if (!normalized) return toQrScannerRpcFailure({ code: 'INVALID_REQUEST', retryable: false });
   try {
@@ -113,13 +114,18 @@ export const createQrScannerSessionDispatcher = (
       default:
         return toQrScannerRpcFailure({ code: 'INVALID_REQUEST', retryable: false });
     }
+    debugLog('qrScanner.appsScript.rpc.completed', {
+      method: normalized.method,
+      durationMs: Math.max(0, Date.now() - startedAt)
+    });
     return { ok: true, result };
   } catch (error) {
     const failure = toQrScannerRpcFailure(error);
     debugLog('qrScanner.appsScript.rpc.failed', {
       method: normalized.method,
       code: failure.ok ? 'INTERNAL_ERROR' : failure.error.code,
-      retryable: failure.ok ? false : failure.error.retryable
+      retryable: failure.ok ? false : failure.error.retryable,
+      durationMs: Math.max(0, Date.now() - startedAt)
     });
     return failure;
   }

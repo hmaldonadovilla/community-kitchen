@@ -202,7 +202,8 @@ export interface DriveAuthorizationMetadata {
 }
 
 export interface QrScannerDriveRepository {
-  fetchMetadata(fileId: string): DriveAuthorizationMetadata;
+  /** Folder metadata may use the short-lived shared cache; scanned files are always read authoritatively. */
+  fetchMetadata(fileId: string, kind?: 'file' | 'folder'): DriveAuthorizationMetadata;
 }
 
 export interface QrScannerRuntime {

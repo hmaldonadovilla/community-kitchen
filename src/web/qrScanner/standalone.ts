@@ -53,6 +53,7 @@ let connectionFailed = false;
 let closedPosted = false;
 let cameraReady = false;
 let frameSequence = 0;
+let consecutiveDecodeErrors = 0;
 let candidates: ScannerCandidateView[] = [];
 let maxFiles = 10;
 let existingCount = 0;
@@ -60,6 +61,15 @@ const recentFingerprints = new Map<string, number>();
 const scanFingerprints = new Map<string, string>();
 
 const scanCanvas = document.createElement('canvas');
+// Keep stable backing stores for the tight, medium, full-frame, and inverted
+// passes. Repeatedly resizing one canvas caused heavy allocation churn on the
+// memory-constrained iPhone 6s and can put avoidable pressure on WebKit's loop.
+const scanRegionCanvases = [
+  scanCanvas,
+  document.createElement('canvas'),
+  document.createElement('canvas'),
+  document.createElement('canvas')
+];
 const detector = createNativeQrDetector();
 const CAMERA_WARMUP_MS = 350;
 const SCAN_INTERVAL_MS = 100;
@@ -271,14 +281,32 @@ const sendDetectedValue = (value: string): void => {
 async function scanLoop(): Promise<void> {
   if (!video || closing || connectionFailed || !cameraReady) return;
   frameSequence += 1;
-  const value = await decodeQrFromVideoFrame(video, scanCanvas, detector, { frameSequence });
-  if (closing || connectionFailed || !cameraReady) return;
-  if (value) {
-    sendDetectedValue(value);
-    resumeTimer = window.setTimeout(scheduleNextFrame, 700);
-    return;
+  let nextDelayMs = SCAN_INTERVAL_MS;
+  try {
+    const value = await decodeQrFromVideoFrame(video, scanCanvas, detector, {
+      frameSequence,
+      regionCanvases: scanRegionCanvases
+    });
+    if (closing || connectionFailed || !cameraReady) return;
+    consecutiveDecodeErrors = 0;
+    if (value) {
+      sendDetectedValue(value);
+      nextDelayMs = 700;
+    }
+  } catch (error) {
+    consecutiveDecodeErrors += 1;
+    // Canvas reads can fail transiently under memory pressure on older WebKit.
+    // Never let one rejected frame terminate the continuous scanner loop.
+    if (consecutiveDecodeErrors <= 3 || consecutiveDecodeErrors % 10 === 0) {
+      console.warn('[QrScanner][decoder] frame failed; continuing', {
+        consecutiveErrors: consecutiveDecodeErrors,
+        message: error instanceof Error ? error.message : 'frame-decode-failed'
+      });
+    }
+    nextDelayMs = Math.min(1000, SCAN_INTERVAL_MS * Math.max(2, consecutiveDecodeErrors));
+  } finally {
+    if (!closing && !connectionFailed && cameraReady) scheduleNextFrame(nextDelayMs);
   }
-  scheduleNextFrame(SCAN_INTERVAL_MS);
 }
 
 const beginScanning = (): void => {

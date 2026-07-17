@@ -49,6 +49,15 @@ On phone-width portrait screens, the rendered camera preview is capped at 32% of
 
 Camera startup requests a high-detail rear stream with 1920 x 1080 as a non-blocking preference. Browsers that advertise detail content hints or continuous focus receive those settings; older Safari versions keep their native autofocus. Live decoding checks tight and medium source-resolution regions in the centre before periodically checking a bounded full-frame image. Standard black-on-white labels use the fast non-inverted path, while an occasional inverted pass preserves support for reversed codes without imposing its decoding cost on every frame.
 
+The live loop retains a stable canvas per decode region to avoid repeated backing-store allocation on memory-constrained phones. A transient canvas or frame-decode failure is logged with bounded frequency and rescheduled with a short backoff instead of terminating the scanner. While the scanner interaction is active, record-freshness heartbeats use the configured quiet window rather than retrying and logging every second.
+
+## Server performance safeguards
+
+- Record mutations stay ordered and serialized; parallel validation must never bypass the pending-intent and expected-version checks.
+- Hot-path session authentication reads only the requested ScriptProperties entry. Expired-session cleanup and capacity reclamation run when a session is created.
+- Every scanned file receives a fresh, field-limited Drive metadata request. Folder metadata used for destination-drive and ancestry checks may use the shared script cache for at most 60 seconds.
+- With `CK_DEBUG` enabled, `qrScanner.appsScript.rpc.completed` reports total RPC duration and `qrScanner.appsScript.candidate.checked` reports `sessionRead`, `targetRead`, `driveAuthorization`, state-write, append, and recovery stage durations without logging QR payloads or Drive scope identifiers.
+
 ## Failure and recovery behavior
 
 - Camera startup is independent from server preparation. Opening the scanner or waiting before the first scan consumes no session and starts no expiry clock.
@@ -56,7 +65,7 @@ Camera startup requests a high-detail rear stream with 1920 x 1080 as a non-bloc
 - Transport uncertainty is retried with the same `scanId`. If the record write succeeded but the response or final session update was lost, Apps Script returns the authoritative already-linked field without another append.
 - Permanent rejection, duplicate, out-of-scope, unsupported, and maximum-file results do not mutate the record.
 - Closing the scanner never calls `qrScanner.commit` or `qrScanner.cancel`. Focus, visibility, `window.closed`, heartbeat, and elapsed-time signals have no persistence meaning.
-- A close message stops accepting new scans but does not interrupt queued work. The origin releases the overlay lock and autosave hold only after relevant in-flight transactions settle.
+- A close message stops accepting new scans but does not interrupt queued work. The origin releases the pending overlay lock after each transaction, while the autosave hold stays active until the scanner closes and any in-flight transaction settles.
 - If the scanner page or opener is discarded after a durable write, the record remains authoritative and a normal record reload shows the linked receipt.
 - Expired credentials are discarded; a later scan can lazily create a fresh session from the origin's latest record version.
 
@@ -66,7 +75,7 @@ Camera startup requests a high-detail rear stream with 1920 x 1080 as a non-bloc
 2. Store a pending append marker and reconcile same-`scanId` retries by Drive file ID.
 3. Return the complete authoritative upload-field state and data version after every accepted scan while keeping the session active.
 4. Open the scanner immediately, start session preparation only on the first scan, and serialize the bounded scan queue.
-5. Apply each authoritative update before reporting **Added**, and scope the file-overlay lock/autosave hold to queued work only.
+5. Apply each authoritative update before reporting **Added**. Scope the file-overlay saving lock to queued work, but retain the autosave hold for the full active scanner interaction so an idle camera can safely submit another code.
 6. Remove native-return inference, heartbeat, timeout cancellation, and generated Finish/Cancel actions while retaining legacy message parsing during rollout.
 7. Cover server idempotency, multi-scan ordering, overlay blocking, platform close behavior, configuration, and generated scanner assets.
 

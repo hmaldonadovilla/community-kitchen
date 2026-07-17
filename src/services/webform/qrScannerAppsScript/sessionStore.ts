@@ -101,7 +101,8 @@ export class AppsScriptQrScannerSessionStore implements QrScannerSessionStore {
 
   get(sessionId: string): StoredQrScannerSession | null {
     return this.withLock(() => {
-      this.cleanupLocked();
+      // Capacity cleanup belongs to create(); a hot-path authentication read
+      // should not enumerate and parse every scanner session in ScriptProperties.
       return this.cloneNullable(parseSession(this.properties.getProperty(sessionKey(sessionId))));
     });
   }
