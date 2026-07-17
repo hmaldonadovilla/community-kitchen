@@ -138,6 +138,12 @@ export function buildWebFormHtml(
 <html>
   <head>
     <meta charset="UTF-8" />
+    <meta name="application-name" content="Community Kitchen" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Community Kitchen" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#ffffff" />
     <link rel="preconnect" href="https://docs.google.com" />
     <link rel="preconnect" href="https://drive.google.com" />
     <meta

@@ -3,7 +3,7 @@
   "version": "3.0.0",
   "description": "Google Apps Script for Community Kitchen Forms",
   "scripts": {
-    "build": "npm run build:web:react && npm run build:server && npm run check:bundle",
+    "build": "npm run build:web:react && npm run build:server && npm run check:bundle && npm run check:browser-compat",
     "lint": "npm run lint:eslint && npm run lint:types",
     "lint:changed": "node scripts/lint-changed.js",
     "lint:eslint": "eslint . --ext .js,.cjs,.mjs,.ts,.tsx",
@@ -12,6 +12,7 @@
     "build:web:react": "node scripts/embed-html-templates.js && node scripts/embed-form-configs.js && node scripts/embed-landing-page-config.js && node scripts/embed-analytics-page-config.js && esbuild src/web/react/main.tsx --bundle --outfile=dist/webform-react.js --format=iife --target=es2019 --jsx=automatic --minify --define:process.env.NODE_ENV='\"production\"' --loader:.css=text && node scripts/build-react-entrypoints.js && node scripts/embed-react-bundle.js && node scripts/build-qr-scanner.js",
     "build:web:react:external": "CK_WEB_ASSET_MODE=external npm run build:web:react",
     "check:bundle": "node scripts/check-bundle-size.js",
+    "check:browser-compat": "node scripts/check-ios15-browser-compat.js",
     "export:config": "node scripts/export-form-config.js",
     "deploy:apps-script": "bash scripts/deploy-apps-script.sh",
     "firebase:setup": "bash scripts/setup-firebase-hosting.sh",
@@ -60,13 +61,22 @@
     "globals": "^17.6.0",
     "jest": "^30.2.0",
     "lighthouse": "^13.0.3",
+    "mdast-util-gfm-footnote": "^2.1.0",
+    "mdast-util-gfm-strikethrough": "^2.0.0",
+    "mdast-util-gfm-table": "^2.0.0",
+    "mdast-util-gfm-task-list-item": "^2.0.0",
+    "micromark-extension-gfm-footnote": "^2.1.0",
+    "micromark-extension-gfm-strikethrough": "^2.1.0",
+    "micromark-extension-gfm-table": "^2.1.1",
+    "micromark-extension-gfm-task-list-item": "^2.1.0",
     "playwright": "^1.55.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^9.1.0",
-    "remark-gfm": "^4.0.0",
+    "remark-parse": "^11.0.0",
     "ts-jest": "^29.4.5",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "unified": "^11.0.5"
   },
   "dependencies": {
     "jsqr": "^1.4.0"

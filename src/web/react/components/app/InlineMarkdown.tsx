@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import remarkGfmIos15 from '../../app/remarkGfmIos15';
 
 /**
  * Responsibility:
@@ -28,7 +28,7 @@ export const InlineMarkdown: React.FC<{ markdown?: string; className?: string }>
   return (
     <span className={className}>
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfmIos15]}
         components={components}
         disallowedElements={[
           'h1',
