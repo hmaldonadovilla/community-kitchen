@@ -3,6 +3,7 @@ let mockRefValues: Array<{ current: unknown }> = [];
 let mockRefIndex = 0;
 const mockRedeemQrScannerSession = jest.fn();
 const mockAddQrScannerCandidate = jest.fn();
+const mockAddQrScannerCandidates = jest.fn();
 const mockCommitQrScannerSession = jest.fn();
 const mockCancelQrScannerSession = jest.fn();
 const mockGetQrScannerSession = jest.fn();
@@ -33,6 +34,7 @@ jest.mock('../../../src/web/react/features/uploads/services/qrScannerSessionClie
     ...actual,
     redeemQrScannerSession: (...args: unknown[]) => mockRedeemQrScannerSession(...args),
     addQrScannerCandidate: (...args: unknown[]) => mockAddQrScannerCandidate(...args),
+    addQrScannerCandidates: (...args: unknown[]) => mockAddQrScannerCandidates(...args),
     commitQrScannerSession: (...args: unknown[]) => mockCommitQrScannerSession(...args),
     cancelQrScannerSession: (...args: unknown[]) => mockCancelQrScannerSession(...args),
     getQrScannerSession: (...args: unknown[]) => mockGetQrScannerSession(...args)
@@ -74,6 +76,14 @@ const redeemedSession = {
   }
 };
 
+const batchedRedeemedSession = {
+  ...redeemedSession,
+  session: {
+    ...redeemedSession.session,
+    capabilities: { addCandidates: true, maxCandidateBatchSize: 3 }
+  }
+};
+
 const receiptUrl = (index: number): string =>
   `https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQrStUvWxY${index}/view`;
 
@@ -96,6 +106,23 @@ const candidateResult = (scanId: string, index: number, linkCount = index) => ({
     links: Array.from({ length: linkCount }, (_, offset) => receiptUrl(offset + 1)),
     summaryCode: 'COMMITTED' as const
   }
+});
+
+const batchResult = (requests: Array<{ scanId: string; rawValue: string }>) => ({
+  results: requests.map((request, index) => ({
+    candidate: candidateResult(request.scanId, index + 1).candidate
+  })),
+  session: batchedRedeemedSession.session,
+  committed: {
+    linkedCount: requests.length,
+    skippedCount: 0,
+    recordId: 'record-1',
+    dataVersion: 20,
+    fieldValue: requests.map((_, index) => receiptUrl(index + 1)).join(', '),
+    links: requests.map((_, index) => receiptUrl(index + 1)),
+    summaryCode: 'COMMITTED' as const
+  },
+  transport: 'batch' as const
 });
 
 const deferred = <T,>() => {
@@ -269,6 +296,7 @@ describe('external QR scanner incremental session hook', () => {
     mockAddQrScannerCandidate
       .mockReset()
       .mockImplementation((_credentials, request) => Promise.resolve(candidateResult(request.scanId, 1)));
+    mockAddQrScannerCandidates.mockReset();
     mockCommitQrScannerSession.mockReset();
     mockCancelQrScannerSession.mockReset();
     mockGetQrScannerSession.mockReset();
@@ -614,6 +642,7 @@ describe('external QR scanner incremental session hook', () => {
     expect(harness.callbacks.onSessionEnd).not.toHaveBeenCalled();
 
     harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-after-idle', 'receipt-after-idle'));
+    harness.runAllTimers();
     await flushPromises();
 
     expect(mockAddQrScannerCandidate).toHaveBeenCalledTimes(2);
@@ -698,6 +727,402 @@ describe('external QR scanner incremental session hook', () => {
       'https://scanner.example.test'
     );
     expectNoTerminalSessionRpc();
+  });
+
+  test('micro-batches three scans, applies one aggregate update, then publishes outcomes in scan order', async () => {
+    mockRedeemQrScannerSession.mockResolvedValue(batchedRedeemedSession);
+    mockAddQrScannerCandidates.mockImplementation(async (_credentials, request) => batchResult(request.candidates));
+    const harness = createHarness();
+    expect(harness.hook.openScanner()).toBe(true);
+    const requestId = harness.requestId();
+
+    [1, 2, 3].forEach(index => {
+      harness.dispatch(buildQrScannerScanMessage(requestId, `scan-${index}`, receiptUrl(index)));
+    });
+    await flushPromises();
+
+    expect(mockAddQrScannerCandidate).not.toHaveBeenCalled();
+    expect(mockAddQrScannerCandidates).toHaveBeenCalledTimes(1);
+    expect(mockAddQrScannerCandidates.mock.calls[0][1].candidates).toEqual([
+      { scanId: 'scan-1', rawValue: receiptUrl(1) },
+      { scanId: 'scan-2', rawValue: receiptUrl(2) },
+      { scanId: 'scan-3', rawValue: receiptUrl(3) }
+    ]);
+    expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(1);
+    expect(harness.callbacks.onCommitted).toHaveBeenCalledWith(
+      expect.objectContaining({ linkedCount: 3, dataVersion: 20 })
+    );
+    const candidateCalls = (harness.popup.postMessage as jest.Mock).mock.calls
+      .map(([message], index) => ({ message, order: (harness.popup.postMessage as jest.Mock).mock.invocationCallOrder[index] }))
+      .filter(entry => entry.message?.type === QR_SCANNER_MESSAGE_TYPES.candidate);
+    expect(candidateCalls.map(entry => entry.message.scanId)).toEqual(['scan-1', 'scan-2', 'scan-3']);
+    expect(harness.callbacks.onCommitted.mock.invocationCallOrder[0]).toBeLessThan(candidateCalls[0].order);
+    expect(harness.callbacks.onPendingWorkChange.mock.calls.map(([count]) => count)).toEqual([1, 2, 3, 2, 1, 0]);
+  });
+
+  test('retries the exact ordered batch with one stable request ID', async () => {
+    const { QrScannerSessionError } = jest.requireActual(
+      '../../../src/web/react/features/uploads/services/qrScannerSessionClient'
+    ) as typeof import('../../../src/web/react/features/uploads/services/qrScannerSessionClient');
+    mockRedeemQrScannerSession.mockResolvedValue(batchedRedeemedSession);
+    mockAddQrScannerCandidates
+      .mockRejectedValueOnce(new QrScannerSessionError('TEMPORARY_ERROR', 'The response was lost.', true))
+      .mockImplementationOnce(async (_credentials, request) => batchResult(request.candidates));
+    const harness = createHarness();
+    expect(harness.hook.openScanner()).toBe(true);
+    const requestId = harness.requestId();
+
+    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-1', receiptUrl(1)));
+    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-2', receiptUrl(2)));
+    await flushPromises();
+
+    expect(mockAddQrScannerCandidates).toHaveBeenCalledTimes(2);
+    const firstRequest = mockAddQrScannerCandidates.mock.calls[0][1];
+    const retriedRequest = mockAddQrScannerCandidates.mock.calls[1][1];
+    expect(retriedRequest).toEqual(firstRequest);
+    expect(firstRequest.candidates.map((candidate: { scanId: string }) => candidate.scanId)).toEqual([
+      'scan-1',
+      'scan-2'
+    ]);
+    expect(firstRequest.requestId).toMatch(/^request-/);
+    expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(1);
+  });
+
+  test('retains an ambiguous failed batch and recovers it before processing a later scan', async () => {
+    const { QrScannerSessionError } = jest.requireActual(
+      '../../../src/web/react/features/uploads/services/qrScannerSessionClient'
+    ) as typeof import('../../../src/web/react/features/uploads/services/qrScannerSessionClient');
+    mockRedeemQrScannerSession.mockResolvedValue(batchedRedeemedSession);
+    mockAddQrScannerCandidates
+      .mockRejectedValueOnce(new QrScannerSessionError('TEMPORARY_ERROR', 'Append response was lost.', true))
+      .mockRejectedValueOnce(new QrScannerSessionError('TEMPORARY_ERROR', 'Append is still ambiguous.', true))
+      .mockImplementationOnce(async (_credentials, request) => batchResult(request.candidates))
+      .mockImplementationOnce(async (_credentials, request) => batchResult(request.candidates));
+    const harness = createHarness();
+    expect(harness.hook.openScanner()).toBe(true);
+    const requestId = harness.requestId();
+
+    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-ambiguous', receiptUrl(1)));
+    await flushPromises();
+
+    expect(mockAddQrScannerCandidates).toHaveBeenCalledTimes(2);
+    expect(mockAddQrScannerCandidates.mock.calls[1][1]).toEqual(mockAddQrScannerCandidates.mock.calls[0][1]);
+    expect(harness.callbacks.onCandidateOutcome).toHaveBeenCalledWith(
+      expect.objectContaining({ scanId: 'scan-ambiguous', status: 'error', code: 'TEMPORARY_ERROR' })
+    );
+    expect(harness.callbacks.onPendingWorkChange.mock.calls.map(([count]) => count)).toEqual([1, 0]);
+
+    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-new', receiptUrl(2)));
+    harness.runAllTimers();
+    await flushPromises();
+
+    expect(mockAddQrScannerCandidates).toHaveBeenCalledTimes(4);
+    expect(mockAddQrScannerCandidates.mock.calls[2][1]).toEqual(mockAddQrScannerCandidates.mock.calls[0][1]);
+    expect(mockAddQrScannerCandidates.mock.calls[3][1]).toEqual(
+      expect.objectContaining({ candidates: [{ scanId: 'scan-new', rawValue: receiptUrl(2) }] })
+    );
+    expect(mockAddQrScannerCandidates.mock.calls[3][1].requestId).not.toBe(
+      mockAddQrScannerCandidates.mock.calls[0][1].requestId
+    );
+    expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(2);
+    expect(harness.callbacks.onPendingWorkChange.mock.calls.map(([count]) => count)).toEqual([1, 0, 1, 0]);
+    const published = (harness.popup.postMessage as jest.Mock).mock.calls
+      .map(([message]) => message)
+      .filter(message => message?.type === QR_SCANNER_MESSAGE_TYPES.candidate)
+      .map(message => [message.scanId, message.status]);
+    expect(published).toEqual([
+      ['scan-ambiguous', 'error'],
+      ['scan-ambiguous', 'accepted'],
+      ['scan-new', 'accepted']
+    ]);
+  });
+
+  test('legacy FINISH exactly recovers a retained ambiguous batch before its committed acknowledgement', async () => {
+    const { QrScannerSessionError } = jest.requireActual(
+      '../../../src/web/react/features/uploads/services/qrScannerSessionClient'
+    ) as typeof import('../../../src/web/react/features/uploads/services/qrScannerSessionClient');
+    mockRedeemQrScannerSession.mockResolvedValue(batchedRedeemedSession);
+    mockAddQrScannerCandidates
+      .mockRejectedValueOnce(new QrScannerSessionError('TEMPORARY_ERROR', 'Append response was lost.', true))
+      .mockRejectedValueOnce(new QrScannerSessionError('TEMPORARY_ERROR', 'Append is still ambiguous.', true))
+      .mockImplementationOnce(async (_credentials, request) => batchResult(request.candidates));
+    const harness = createHarness();
+    expect(harness.hook.openScanner()).toBe(true);
+    const requestId = harness.requestId();
+
+    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-before-finish-recovery', receiptUrl(1)));
+    await flushPromises();
+    expect(mockAddQrScannerCandidates).toHaveBeenCalledTimes(2);
+
+    harness.dispatch(buildQrScannerFinishMessage(requestId, 'legacy-finish-recovery'));
+    await flushPromises();
+
+    expect(mockAddQrScannerCandidates).toHaveBeenCalledTimes(3);
+    expect(mockAddQrScannerCandidates.mock.calls[2][1]).toEqual(mockAddQrScannerCandidates.mock.calls[0][1]);
+    expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(1);
+    expect(harness.callbacks.onSessionEnd).toHaveBeenCalledWith('committed');
+    const postedCalls = (harness.popup.postMessage as jest.Mock).mock.calls.map(([message], index) => ({
+      message,
+      order: (harness.popup.postMessage as jest.Mock).mock.invocationCallOrder[index]
+    }));
+    const recoveredCandidate = postedCalls.find(
+      entry =>
+        entry.message?.type === QR_SCANNER_MESSAGE_TYPES.candidate &&
+        entry.message?.scanId === 'scan-before-finish-recovery' &&
+        entry.message?.status === 'accepted'
+    );
+    const committedAck = postedCalls.find(
+      entry => entry.message?.type === QR_SCANNER_MESSAGE_TYPES.commit && entry.message?.status === 'committed'
+    );
+    expect(recoveredCandidate).toBeDefined();
+    expect(committedAck).toBeDefined();
+    expect(recoveredCandidate!.order).toBeLessThan(committedAck!.order);
+    expect(committedAck!.message).toEqual(
+      expect.objectContaining({ linkedCount: 1, message: '1 receipt added.' })
+    );
+    expectNoTerminalSessionRpc();
+  });
+
+  test('coalesces a pending Drive identity and reuses the accepted outcome locally for later detections', async () => {
+    mockRedeemQrScannerSession.mockResolvedValue(batchedRedeemedSession);
+    mockAddQrScannerCandidates.mockImplementation(async (_credentials, request) => batchResult(request.candidates));
+    const harness = createHarness();
+    expect(harness.hook.openScanner()).toBe(true);
+    const requestId = harness.requestId();
+
+    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-a', receiptUrl(1)));
+    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-a-alias', receiptUrl(1)));
+    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-b', receiptUrl(2)));
+    await flushPromises();
+
+    expect(mockAddQrScannerCandidates).toHaveBeenCalledTimes(1);
+    expect(mockAddQrScannerCandidates.mock.calls[0][1].candidates).toEqual([
+      { scanId: 'scan-a', rawValue: receiptUrl(1) },
+      { scanId: 'scan-b', rawValue: receiptUrl(2) }
+    ]);
+    const firstStatuses = (harness.popup.postMessage as jest.Mock).mock.calls
+      .map(([message]) => message)
+      .filter(message => message?.type === QR_SCANNER_MESSAGE_TYPES.candidate)
+      .map(message => [message.scanId, message.status]);
+    expect(firstStatuses).toEqual([
+      ['scan-a', 'accepted'],
+      ['scan-a-alias', 'duplicate'],
+      ['scan-b', 'accepted']
+    ]);
+    expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(1);
+
+    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-a-later', receiptUrl(1)));
+    await flushPromises();
+
+    expect(mockAddQrScannerCandidates).toHaveBeenCalledTimes(1);
+    expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(1);
+    expect(harness.popup.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ scanId: 'scan-a-later', status: 'duplicate', code: 'DUPLICATE_SESSION' }),
+      'https://scanner.example.test'
+    );
+  });
+
+  test('single-flights a matching Drive identity that arrives while its batch RPC is in flight', async () => {
+    const pendingBatch = deferred<ReturnType<typeof batchResult>>();
+    mockRedeemQrScannerSession.mockResolvedValue(batchedRedeemedSession);
+    mockAddQrScannerCandidates.mockReturnValueOnce(pendingBatch.promise);
+    const harness = createHarness();
+    expect(harness.hook.openScanner()).toBe(true);
+    const requestId = harness.requestId();
+
+    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-leader', receiptUrl(1)));
+    await flushPromises();
+    expect(mockAddQrScannerCandidates).toHaveBeenCalledTimes(1);
+
+    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-follower', receiptUrl(1)));
+    await flushPromises();
+    expect(mockAddQrScannerCandidates).toHaveBeenCalledTimes(1);
+
+    pendingBatch.resolve(batchResult([{ scanId: 'scan-leader', rawValue: receiptUrl(1) }]));
+    await flushPromises();
+
+    const statuses = (harness.popup.postMessage as jest.Mock).mock.calls
+      .map(([message]) => message)
+      .filter(message => message?.type === QR_SCANNER_MESSAGE_TYPES.candidate)
+      .map(message => [message.scanId, message.status]);
+    expect(statuses).toEqual([
+      ['scan-leader', 'accepted'],
+      ['scan-follower', 'duplicate']
+    ]);
+    expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(1);
+    expect(harness.callbacks.onPendingWorkChange.mock.calls.map(([count]) => count)).toEqual([1, 2, 1, 0]);
+  });
+
+  test('uses the short idle window to collect two scans into one later batch', async () => {
+    mockRedeemQrScannerSession.mockResolvedValue(batchedRedeemedSession);
+    mockAddQrScannerCandidates.mockImplementation(async (_credentials, request) => batchResult(request.candidates));
+    const harness = createHarness();
+    expect(harness.hook.openScanner()).toBe(true);
+    const requestId = harness.requestId();
+
+    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-initial', receiptUrl(1)));
+    await flushPromises();
+    expect(mockAddQrScannerCandidates).toHaveBeenCalledTimes(1);
+
+    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-later-2', receiptUrl(2)));
+    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-later-3', receiptUrl(3)));
+    await flushPromises();
+    expect(mockAddQrScannerCandidates).toHaveBeenCalledTimes(1);
+
+    harness.runAllTimers();
+    await flushPromises();
+    expect(mockAddQrScannerCandidates).toHaveBeenCalledTimes(2);
+    expect(mockAddQrScannerCandidates.mock.calls[1][1].candidates).toEqual([
+      { scanId: 'scan-later-2', rawValue: receiptUrl(2) },
+      { scanId: 'scan-later-3', rawValue: receiptUrl(3) }
+    ]);
+  });
+
+  test('does not cache a retryable result and permits the same Drive identity in a later batch', async () => {
+    mockRedeemQrScannerSession.mockResolvedValue(batchedRedeemedSession);
+    const retryableResult = {
+      results: [
+        {
+          candidate: {
+            id: 'candidate-retryable',
+            status: 'RETRYABLE_ERROR' as const,
+            code: 'TEMPORARY_ERROR',
+            retryable: true
+          }
+        }
+      ],
+      session: batchedRedeemedSession.session,
+      transport: 'batch' as const
+    };
+    mockAddQrScannerCandidates
+      .mockResolvedValueOnce(retryableResult)
+      .mockImplementationOnce(async (_credentials, request) => batchResult(request.candidates));
+    const harness = createHarness();
+    expect(harness.hook.openScanner()).toBe(true);
+    const requestId = harness.requestId();
+
+    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-retryable', receiptUrl(1)));
+    await flushPromises();
+    expect(mockAddQrScannerCandidates).toHaveBeenCalledTimes(1);
+
+    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-retryable-later', receiptUrl(1)));
+    harness.runAllTimers();
+    await flushPromises();
+
+    expect(mockAddQrScannerCandidates).toHaveBeenCalledTimes(2);
+    expect(mockAddQrScannerCandidates.mock.calls[1][1].requestId).not.toBe(
+      mockAddQrScannerCandidates.mock.calls[0][1].requestId
+    );
+    expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(1);
+  });
+
+  test('does not replay a mixed batch solely because one item is retryable', async () => {
+    mockRedeemQrScannerSession.mockResolvedValue(batchedRedeemedSession);
+    mockAddQrScannerCandidates.mockResolvedValueOnce({
+      results: [
+        { candidate: candidateResult('scan-accepted', 1).candidate },
+        {
+          candidate: {
+            id: 'candidate-retryable',
+            status: 'RETRYABLE_ERROR',
+            code: 'TEMPORARY_ERROR',
+            retryable: true
+          }
+        }
+      ],
+      session: batchedRedeemedSession.session,
+      committed: batchResult([{ scanId: 'scan-accepted', rawValue: receiptUrl(1) }]).committed,
+      transport: 'batch'
+    });
+    const harness = createHarness();
+    expect(harness.hook.openScanner()).toBe(true);
+    const requestId = harness.requestId();
+
+    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-accepted', receiptUrl(1)));
+    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-retryable', receiptUrl(2)));
+    await flushPromises();
+
+    expect(mockAddQrScannerCandidates).toHaveBeenCalledTimes(1);
+    expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(1);
+    expect(harness.callbacks.onCandidateOutcome).toHaveBeenCalledWith(
+      expect.objectContaining({ scanId: 'scan-retryable', status: 'error', code: 'TEMPORARY_ERROR' })
+    );
+  });
+
+  test('reuses a permanent rejection locally without another server request', async () => {
+    mockRedeemQrScannerSession.mockResolvedValue(batchedRedeemedSession);
+    mockAddQrScannerCandidates.mockResolvedValue({
+      results: [
+        {
+          candidate: {
+            id: 'candidate-rejected',
+            status: 'REJECTED',
+            code: 'UNSUPPORTED_TYPE',
+            fileId: '1AbCdEfGhIjKlMnOpQrStUvWxY1'
+          }
+        }
+      ],
+      session: batchedRedeemedSession.session,
+      transport: 'batch'
+    });
+    const harness = createHarness();
+    expect(harness.hook.openScanner()).toBe(true);
+    const requestId = harness.requestId();
+
+    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-rejected', receiptUrl(1)));
+    await flushPromises();
+    harness.dispatch(buildQrScannerScanMessage(requestId, 'scan-rejected-later', receiptUrl(1)));
+    await flushPromises();
+
+    expect(mockAddQrScannerCandidates).toHaveBeenCalledTimes(1);
+    expect(harness.popup.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ scanId: 'scan-rejected-later', status: 'rejected', code: 'UNSUPPORTED_TYPE' }),
+      'https://scanner.example.test'
+    );
+    expect(harness.callbacks.onCommitted).not.toHaveBeenCalled();
+  });
+
+  test('splits a five-scan backlog into stable ordered batches of three and two', async () => {
+    mockRedeemQrScannerSession.mockResolvedValue(batchedRedeemedSession);
+    mockAddQrScannerCandidates.mockImplementation(async (_credentials, request) => batchResult(request.candidates));
+    const harness = createHarness();
+    expect(harness.hook.openScanner()).toBe(true);
+    const requestId = harness.requestId();
+
+    [1, 2, 3, 4, 5].forEach(index => {
+      harness.dispatch(buildQrScannerScanMessage(requestId, `scan-${index}`, receiptUrl(index)));
+    });
+    await flushPromises();
+
+    expect(mockAddQrScannerCandidates).toHaveBeenCalledTimes(2);
+    expect(mockAddQrScannerCandidates.mock.calls.map(call => call[1].candidates.map((entry: any) => entry.scanId))).toEqual([
+      ['scan-1', 'scan-2', 'scan-3'],
+      ['scan-4', 'scan-5']
+    ]);
+    expect(mockAddQrScannerCandidates.mock.calls[0][1].requestId).not.toBe(
+      mockAddQrScannerCandidates.mock.calls[1][1].requestId
+    );
+    expect(harness.callbacks.onCommitted).toHaveBeenCalledTimes(2);
+  });
+
+  test('fails the batch safely when the ordered server result count does not match', async () => {
+    mockRedeemQrScannerSession.mockResolvedValue(batchedRedeemedSession);
+    mockAddQrScannerCandidates.mockResolvedValue({
+      results: [],
+      session: batchedRedeemedSession.session,
+      transport: 'batch'
+    });
+    const harness = createHarness();
+    expect(harness.hook.openScanner()).toBe(true);
+
+    harness.dispatch(buildQrScannerScanMessage(harness.requestId(), 'scan-missing', receiptUrl(1)));
+    await flushPromises();
+
+    expect(harness.callbacks.onCommitted).not.toHaveBeenCalled();
+    expect(harness.callbacks.onCandidateOutcome).toHaveBeenCalledWith(
+      expect.objectContaining({ scanId: 'scan-missing', status: 'error', code: 'INTERNAL_ERROR' })
+    );
+    expect(harness.callbacks.onPendingWorkChange.mock.calls.map(([count]) => count)).toEqual([1, 0]);
   });
 
   test('does not prepare a session when the popup is blocked', async () => {

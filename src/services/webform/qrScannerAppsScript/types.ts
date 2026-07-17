@@ -1,5 +1,7 @@
 import { FileUploadConfig, FormConfigExport, WebFormSubmission } from '../../../types';
 
+export const QR_SCANNER_MAX_CANDIDATE_BATCH_SIZE = 3;
+
 export type QrScannerResultCode =
   | 'ACCEPTED'
   | 'DUPLICATE_SESSION'
@@ -29,6 +31,8 @@ export interface StoredQrScannerCandidate {
   status: QrScannerCandidateStatus;
   code: QrScannerResultCode;
   fileId?: string;
+  /** Canonical file identity used for de-duplication without projecting rejected IDs. */
+  fileIdHash?: string;
   displayName?: string;
   mimeType?: string;
   retryable?: boolean;
@@ -50,9 +54,9 @@ export interface QrScannerCommitResult {
   summaryCode: 'COMMITTED' | 'NOTHING_TO_COMMIT';
 }
 
-/** Authoritative upload-field state after one accepted scan is attached. */
+/** Authoritative upload-field state after one or more accepted scans are attached. */
 export interface QrScannerIncrementalCommitResult {
-  linkedCount: 1;
+  linkedCount: number;
   skippedCount: 0;
   recordId: string;
   dataVersion: number;
@@ -102,6 +106,21 @@ export interface StoredQrScannerSession {
   redemptionNonceHash?: string;
   redeemedAt?: string;
   commit?: { requestIdHash: string; startedAt: string; completedAt?: string };
+  /** Recovery intent for the single atomic append performed by addCandidates. */
+  incrementalBatch?: {
+    requestHash: string;
+    scanIdHashes: string[];
+    payloadHashes: string[];
+    fileIds: string[];
+    startedAt: string;
+  };
+  /** Bounded idempotency receipt for the most recently completed micro-batch. */
+  lastIncrementalBatch?: {
+    requestHash: string;
+    scanIdHashes: string[];
+    payloadHashes: string[];
+    completedAt: string;
+  };
   commitResult?: QrScannerCommitResult;
   cancelResult?: { returnUrl: string; cancelledAt: string };
   lastErrorCode?: QrScannerResultCode;
@@ -137,6 +156,10 @@ export interface QrScannerSessionProjection {
   maxFiles: number;
   existingCount: number;
   returnUrl: string;
+  capabilities: {
+    addCandidates: true;
+    maxCandidateBatchSize: number;
+  };
   candidates: QrScannerCandidateProjection[];
   counts: {
     accepted: number;
@@ -234,6 +257,11 @@ export interface AuthenticatedQrScannerRequest {
 export interface AddQrScannerCandidateRequest extends AuthenticatedQrScannerRequest {
   scanId: string;
   rawValue: string;
+}
+
+export interface AddQrScannerCandidatesRequest extends AuthenticatedQrScannerRequest {
+  requestId: string;
+  candidates: Array<Pick<AddQrScannerCandidateRequest, 'scanId' | 'rawValue'>>;
 }
 
 export interface CommitQrScannerRequest extends AuthenticatedQrScannerRequest {

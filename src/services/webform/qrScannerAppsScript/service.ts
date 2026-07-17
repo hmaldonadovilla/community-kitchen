@@ -22,6 +22,7 @@ import {
 import { qrScannerError } from './errors';
 import {
   AddQrScannerCandidateRequest,
+  AddQrScannerCandidatesRequest,
   AuthenticatedQrScannerRequest,
   CommitQrScannerRequest,
   QrScannerAuthoritativeService,
@@ -30,6 +31,7 @@ import {
   QrScannerIncrementalCommitResult,
   QrScannerResultCode,
   QrScannerRuntime,
+  QR_SCANNER_MAX_CANDIDATE_BATCH_SIZE,
   QrScannerSessionProjection,
   QrScannerSessionStore,
   QrScannerTarget,
@@ -42,13 +44,25 @@ const DEFAULT_SESSION_TTL_MINUTES = 15;
 const MAX_SESSION_TTL_MINUTES = 30;
 const LAUNCH_TOKEN_TTL_MINUTES = 5;
 const DEFAULT_MAX_ATTEMPTS = 20;
-// ScriptProperties has a 9 KB value ceiling. Twelve bounded candidate records
-// leave room for commit recovery state while covering the configured 10-file flow.
-const MAX_STORED_CANDIDATES = 12;
+// ScriptProperties has a 9 KB value ceiling. Keep at most the configured
+// default 10-file flow; accepted totals and file identities survive compaction.
+const MAX_STORED_CANDIDATES = 10;
 
 type CandidateTiming = {
   startedAt: number;
   stages: Record<string, number>;
+};
+
+type NormalizedBatchCandidate = {
+  scanIdHash: string;
+  payloadHash: string;
+  parsed: ReturnType<typeof parseDriveQrPayload>;
+  prior?: StoredQrScannerCandidate;
+  candidate?: StoredQrScannerCandidate;
+  duplicateOfScanIdHash?: string;
+  newlyAuthorised?: boolean;
+  replayed?: boolean;
+  consumesAttempt?: boolean;
 };
 
 const timeCandidateStage = <T>(timing: CandidateTiming, stage: string, operation: () => T): T => {
@@ -67,6 +81,19 @@ const normalizeIdentifier = (value: unknown, maxLength = 160): string => {
   return normalized;
 };
 
+const boundedUtf8Text = (value: unknown, maxBytes: number): string => {
+  let result = '';
+  let bytes = 0;
+  for (const character of (value ?? '').toString().trim()) {
+    const codePoint = character.codePointAt(0) || 0;
+    const characterBytes = codePoint <= 0x7f ? 1 : codePoint <= 0x7ff ? 2 : codePoint <= 0xffff ? 3 : 4;
+    if (bytes + characterBytes > maxBytes) break;
+    result += character;
+    bytes += characterBytes;
+  }
+  return result;
+};
+
 const addMinutes = (date: Date, minutes: number): string =>
   new Date(date.getTime() + minutes * 60 * 1000).toISOString();
 
@@ -83,7 +110,7 @@ const maximumFiles = (value: unknown): number => {
 };
 
 const fieldText = (field: any): string =>
-  (field?.qEn || field?.label?.en || field?.label || field?.id || 'Scan QR codes').toString().trim().slice(0, 160);
+  boundedUtf8Text(field?.qEn || field?.label?.en || field?.label || field?.id || 'Scan QR codes', 160);
 
 const isExpired = (session: StoredQrScannerSession, now: Date): boolean => {
   const expiry = Date.parse(session.expiresAt || '');
@@ -108,7 +135,7 @@ const makeCandidate = (
   payloadHash: string,
   code: QrScannerResultCode,
   now: Date,
-  details?: { fileId?: string; displayName?: string; mimeType?: string; retryable?: boolean }
+  details?: { fileId?: string; fileIdHash?: string; displayName?: string; mimeType?: string; retryable?: boolean }
 ): StoredQrScannerCandidate => ({
   id: crypto.randomToken(12),
   scanIdHash,
@@ -116,8 +143,9 @@ const makeCandidate = (
   status: candidateStatusForCode(code),
   code,
   ...(details?.fileId ? { fileId: details.fileId } : {}),
-  ...(details?.displayName ? { displayName: details.displayName.slice(0, 160) } : {}),
-  ...(details?.mimeType ? { mimeType: details.mimeType.slice(0, 160) } : {}),
+  ...(details?.fileIdHash ? { fileIdHash: details.fileIdHash } : {}),
+  ...(details?.displayName ? { displayName: boundedUtf8Text(details.displayName, 160) } : {}),
+  ...(details?.mimeType ? { mimeType: boundedUtf8Text(details.mimeType, 80) } : {}),
   ...(details?.retryable ? { retryable: true } : {}),
   checkedAt: now.toISOString()
 });
@@ -187,7 +215,7 @@ export class AppsScriptQrScannerService {
       const qrConfig = target.uploadConfig.linkCapture || {};
       const fieldLabel = fieldText(target.field);
       const language = normalizeLanguage(target.record.language || request.language);
-      const instruction = resolveQrScannerInstruction(qrConfig.instruction, language);
+      const instruction = boundedUtf8Text(resolveQrScannerInstruction(qrConfig.instruction, language), 300);
       const configuredMaxFiles = maximumFiles(target.uploadConfig.maxFiles);
       const launchUrl = buildScannerLaunchUrl(scannerBaseUrl(this.runtime), id, launchToken, instruction);
       if (!launchUrl || !buildScannerReturnUrl(serviceUrl, {
@@ -302,6 +330,332 @@ export class AppsScriptQrScannerService {
     return { session: projectSession(this.authenticate(request)) };
   }
 
+  /**
+   * Validates a small group of camera detections against one authoritative
+   * snapshot and attaches every newly-authorised unique file in one write.
+   * The request ID and persisted PENDING intent make the append recoverable
+   * when Apps Script loses either the append response or the final state write.
+   */
+  addCandidates(request: AddQrScannerCandidatesRequest) {
+    const timing: CandidateTiming = { startedAt: Date.now(), stages: {} };
+    const snapshot = timeCandidateStage(timing, 'sessionRead', () => this.authenticate(request));
+    if (snapshot.status !== 'ACTIVE') throw qrScannerError('SESSION_NOT_ACTIVE');
+    const requestId = normalizeIdentifier(request?.requestId, 256);
+    const source = Array.isArray(request?.candidates) ? request.candidates : [];
+    if (!requestId || source.length < 1 || source.length > QR_SCANNER_MAX_CANDIDATE_BATCH_SIZE) {
+      throw qrScannerError('INVALID_REQUEST');
+    }
+
+    const items: NormalizedBatchCandidate[] = source.map(entry => {
+      const scanId = normalizeIdentifier(entry?.scanId, 256);
+      const rawValue = normalizeIdentifier(entry?.rawValue, 2048);
+      if (!scanId || !rawValue) throw qrScannerError('INVALID_REQUEST');
+      const scanIdHash = this.crypto.hash(scanId);
+      const payloadHash = this.crypto.hash(rawValue);
+      const prior = snapshot.candidates.find(candidate => candidate.scanIdHash === scanIdHash);
+      if (prior?.payloadHash !== undefined && prior.payloadHash !== payloadHash) {
+        throw qrScannerError('INVALID_REQUEST');
+      }
+      return {
+        scanIdHash,
+        payloadHash,
+        parsed: parseDriveQrPayload(rawValue),
+        ...(prior ? { prior } : {})
+      };
+    });
+    const payloadByScan = new Map<string, string>();
+    items.forEach(item => {
+      const previous = payloadByScan.get(item.scanIdHash);
+      if (previous) throw qrScannerError('INVALID_REQUEST');
+      payloadByScan.set(item.scanIdHash, item.payloadHash);
+    });
+    const requestHash = this.crypto.hash(requestId);
+    const scanIdHashes = items.map(item => item.scanIdHash);
+    const payloadHashes = items.map(item => item.payloadHash);
+    const sameStoredIntent = (session: StoredQrScannerSession): boolean =>
+      Boolean(
+        session.incrementalBatch &&
+        session.incrementalBatch.requestHash === requestHash &&
+        JSON.stringify(session.incrementalBatch.scanIdHashes) === JSON.stringify(scanIdHashes) &&
+        JSON.stringify(session.incrementalBatch.payloadHashes) === JSON.stringify(payloadHashes)
+      );
+    if (snapshot.incrementalBatch && !sameStoredIntent(snapshot)) {
+      if (snapshot.incrementalBatch.requestHash === requestHash) throw qrScannerError('INVALID_REQUEST');
+      throw qrScannerError('TEMPORARY_ERROR', { retryable: true });
+    }
+    if (snapshot.lastIncrementalBatch?.requestHash === requestHash) {
+      const sameLastRequest =
+        JSON.stringify(snapshot.lastIncrementalBatch.scanIdHashes) === JSON.stringify(scanIdHashes) &&
+        JSON.stringify(snapshot.lastIncrementalBatch.payloadHashes) === JSON.stringify(payloadHashes);
+      if (!sameLastRequest) throw qrScannerError('INVALID_REQUEST');
+    }
+
+    const authorisedByFileId = new Map<string, StoredQrScannerCandidate>();
+    const reusableByFileIdHash = new Map<string, StoredQrScannerCandidate>();
+    const reusableByPayloadHash = new Map<string, StoredQrScannerCandidate>();
+    snapshot.candidates.forEach(candidate => {
+      if (candidate.status === 'AUTHORISED' && candidate.fileId) {
+        authorisedByFileId.set(candidate.fileId, candidate);
+      }
+      if (candidate.status !== 'RETRYABLE_ERROR' && !reusableByPayloadHash.has(candidate.payloadHash)) {
+        reusableByPayloadHash.set(candidate.payloadHash, candidate);
+      }
+      const fileIdHash = candidate.fileIdHash || (candidate.fileId ? this.crypto.hash(candidate.fileId) : '');
+      if (fileIdHash && candidate.status !== 'RETRYABLE_ERROR' && !reusableByFileIdHash.has(fileIdHash)) {
+        reusableByFileIdHash.set(fileIdHash, candidate);
+      }
+    });
+
+    const representativeByFileId = new Map<string, string>();
+    let requiresTarget = Boolean(snapshot.incrementalBatch);
+    items.forEach(item => {
+      if (snapshot.lastIncrementalBatch?.requestHash === requestHash && item.prior) {
+        item.candidate = item.prior;
+        item.replayed = item.prior.status === 'AUTHORISED';
+        requiresTarget = requiresTarget || item.replayed;
+        return;
+      }
+      if (item.prior && item.prior.status !== 'RETRYABLE_ERROR') {
+        item.candidate = item.prior;
+        item.replayed = item.prior.status === 'AUTHORISED';
+        requiresTarget = requiresTarget || item.replayed;
+        return;
+      }
+      if (!item.parsed.ok) {
+        const reusable = reusableByPayloadHash.get(item.payloadHash);
+        item.candidate = makeCandidate(
+          this.crypto,
+          item.scanIdHash,
+          item.payloadHash,
+          reusable?.code || 'INVALID_PAYLOAD',
+          this.runtime.now(),
+          { retryable: reusable?.retryable }
+        );
+        item.consumesAttempt = !reusable;
+        return;
+      }
+      const representative = representativeByFileId.get(item.parsed.fileId);
+      if (representative) {
+        item.duplicateOfScanIdHash = representative;
+        return;
+      }
+      representativeByFileId.set(item.parsed.fileId, item.scanIdHash);
+      if (authorisedByFileId.has(item.parsed.fileId)) {
+        item.candidate = makeCandidate(
+          this.crypto,
+          item.scanIdHash,
+          item.payloadHash,
+          'DUPLICATE_SESSION',
+          this.runtime.now()
+        );
+        return;
+      }
+      const reusableCanonical = reusableByFileIdHash.get(this.crypto.hash(item.parsed.fileId));
+      if (reusableCanonical) {
+        item.candidate = makeCandidate(
+          this.crypto,
+          item.scanIdHash,
+          item.payloadHash,
+          reusableCanonical.code,
+          this.runtime.now(),
+          { fileIdHash: this.crypto.hash(item.parsed.fileId), retryable: reusableCanonical.retryable }
+        );
+        return;
+      }
+      const reusable = reusableByPayloadHash.get(item.payloadHash);
+      if (reusable && reusable.status !== 'AUTHORISED') {
+        item.candidate = makeCandidate(
+          this.crypto,
+          item.scanIdHash,
+          item.payloadHash,
+          reusable.code,
+          this.runtime.now(),
+          { retryable: reusable.retryable }
+        );
+        return;
+      }
+      requiresTarget = true;
+    });
+
+    if (!requiresTarget) {
+      let remainingAttemptBudget = Math.max(0, snapshot.maxAttempts - snapshot.attempts);
+      items.forEach(item => {
+        if (!item.consumesAttempt) return;
+        if (remainingAttemptBudget > 0) {
+          remainingAttemptBudget -= 1;
+          return;
+        }
+        item.candidate = makeCandidate(
+          this.crypto,
+          item.scanIdHash,
+          item.payloadHash,
+          'LIMIT_REACHED',
+          this.runtime.now()
+        );
+        item.consumesAttempt = false;
+      });
+      this.resolveInBatchDuplicates(items);
+      const updated = this.storeBatchCandidates(snapshot, request.accessToken, items, {
+        requestHash,
+        scanIdHashes,
+        payloadHashes,
+        fileIds: [],
+        startedAt: this.runtime.now().toISOString()
+      });
+      return this.batchCandidateResponse(updated, items, undefined, timing);
+    }
+
+    const target = timeCandidateStage(timing, 'targetRead', () =>
+      resolveAuthoritativeTarget(
+        this.authoritative,
+        snapshot.formKey,
+        snapshot.recordId,
+        snapshot.fieldId
+      )
+    );
+    if (!target) throw qrScannerError('CONFIGURATION_ERROR');
+
+    if (snapshot.incrementalBatch) {
+      const intendedFileIds = snapshot.incrementalBatch.fileIds;
+      const durable =
+        target.dataVersion === snapshot.expectedDataVersion + 1 &&
+        intendedFileIds.every(fileId => target.currentFileIds.includes(fileId));
+      if (durable) {
+        const committed = this.incrementalCommitFromTarget(snapshot, target, intendedFileIds.length, true);
+        const completed = timeCandidateStage(timing, 'candidateFinalWrite', () =>
+          this.completeCandidateBatch(snapshot, request.accessToken, requestHash, intendedFileIds, committed)
+        );
+        return this.batchCandidateResponse(completed, items, committed, timing);
+      }
+      if (target.dataVersion !== snapshot.expectedDataVersion) throw qrScannerError('RECORD_CHANGED');
+      const append = this.appendCandidateBatch(snapshot, intendedFileIds, timing);
+      return this.finishCandidateBatchAppend(snapshot, request, requestHash, items, intendedFileIds, append, timing);
+    }
+
+    if (target.dataVersion !== snapshot.expectedDataVersion) throw qrScannerError('RECORD_CHANGED');
+    items.forEach(item => {
+      if (item.candidate) {
+        if (
+          item.candidate.status === 'AUTHORISED' &&
+          item.candidate.fileId &&
+          !target.currentFileIds.includes(item.candidate.fileId)
+        ) {
+          throw qrScannerError('RECORD_CHANGED');
+        }
+        return;
+      }
+      if (!item.parsed.ok) return;
+      if (target.currentFileIds.includes(item.parsed.fileId)) {
+        item.candidate = makeCandidate(
+          this.crypto,
+          item.scanIdHash,
+          item.payloadHash,
+          'ALREADY_LINKED',
+          this.runtime.now()
+        );
+      }
+    });
+
+    let remaining = Math.max(0, snapshot.maxFiles - target.currentLinks.length);
+    let remainingAttemptBudget = Math.max(0, snapshot.maxAttempts - snapshot.attempts);
+    items.forEach(item => {
+      const parsed = item.parsed;
+      if (item.consumesAttempt) {
+        if (remainingAttemptBudget > 0) {
+          remainingAttemptBudget -= 1;
+        } else {
+          item.candidate = makeCandidate(
+            this.crypto,
+            item.scanIdHash,
+            item.payloadHash,
+            'LIMIT_REACHED',
+            this.runtime.now()
+          );
+          item.consumesAttempt = false;
+        }
+        return;
+      }
+      if (item.candidate || item.duplicateOfScanIdHash || !parsed.ok) return;
+      if (remaining <= 0) {
+        item.candidate = makeCandidate(
+          this.crypto,
+          item.scanIdHash,
+          item.payloadHash,
+          'LIMIT_REACHED',
+          this.runtime.now()
+        );
+        return;
+      }
+      if (remainingAttemptBudget <= 0) {
+        item.candidate = makeCandidate(
+          this.crypto,
+          item.scanIdHash,
+          item.payloadHash,
+          'LIMIT_REACHED',
+          this.runtime.now()
+        );
+        return;
+      }
+      remainingAttemptBudget -= 1;
+      item.candidate = timeCandidateStage(timing, 'driveAuthorization', () =>
+        this.authoriseCandidate(item.scanIdHash, item.payloadHash, parsed.fileId, target)
+      );
+      item.consumesAttempt = true;
+      if (item.candidate.status === 'AUTHORISED') {
+        item.newlyAuthorised = true;
+        remaining -= 1;
+      }
+    });
+    this.resolveInBatchDuplicates(items);
+
+    const intendedFileIds = items
+      .filter(item => item.newlyAuthorised)
+      .map(item => item.candidate)
+      .filter((candidate): candidate is StoredQrScannerCandidate =>
+        Boolean(candidate?.status === 'AUTHORISED' && candidate.fileId)
+      )
+      .map(candidate => candidate.fileId!);
+    const uniqueFileIds = Array.from(new Set(intendedFileIds));
+    const replayedFileIds = Array.from(
+      new Set(
+        items
+          .filter(item => item.replayed && item.candidate?.status === 'AUTHORISED' && item.candidate.fileId)
+          .map(item => item.candidate!.fileId!)
+      )
+    );
+    if (
+      !uniqueFileIds.length &&
+      snapshot.lastIncrementalBatch?.requestHash === requestHash &&
+      replayedFileIds.length
+    ) {
+      const committed = this.incrementalCommitFromTarget(snapshot, target, replayedFileIds.length, true);
+      return this.batchCandidateResponse(snapshot, items, committed, timing);
+    }
+    const pending = {
+      requestHash,
+      scanIdHashes,
+      payloadHashes,
+      fileIds: uniqueFileIds,
+      startedAt: this.runtime.now().toISOString()
+    };
+    const reserved = timeCandidateStage(timing, 'candidateStateWrite', () =>
+      this.storeBatchCandidates(snapshot, request.accessToken, items, pending)
+    );
+    if (!uniqueFileIds.length) {
+      const committed = replayedFileIds.length
+        ? this.incrementalCommitFromTarget(reserved, target, replayedFileIds.length, true)
+        : undefined;
+      return this.batchCandidateResponse(reserved, items, committed, timing);
+    }
+
+    const reservedFileIds = reserved.incrementalBatch?.requestHash === requestHash
+      ? reserved.incrementalBatch.fileIds
+      : [];
+    if (!reservedFileIds.length) return this.batchCandidateResponse(reserved, items, undefined, timing);
+    const append = this.appendCandidateBatch(snapshot, reservedFileIds, timing);
+    return this.finishCandidateBatchAppend(snapshot, request, requestHash, items, reservedFileIds, append, timing);
+  }
+
   addCandidate(request: AddQrScannerCandidateRequest): {
     candidate: ReturnType<typeof projectCandidate>;
     counts: ReturnType<typeof candidateCounts>;
@@ -382,10 +736,12 @@ export class AppsScriptQrScannerService {
         candidate = result.ok
           ? makeCandidate(this.crypto, scanIdHash, payloadHash, 'ACCEPTED', this.runtime.now(), {
               fileId: result.file.id,
+              fileIdHash: this.crypto.hash(parsed.fileId),
               displayName: result.file.name,
               mimeType: result.file.mimeType
             })
           : makeCandidate(this.crypto, scanIdHash, payloadHash, result.code, this.runtime.now(), {
+              fileIdHash: this.crypto.hash(parsed.fileId),
               retryable: result.retryable
             });
       }
@@ -518,6 +874,7 @@ export class AppsScriptQrScannerService {
     }
     const completedCandidate: StoredQrScannerCandidate = {
       ...candidate,
+      mimeType: undefined,
       incremental: { state: 'COMPLETED', updatedAt: this.runtime.now().toISOString() },
       checkedAt: this.runtime.now().toISOString()
     };
@@ -622,8 +979,8 @@ export class AppsScriptQrScannerService {
         if (result.ok) {
           return {
             ...candidate,
-            displayName: result.file.name.slice(0, 160),
-            mimeType: result.file.mimeType.slice(0, 160),
+            displayName: boundedUtf8Text(result.file.name, 160),
+            mimeType: undefined,
             checkedAt: this.runtime.now().toISOString()
           };
         }
@@ -782,6 +1139,472 @@ export class AppsScriptQrScannerService {
     if (isExpired(session, this.runtime.now())) throw qrScannerError('SESSION_EXPIRED');
   }
 
+  private resolveInBatchDuplicates(items: NormalizedBatchCandidate[]): void {
+    items.forEach(item => {
+      if (!item.duplicateOfScanIdHash || item.candidate) return;
+      const primary = items.find(
+        entry => entry.scanIdHash === item.duplicateOfScanIdHash && entry.candidate
+      )?.candidate;
+      if (!primary) throw qrScannerError('INTERNAL_ERROR');
+      const code = primary.status === 'AUTHORISED' ? 'DUPLICATE_SESSION' : primary.code;
+      item.candidate = makeCandidate(
+        this.crypto,
+        item.scanIdHash,
+        item.payloadHash,
+        code,
+        this.runtime.now(),
+        { retryable: primary.retryable }
+      );
+    });
+  }
+
+  private storeBatchCandidates(
+    snapshot: StoredQrScannerSession,
+    accessToken: string,
+    items: NormalizedBatchCandidate[],
+    pending: StoredQrScannerSession['incrementalBatch'] | undefined
+  ): StoredQrScannerSession {
+    const incoming = items.filter(item => item.candidate && !item.replayed);
+    if (!incoming.length && !pending) return snapshot;
+    return this.sessions.mutate(snapshot.id, current => {
+      this.requireAuthenticatedCurrent(current, accessToken);
+      if (current.status !== 'ACTIVE') throw qrScannerError('SESSION_NOT_ACTIVE');
+      if (current.expectedDataVersion !== snapshot.expectedDataVersion) throw qrScannerError('RECORD_CHANGED');
+      if (current.incrementalBatch) throw qrScannerError('TEMPORARY_ERROR', { retryable: true });
+      if (current.candidates.some(candidate => candidate.incremental?.state === 'PENDING')) {
+        throw qrScannerError('TEMPORARY_ERROR', { retryable: true });
+      }
+
+      let candidates = current.candidates.slice();
+      let addedAttempts = 0;
+      const appendCandidate = (candidate: StoredQrScannerCandidate): void => {
+        while (candidates.length >= MAX_STORED_CANDIDATES) {
+          let removable = candidates.findIndex(
+            entry =>
+              entry.status !== 'AUTHORISED' &&
+              entry.status !== 'RETRYABLE_ERROR' &&
+              entry.incremental?.state !== 'PENDING'
+          );
+          if (removable < 0) removable = candidates.findIndex(entry => entry.incremental?.state === 'COMPLETED');
+          if (removable < 0) {
+            removable = candidates.findIndex(
+              entry => entry.status === 'RETRYABLE_ERROR' && entry.incremental?.state !== 'PENDING'
+            );
+          }
+          if (removable < 0) throw qrScannerError('LIMIT_REACHED');
+          candidates = candidates.filter((_, index) => index !== removable);
+        }
+        candidates.push(candidate);
+      };
+
+      incoming.forEach(item => {
+        const candidate = item.candidate!;
+        const existing = candidates.find(entry => entry.scanIdHash === item.scanIdHash);
+        if (existing?.payloadHash !== undefined && existing.payloadHash !== item.payloadHash) {
+          throw qrScannerError('INVALID_REQUEST');
+        }
+        if (existing && existing.status !== 'RETRYABLE_ERROR') return;
+        if (item.consumesAttempt && !existing && current.attempts + addedAttempts >= current.maxAttempts) {
+          throw qrScannerError('SESSION_NOT_ACTIVE');
+        }
+        let nextCandidate: StoredQrScannerCandidate = existing
+          ? { ...candidate, id: existing.id }
+          : candidate;
+        if (
+          pending?.fileIds.includes(candidate.fileId || '') &&
+          candidate.status === 'AUTHORISED' &&
+          candidate.fileId
+        ) {
+          // A fresh detection may supersede a prior retryable attempt for the
+          // same receipt, but must never overtake another durable PENDING one.
+          candidates = candidates.filter(
+            entry =>
+              entry.id === existing?.id ||
+              entry.fileId !== candidate.fileId ||
+              entry.status !== 'RETRYABLE_ERROR' ||
+              entry.incremental?.state === 'PENDING'
+          );
+          const sameFile = candidates.find(
+            entry => entry.id !== existing?.id && entry.fileId === candidate.fileId
+          );
+          if (current.existingFileIds.includes(candidate.fileId)) {
+            nextCandidate = {
+              ...nextCandidate,
+              status: 'DUPLICATE',
+              code: 'ALREADY_LINKED',
+              fileId: undefined,
+              displayName: undefined,
+              mimeType: undefined,
+              incremental: undefined
+            };
+          } else if (sameFile) {
+            nextCandidate = {
+              ...nextCandidate,
+              status: 'DUPLICATE',
+              code: 'DUPLICATE_SESSION',
+              fileId: undefined,
+              displayName: undefined,
+              mimeType: undefined,
+              incremental: undefined
+            };
+          } else {
+            nextCandidate = {
+              ...nextCandidate,
+              status: 'RETRYABLE_ERROR',
+              code: 'TEMPORARY_ERROR',
+              retryable: true,
+              incremental: { state: 'PENDING', updatedAt: this.runtime.now().toISOString() }
+            };
+          }
+        }
+        if (existing) {
+          candidates = candidates.map(entry => (entry.id === existing.id ? nextCandidate : entry));
+        } else {
+          appendCandidate(nextCandidate);
+          // Duplicate aliases and reused outcomes are retained for stable
+          // scan-ID replay but do not consume the processing-attempt budget.
+          if (item.consumesAttempt) addedAttempts += 1;
+        }
+      });
+
+      const pendingCandidates = candidates.filter(
+        candidate =>
+          candidate.incremental?.state === 'PENDING' &&
+          candidate.fileId &&
+          pending?.fileIds.includes(candidate.fileId)
+      );
+      const persistedIntent = pending && pendingCandidates.length
+        ? {
+            ...pending,
+            fileIds: Array.from(new Set(pendingCandidates.map(candidate => candidate.fileId!)))
+          }
+        : undefined;
+      const completedAt = this.runtime.now().toISOString();
+      return {
+        ...current,
+        candidates,
+        attempts: current.attempts + addedAttempts,
+        ...(persistedIntent ? { incrementalBatch: persistedIntent } : {}),
+        ...(!persistedIntent && pending
+          ? {
+              lastIncrementalBatch: {
+                requestHash: pending.requestHash,
+                scanIdHashes: pending.scanIdHashes,
+                payloadHashes: pending.payloadHashes,
+                completedAt
+              }
+            }
+          : {}),
+        updatedAt: completedAt
+      };
+    });
+  }
+
+  private appendCandidateBatch(
+    session: StoredQrScannerSession,
+    fileIds: string[],
+    timing: CandidateTiming
+  ): QrScannerFieldAppendResult {
+    let append: QrScannerFieldAppendResult;
+    try {
+      append = timeCandidateStage(timing, 'recordAppend', () =>
+        this.authoritative.appendQrScannerUploadLinks({
+          formKey: session.formKey,
+          recordId: session.recordId,
+          fieldId: session.fieldId,
+          links: fileIds.map(canonicalDriveFileUrl),
+          expectedDataVersion: session.expectedDataVersion
+        })
+      );
+    } catch {
+      append = { success: false, code: 'TEMPORARY_ERROR', message: 'The receipts could not be attached.' };
+    }
+    if (!append.success) {
+      const recovered = timeCandidateStage(timing, 'appendRecovery', () =>
+        this.recoverIncrementalBatchAppend(session, fileIds)
+      );
+      if (recovered) append = recovered;
+    }
+    return append;
+  }
+
+  private finishCandidateBatchAppend(
+    snapshot: StoredQrScannerSession,
+    request: AddQrScannerCandidatesRequest,
+    requestHash: string,
+    items: NormalizedBatchCandidate[],
+    fileIds: string[],
+    append: QrScannerFieldAppendResult,
+    timing: CandidateTiming
+  ) {
+    if (!append.success) {
+      const code = append.code || 'TEMPORARY_ERROR';
+      if (code === 'TEMPORARY_ERROR') {
+        // The append may already be durable even when Apps Script loses the
+        // response. Retain the exact PENDING intent for same-request recovery.
+        throw qrScannerError('TEMPORARY_ERROR', { retryable: true });
+      }
+      const failed = timeCandidateStage(timing, 'candidateFinalWrite', () =>
+        this.failCandidateBatch(snapshot, request.accessToken, requestHash, code, items)
+      );
+      return this.batchCandidateResponse(failed, items, undefined, timing);
+    }
+
+    let committed: QrScannerIncrementalCommitResult;
+    try {
+      committed = this.incrementalBatchCommitResult(snapshot, append, fileIds);
+    } catch (error) {
+      const code: QrScannerResultCode = (error as any)?.code === 'RECORD_CHANGED'
+        ? 'RECORD_CHANGED'
+        : 'TEMPORARY_ERROR';
+      if (code === 'TEMPORARY_ERROR') {
+        const recovered = timeCandidateStage(timing, 'appendRecovery', () =>
+          this.recoverIncrementalBatchAppend(snapshot, fileIds)
+        );
+        if (recovered) {
+          committed = this.incrementalBatchCommitResult(snapshot, recovered, fileIds);
+        } else {
+          throw qrScannerError('TEMPORARY_ERROR', { retryable: true });
+        }
+      } else {
+        const failed = timeCandidateStage(timing, 'candidateFinalWrite', () =>
+          this.failCandidateBatch(snapshot, request.accessToken, requestHash, code, items)
+        );
+        return this.batchCandidateResponse(failed, items, undefined, timing);
+      }
+    }
+    const completed = timeCandidateStage(timing, 'candidateFinalWrite', () =>
+      this.completeCandidateBatch(snapshot, request.accessToken, requestHash, fileIds, committed)
+    );
+    return this.batchCandidateResponse(completed, items, committed, timing);
+  }
+
+  private completeCandidateBatch(
+    snapshot: StoredQrScannerSession,
+    accessToken: string,
+    requestHash: string,
+    fileIds: string[],
+    committed: QrScannerIncrementalCommitResult
+  ): StoredQrScannerSession {
+    return this.sessions.mutate(snapshot.id, current => {
+      this.requireAuthenticatedCurrent(current, accessToken);
+      if (current.status !== 'ACTIVE') throw qrScannerError('SESSION_NOT_ACTIVE');
+      if (!current.incrementalBatch) {
+        if (
+          current.expectedDataVersion === committed.dataVersion &&
+          fileIds.every(fileId => current.existingFileIds.includes(fileId))
+        ) {
+          return null;
+        }
+        throw qrScannerError('RECORD_CHANGED');
+      }
+      if (current.incrementalBatch.requestHash !== requestHash) {
+        throw qrScannerError('TEMPORARY_ERROR', { retryable: true });
+      }
+      if (current.expectedDataVersion !== snapshot.expectedDataVersion) throw qrScannerError('RECORD_CHANGED');
+      const intended = new Set(current.incrementalBatch.fileIds);
+      const completedFileIds = new Set<string>();
+      const completedAt = this.runtime.now().toISOString();
+      const candidates = current.candidates.map(candidate => {
+        if (candidate.incremental?.state !== 'PENDING' || !candidate.fileId || !intended.has(candidate.fileId)) {
+          return candidate;
+        }
+        completedFileIds.add(candidate.fileId);
+        return {
+          ...candidate,
+          status: 'AUTHORISED' as const,
+          code: 'ACCEPTED' as const,
+          retryable: undefined,
+          mimeType: undefined,
+          incremental: { state: 'COMPLETED' as const, updatedAt: completedAt },
+          checkedAt: completedAt
+        };
+      });
+      if (completedFileIds.size !== intended.size) throw qrScannerError('TEMPORARY_ERROR', { retryable: true });
+      const retainedAuthorised = current.candidates.filter(candidate => candidate.status === 'AUTHORISED').length;
+      const acceptedBefore = Math.max(Number(current.incrementalAcceptedCount) || 0, retainedAuthorised);
+      return {
+        ...current,
+        candidates,
+        expectedDataVersion: committed.dataVersion,
+        existingFileIds: Array.from(new Set([...current.existingFileIds, ...fileIds])).slice(-MAX_STORED_CANDIDATES),
+        incrementalAcceptedCount: acceptedBefore + completedFileIds.size,
+        incrementalBatch: undefined,
+        lastIncrementalBatch: {
+          requestHash,
+          scanIdHashes: current.incrementalBatch.scanIdHashes,
+          payloadHashes: current.incrementalBatch.payloadHashes,
+          completedAt
+        },
+        updatedAt: completedAt
+      };
+    });
+  }
+
+  private failCandidateBatch(
+    snapshot: StoredQrScannerSession,
+    accessToken: string,
+    requestHash: string,
+    code: QrScannerResultCode,
+    items: NormalizedBatchCandidate[]
+  ): StoredQrScannerSession {
+    return this.sessions.mutate(snapshot.id, current => {
+      this.requireAuthenticatedCurrent(current, accessToken);
+      if (current.status !== 'ACTIVE') throw qrScannerError('SESSION_NOT_ACTIVE');
+      if (!current.incrementalBatch) return null;
+      if (current.incrementalBatch.requestHash !== requestHash) {
+        throw qrScannerError('TEMPORARY_ERROR', { retryable: true });
+      }
+      const intended = new Set(current.incrementalBatch.fileIds);
+      const now = this.runtime.now().toISOString();
+      const retryable = code === 'TEMPORARY_ERROR';
+      const failedPrimaryHashes = new Set<string>();
+      let candidates = current.candidates.map(candidate => {
+        if (candidate.incremental?.state !== 'PENDING' || !candidate.fileId || !intended.has(candidate.fileId)) {
+          return candidate;
+        }
+        failedPrimaryHashes.add(candidate.scanIdHash);
+        return {
+          ...candidate,
+          status: candidateStatusForCode(code),
+          code,
+          retryable: retryable || undefined,
+          incremental: retryable ? { state: 'RETRYABLE' as const, updatedAt: now } : undefined,
+          ...(retryable ? {} : { fileId: undefined, displayName: undefined, mimeType: undefined }),
+          checkedAt: now
+        };
+      });
+      const primaryByAliasHash = new Map(
+        items
+          .filter(item => item.duplicateOfScanIdHash)
+          .map(item => [item.scanIdHash, item.duplicateOfScanIdHash!] as const)
+      );
+      candidates = candidates.map(candidate => {
+        const primaryHash = primaryByAliasHash.get(candidate.scanIdHash);
+        if (!primaryHash || !failedPrimaryHashes.has(primaryHash)) return candidate;
+        return {
+          ...candidate,
+          status: candidateStatusForCode(code),
+          code,
+          retryable: retryable || undefined,
+          incremental: retryable ? { state: 'RETRYABLE' as const, updatedAt: now } : undefined,
+          fileId: undefined,
+          displayName: undefined,
+          mimeType: undefined,
+          checkedAt: now
+        };
+      });
+      return {
+        ...current,
+        candidates,
+        incrementalBatch: undefined,
+        lastErrorCode: code,
+        updatedAt: now
+      };
+    });
+  }
+
+  private recoverIncrementalBatchAppend(
+    session: StoredQrScannerSession,
+    fileIds: string[]
+  ): QrScannerFieldAppendResult | null {
+    try {
+      const target = resolveAuthoritativeTarget(
+        this.authoritative,
+        session.formKey,
+        session.recordId,
+        session.fieldId
+      );
+      if (
+        !target ||
+        target.dataVersion !== session.expectedDataVersion + 1 ||
+        !fileIds.every(fileId => target.currentFileIds.includes(fileId))
+      ) {
+        return null;
+      }
+      return {
+        success: true,
+        message: 'The receipt links were already attached.',
+        appendedCount: 0,
+        dataVersion: target.dataVersion,
+        fieldValue: target.currentLinks.join(', '),
+        links: target.currentLinks,
+        idempotent: true
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private incrementalBatchCommitResult(
+    session: StoredQrScannerSession,
+    append: QrScannerFieldAppendResult,
+    fileIds: string[]
+  ): QrScannerIncrementalCommitResult {
+    const committed = this.incrementalCommitResult(session, append, fileIds.length);
+    const committedFileIds = new Set(
+      committed.links
+        .map(link => parseDriveQrPayload(link))
+        .filter((parsed): parsed is Extract<ReturnType<typeof parseDriveQrPayload>, { ok: true }> => parsed.ok)
+        .map(parsed => parsed.fileId)
+    );
+    if (!fileIds.every(fileId => committedFileIds.has(fileId))) {
+      throw qrScannerError('TEMPORARY_ERROR', { retryable: true });
+    }
+    return committed;
+  }
+
+  private incrementalCommitFromTarget(
+    session: StoredQrScannerSession,
+    target: QrScannerTarget,
+    linkedCount: number,
+    idempotent: boolean
+  ): QrScannerIncrementalCommitResult {
+    return {
+      linkedCount,
+      skippedCount: 0,
+      recordId: session.recordId,
+      dataVersion: target.dataVersion,
+      fieldValue: target.currentLinks.join(', '),
+      links: target.currentLinks,
+      summaryCode: 'COMMITTED',
+      idempotent
+    };
+  }
+
+  private batchCandidateResponse(
+    session: StoredQrScannerSession,
+    items: NormalizedBatchCandidate[],
+    committed: QrScannerIncrementalCommitResult | undefined,
+    timing: CandidateTiming
+  ) {
+    const results = items.map(item => {
+      const candidate = session.candidates.find(entry => entry.scanIdHash === item.scanIdHash) || item.candidate;
+      if (!candidate) throw qrScannerError('INTERNAL_ERROR');
+      return { candidate: projectCandidate(candidate) };
+    });
+    debugLog('qrScanner.appsScript.candidates.checked', {
+      sessionId: session.id,
+      candidateCount: items.length,
+      uniqueCanonicalCount: new Set(
+        items.filter(item => item.parsed.ok).map(item => (item.parsed as { fileId: string }).fileId)
+      ).size,
+      suppressedDuplicateCount: items.filter(
+        item => item.duplicateOfScanIdHash || item.candidate?.code === 'DUPLICATE_SESSION'
+      ).length,
+      linkedCount: committed?.linkedCount || 0,
+      durationMs: Math.max(0, Date.now() - timing.startedAt),
+      stageMs: timing.stages
+    });
+    return {
+      results,
+      counts: candidateCounts(session),
+      revision: session.revision,
+      session: projectSession(session),
+      ...(committed ? { committed } : {})
+    };
+  }
+
   private authoriseCandidate(
     scanIdHash: string,
     payloadHash: string,
@@ -796,6 +1619,7 @@ export class AppsScriptQrScannerService {
           mimeType: result.file.mimeType
         })
       : makeCandidate(this.crypto, scanIdHash, payloadHash, result.code, this.runtime.now(), {
+          fileIdHash: this.crypto.hash(fileId),
           retryable: result.retryable
         });
   }
@@ -940,7 +1764,8 @@ export class AppsScriptQrScannerService {
 
   private incrementalCommitResult(
     session: StoredQrScannerSession,
-    append: QrScannerFieldAppendResult
+    append: QrScannerFieldAppendResult,
+    linkedCount = 1
   ): QrScannerIncrementalCommitResult {
     const dataVersion = Number(append.dataVersion);
     const links = Array.isArray(append.links)
@@ -953,7 +1778,7 @@ export class AppsScriptQrScannerService {
       throw qrScannerError('RECORD_CHANGED');
     }
     return {
-      linkedCount: 1,
+      linkedCount,
       skippedCount: 0,
       recordId: session.recordId,
       dataVersion,
@@ -1087,7 +1912,10 @@ export class AppsScriptQrScannerService {
       return {
         ...current,
         status: 'COMPLETED',
-        candidates,
+        // The authoritative field snapshot below is sufficient for terminal
+        // replay. Drop accepted per-scan detail so 10 links are not stored a
+        // third time beside existingFileIds and commitResult.
+        candidates: candidates.filter(candidate => candidate.status !== 'AUTHORISED').slice(-MAX_STORED_CANDIDATES),
         commit: { ...current.commit, completedAt: this.runtime.now().toISOString() },
         commitResult: result,
         updatedAt: this.runtime.now().toISOString()
