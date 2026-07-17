@@ -2003,13 +2003,57 @@ export const FORM_VIEW_STYLES = `
           min-width: 0;
         }
         .ck-date-input-control {
+          --ck-date-overlay-padding-block: 0px;
+          --ck-date-overlay-padding-start: 22px;
+          --ck-date-overlay-padding-end: 56px;
           position: relative;
           width: 100%;
           min-width: 0;
         }
+        .ck-ios-basescale .ck-date-input-control {
+          /* iOS opens the picker from the whole control and does not render a calendar icon. */
+          --ck-date-overlay-padding-end: 22px;
+        }
+        .ck-date-input-control--content-sized {
+          display: inline-block;
+          width: auto;
+          max-width: 100%;
+          vertical-align: middle;
+          font-size: 0;
+          line-height: 0;
+        }
         .ck-date-input-control > input.ck-date-input {
           width: 100%;
           min-width: 0;
+          min-height: 0;
+          padding-top: var(--ck-date-overlay-padding-block);
+          padding-bottom: var(--ck-date-overlay-padding-block);
+          line-height: 1.2;
+        }
+        .ck-date-input-control--content-sized > input.ck-date-input {
+          position: absolute;
+          inset: 0;
+          z-index: 1;
+          width: 100%;
+          height: 100%;
+          min-width: 0;
+          min-height: 0;
+          max-width: 100%;
+        }
+        .ck-date-overlay-sizer {
+          display: inline-block;
+          visibility: hidden;
+          pointer-events: none;
+          box-sizing: border-box;
+          max-width: 100%;
+          overflow: hidden;
+          padding: var(--ck-date-overlay-padding-block) var(--ck-date-overlay-padding-end)
+            var(--ck-date-overlay-padding-block) var(--ck-date-overlay-padding-start);
+          font-size: var(--ck-font-control);
+          font-weight: 400;
+          line-height: 1.2;
+          white-space: nowrap;
+          vertical-align: top;
         }
         .ck-date-input.ck-date-input--overlay {
           color: transparent;
@@ -2023,10 +2067,13 @@ export const FORM_VIEW_STYLES = `
         .ck-date-overlay {
           position: absolute;
           inset: 0;
+          z-index: 2;
           pointer-events: none;
-          /* Match base control padding (see WebFormTemplate). Leave room for the calendar icon. */
-          padding: 18px 56px 18px 22px;
+          /* Match the intrinsic sizer and leave room for the native calendar icon. */
+          padding: var(--ck-date-overlay-padding-block) var(--ck-date-overlay-padding-end)
+            var(--ck-date-overlay-padding-block) var(--ck-date-overlay-padding-start);
           font-weight: 400;
+          line-height: 1.2;
           display: flex;
           align-items: center;
           white-space: nowrap;
@@ -2034,6 +2081,10 @@ export const FORM_VIEW_STYLES = `
           text-overflow: clip;
           color: var(--text);
           font-size: var(--ck-font-control);
+        }
+        .ck-line-item-table .ck-date-input-wrap {
+          display: flex;
+          justify-content: flex-end;
         }
         .ck-date-input-feedback {
           margin-top: 6px;
