@@ -4,6 +4,7 @@ import {
   extractDriveFileIdFromLink,
   formatDriveFileDisplayName,
   normalizeCapturedUploadLink,
+  resolveUploadLinkCaptureConfig,
   shouldRetryDuplicateCapturedUploadLink
 } from '../../../src/web/react/features/uploads/domain/linkCapture';
 
@@ -19,6 +20,22 @@ describe('upload link capture', () => {
       dedupeBy: 'driveFileId'
     }
   };
+
+  it('enables and disables link capture from fixture configuration', () => {
+    expect(resolveUploadLinkCaptureConfig(uploadConfig)).toEqual(
+      expect.objectContaining({
+        enabled: true,
+        mode: 'driveQr',
+        dedupeBy: 'driveFileId'
+      })
+    );
+    expect(
+      resolveUploadLinkCaptureConfig({
+        ...uploadConfig,
+        linkCapture: { ...uploadConfig.linkCapture, enabled: false }
+      })
+    ).toBeNull();
+  });
 
   it('extracts Drive file ids from supported QR values', () => {
     expect(extractDriveFileIdFromLink(`https://drive.google.com/file/d/${driveId}/view?usp=sharing`)).toBe(driveId);

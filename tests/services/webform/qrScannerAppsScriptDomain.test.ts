@@ -5,6 +5,7 @@ import {
   canonicalizeQrScannerCommitLinks,
   dedupeUploadLinksByFileId,
   fileTypeMatches,
+  hasAuthoritativeQrScannerConfig,
   linkCaptureFileTypeMatches,
   parseDriveQrPayload,
   resolveQrScannerInstruction,
@@ -12,6 +13,29 @@ import {
 } from '../../../src/services/webform/qrScannerAppsScript/domain';
 
 describe('Apps Script QR scanner domain', () => {
+  test('requires an enabled, server-validated scanner configuration', () => {
+    const field = {
+      uploadConfig: {
+        linkCapture: {
+          enabled: true,
+          mode: 'driveQr',
+          validation: { requireServerValidation: true }
+        }
+      }
+    };
+
+    expect(hasAuthoritativeQrScannerConfig(field)).toBe(true);
+    expect(
+      hasAuthoritativeQrScannerConfig({
+        ...field,
+        uploadConfig: {
+          ...field.uploadConfig,
+          linkCapture: { ...field.uploadConfig.linkCapture, enabled: false }
+        }
+      })
+    ).toBe(false);
+  });
+
   test.each([
     ['https://drive.google.com/file/d/1AbCdEfGhIjKlMnOpQrStUvWxYz/view', '1AbCdEfGhIjKlMnOpQrStUvWxYz'],
     ['https://drive.google.com/open?id=1AbCdEfGhIjKlMnOpQrStUvWxYz', '1AbCdEfGhIjKlMnOpQrStUvWxYz'],
