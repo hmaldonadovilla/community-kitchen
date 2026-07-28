@@ -6754,7 +6754,7 @@
       "listView": false,
       "ui": {
         "helperText": {
-          "en": "Scan a receipt QR code or upload up to 10 photos max 10 Mb each"
+          "en": "Upload up to 10 photos max 10 Mb each"
         },
         "helperPlacement": "belowLabel"
       },
@@ -6813,7 +6813,7 @@
         ],
         "errorMessages": {
           "minFiles": {
-            "en": "Scan one receipt QR code or upload at least 1 photo."
+            "en": "Upload at least 1 photo."
           },
           "maxFiles": {
             "en": "The maximum number of photos is {max}"
@@ -6839,7 +6839,7 @@
           "en": "Receipt evidence {n}"
         },
         "linkCapture": {
-          "enabled": true,
+          "enabled": false,
           "mode": "driveQr",
           "allowManualPaste": false,
           "dedupeBy": "driveFileId",
@@ -10444,7 +10444,7 @@
         "listView": false,
         "ui": {
           "helperText": {
-            "en": "Scan a receipt QR code or upload up to 10 photos max 10 Mb each"
+            "en": "Upload up to 10 photos max 10 Mb each"
           },
           "helperPlacement": "belowLabel"
         },
@@ -10503,7 +10503,7 @@
           ],
           "errorMessages": {
             "minFiles": {
-              "en": "Scan one receipt QR code or upload at least 1 photo."
+              "en": "Upload at least 1 photo."
             },
             "maxFiles": {
               "en": "The maximum number of photos is {max}"
@@ -10529,7 +10529,7 @@
             "en": "Receipt evidence {n}"
           },
           "linkCapture": {
-            "enabled": true,
+            "enabled": false,
             "mode": "driveQr",
             "allowManualPaste": false,
             "dedupeBy": "driveFileId",

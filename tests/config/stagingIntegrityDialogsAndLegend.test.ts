@@ -62,51 +62,30 @@ describe('staging integrity dialogs and list legend config', () => {
     });
   });
 
-  test('meal production photo upload helpers include photo count and size limits', () => {
+  test('meal production photo upload helpers include photo count and size limits in both projections', () => {
     const cfg = readConfig('config_meal_production.json');
-    [
-      ['ING_EVD', 'Scan a receipt QR code or upload up to 10 photos max 10 Mb each'],
-      ['TEMP_EVD', 'Upload up to 10 photos max 10 Mb each']
-    ].forEach(([id, expected]) => {
-      expect(findQuestion(cfg.questions || [], id)?.ui?.helperText?.en).toBe(expected);
-      expect(findQuestion(cfg.definition?.questions || [], id)?.ui?.helperText?.en).toBe(expected);
+    ['ING_EVD', 'TEMP_EVD'].forEach(id => {
+      const primaryField = findQuestion(cfg.questions || [], id);
+      const definitionField = findQuestion(cfg.definition?.questions || [], id);
+      [primaryField, definitionField].forEach(field => {
+        expect(field?.ui?.helperText?.en).toEqual(expect.stringContaining('up to 10 photos max 10 Mb each'));
+      });
+      expect(definitionField?.ui?.helperText).toEqual(primaryField?.ui?.helperText);
     });
   });
 
-  test('meal production receipt scanner keeps the mobile session contract in both config projections', () => {
+  test('meal production receipt upload settings stay aligned in both config projections', () => {
     const cfg = readConfig('config_meal_production.json');
-    [cfg.questions || [], cfg.definition?.questions || []].forEach(questions => {
-      const uploadConfig = findQuestion(questions, 'ING_EVD')?.uploadConfig;
+    const primaryField = findQuestion(cfg.questions || [], 'ING_EVD');
+    const definitionField = findQuestion(cfg.definition?.questions || [], 'ING_EVD');
+
+    [primaryField, definitionField].forEach(field => {
+      const uploadConfig = field?.uploadConfig;
       expect(uploadConfig?.maxFiles).toBe(10);
-      expect(uploadConfig?.linkCapture).toEqual(
-        expect.objectContaining({
-          enabled: true,
-          mode: 'driveQr',
-          allowManualPaste: false,
-          dedupeBy: 'driveFileId',
-          allowedMimeTypes: ['*/*'],
-          instruction: {
-            en: 'Point the camera at each QR code on the ingredient receipts.'
-          },
-          sessionTtlMinutes: 15,
-          hideCloseOnIos: true,
-          commitOnReturnOnIos: true,
-          validation: expect.objectContaining({
-            requireServerValidation: true,
-            includeUploadDestinationFolder: true,
-            rejectTrashed: true
-          })
-        })
-      );
-      expect(uploadConfig?.waitMessages).toEqual(
-        expect.objectContaining({
-          title: { en: '' },
-          scan: {
-            en: 'Please wait until all receipt scans have finished processing. Accepted receipts will be added automatically.'
-          }
-        })
-      );
+      expect(hasNonEmptyEnText(uploadConfig?.errorMessages?.minFiles)).toBe(true);
     });
+
+    expect(definitionField?.uploadConfig).toEqual(primaryField?.uploadConfig);
   });
 
   test('recipes list legend keeps required action icons and valid layout config', () => {
