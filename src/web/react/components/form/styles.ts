@@ -1900,6 +1900,7 @@ export const FORM_VIEW_STYLES = `
           border-radius: 14px;
           box-shadow: none;
           padding: 6px;
+          touch-action: pan-y;
         }
         .ck-searchable-select__menu--up {
           top: auto;

@@ -12,6 +12,8 @@ export type OptionLike = {
 
 export type BooleanChoiceMap = { trueValue: string; falseValue: string };
 
+export const shouldPreferCustomChoiceControl = (userAgent: string): boolean => /Android/i.test(userAgent || '');
+
 const normalizeBoolToken = (value: unknown): string => {
   if (value === undefined || value === null) return '';
   if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'boolean') return '';
@@ -93,8 +95,10 @@ export const shouldUseSearchableChoiceControl = (args: {
   optionCount: number;
   searchEnabled?: boolean;
   override?: string | null;
+  preferCustomControl?: boolean;
 }): boolean => {
   if (args.variant !== 'select') return false;
+  if (args.preferCustomControl) return true;
   if (args.searchEnabled === true) return true;
   if (args.searchEnabled === false) return false;
   const normalizedOverride = (args.override || '').toString().trim().toLowerCase();

@@ -6,6 +6,7 @@ import { SearchableSelect } from './SearchableSelect';
 import {
   computeChoiceControlVariant,
   resolveNoneLabel,
+  shouldPreferCustomChoiceControl,
   shouldUseSearchableChoiceControl,
   type OptionLike
 } from './choiceControls';
@@ -40,6 +41,9 @@ export const useChoiceControlRenderer = (args: {
   const choiceVariantLogRef = useRef<Record<string, string>>({});
   const choiceSearchLoggedRef = useRef<Set<string>>(new Set());
   const choiceSearchIndexLoggedRef = useRef<Set<string>>(new Set());
+  const preferCustomControl = shouldPreferCustomChoiceControl(
+    typeof navigator !== 'undefined' ? navigator.userAgent : ''
+  );
 
   return useCallback(
     (renderArgs: RenderChoiceControlArgs) => {
@@ -78,7 +82,8 @@ export const useChoiceControlRenderer = (args: {
         variant: decision.variant,
         optionCount: options.length,
         searchEnabled,
-        override
+        override,
+        preferCustomControl
       });
 
       const renderSelectControl = () => {
@@ -88,7 +93,7 @@ export const useChoiceControlRenderer = (args: {
             onDiagnostic?.('ui.choiceControl.search.enabled', {
               fieldPath,
               optionCount: options.length,
-              enabled: searchEnabled === true ? 'forced' : 'auto'
+              enabled: preferCustomControl ? 'android' : searchEnabled === true ? 'forced' : 'auto'
             });
           }
           const searchableCount = options.filter(opt => !!opt.searchText).length;
@@ -234,6 +239,6 @@ export const useChoiceControlRenderer = (args: {
           return renderSelectControl();
       }
     },
-    [language, onDiagnostic]
+    [language, onDiagnostic, preferCustomControl]
   );
 };
