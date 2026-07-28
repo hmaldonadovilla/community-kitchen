@@ -23,6 +23,8 @@ export const SearchableSelect: React.FC<{
 }> = ({ value, options, disabled, placeholder, emptyText, className, style, inputStyle, onDiagnostic, onChange }) => {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const menuInteractingRef = useRef(false);
+  const lastPointerActivationRef = useRef<{ value: string; at: number } | null>(null);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState('');
@@ -58,7 +60,7 @@ export const SearchableSelect: React.FC<{
     setActiveIndex(0);
     try {
       inputRef.current?.blur();
-    } catch (_) {
+    } catch {
       // ignore
     }
   };
@@ -81,6 +83,22 @@ export const SearchableSelect: React.FC<{
     }
     // Revert to the selected label when the user leaves without choosing a valid option.
     setText(selectedLabel);
+  };
+
+  const markMenuInteracting = () => {
+    menuInteractingRef.current = true;
+  };
+
+  const clearMenuInteractingSoon = () => {
+    window.setTimeout(() => {
+      menuInteractingRef.current = false;
+    }, 0);
+  };
+
+  const wasJustActivatedByPointer = (optionValue: string): boolean => {
+    const lastActivation = lastPointerActivationRef.current;
+    if (!lastActivation || lastActivation.value !== optionValue) return false;
+    return Date.now() - lastActivation.at < 750;
   };
 
   const recomputeMenuLayout = useCallback(() => {
@@ -141,6 +159,19 @@ export const SearchableSelect: React.FC<{
         aria-autocomplete="list"
         aria-haspopup="listbox"
         style={inputStyle}
+        onPointerDown={() => {
+          if (disabled) return;
+          setEditing(true);
+          setOpen(true);
+          setActiveIndex(0);
+          if (inputRef.current && document.activeElement !== inputRef.current) {
+            try {
+              inputRef.current.focus({ preventScroll: true });
+            } catch {
+              inputRef.current.focus();
+            }
+          }
+        }}
         onFocus={() => {
           if (disabled) return;
           setEditing(true);
@@ -150,12 +181,16 @@ export const SearchableSelect: React.FC<{
           requestAnimationFrame(() => {
             try {
               inputRef.current?.select();
-            } catch (_) {
+            } catch {
               // ignore
             }
           });
         }}
         onBlur={() => {
+          if (menuInteractingRef.current) {
+            clearMenuInteractingSoon();
+            return;
+          }
           setOpen(false);
           setEditing(false);
           commitFromText();
@@ -217,7 +252,7 @@ export const SearchableSelect: React.FC<{
             setActiveIndex(0);
             try {
               inputRef.current?.focus();
-            } catch (_) {
+            } catch {
               // ignore
             }
             onDiagnostic?.('choice.search.clear', { hadValue: Boolean((value || '').toString().trim()) });
@@ -233,6 +268,9 @@ export const SearchableSelect: React.FC<{
           role="listbox"
           aria-label="Options"
           style={{ maxHeight: `${menuMaxHeight}px` }}
+          onPointerDownCapture={markMenuInteracting}
+          onPointerUpCapture={clearMenuInteractingSoon}
+          onPointerCancelCapture={clearMenuInteractingSoon}
         >
           {visible.length ? (
             visible.map((opt, idx) => {
@@ -244,10 +282,19 @@ export const SearchableSelect: React.FC<{
                   className={`ck-searchable-select__option${active ? ' is-active' : ''}`}
                   role="option"
                   aria-selected={opt.value === value ? 'true' : 'false'}
-                  onMouseDown={e => {
+                  onPointerDown={e => {
                     // Prevent input blur before selection.
                     e.preventDefault();
+                  }}
+                  onPointerUp={e => {
+                    if (e.pointerType === 'mouse') return;
+                    e.preventDefault();
                     if (disabled) return;
+                    lastPointerActivationRef.current = { value: opt.value, at: Date.now() };
+                    commitValue(opt);
+                  }}
+                  onClick={() => {
+                    if (disabled || wasJustActivatedByPointer(opt.value)) return;
                     commitValue(opt);
                   }}
                 >
