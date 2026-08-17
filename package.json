@@ -54,7 +54,7 @@
     "@types/jest": "^30.0.0",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.0",
-    "@typescript-eslint/eslint-plugin": "^8.58.0",
+    "@typescript-eslint/eslint-plugin": "^8.60.1",
     "@typescript-eslint/parser": "^8.58.0",
     "brace-expansion": "file:vendor/brace-expansion",
     "chrome-launcher": "^1.2.1",
