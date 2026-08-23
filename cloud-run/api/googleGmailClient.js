@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 
 const { createGoogleApiClient } = require('./googleApiClient');
+const { parseEmailAddressList } = require('./domain/emailAddresses');
 
 const GMAIL_API_BASE_URL = 'https://gmail.googleapis.com/gmail/v1';
 const IAM_CREDENTIALS_BASE_URL = 'https://iamcredentials.googleapis.com/v1';
@@ -35,10 +36,18 @@ const formatMailbox = (email, name) => {
 const normalizeAddressList = value => {
   if (!value) return [];
   const list = Array.isArray(value) ? value : [value];
-  return list
-    .flatMap(entry => toText(entry).split(','))
-    .map(entry => entry.trim())
-    .filter(Boolean);
+  const addresses = list.flatMap(entry => {
+    const parsed = parseEmailAddressList(entry, { allowMultiple: true });
+    if (!parsed.valid) throw new Error('Email message contains an invalid recipient address.');
+    return parsed.addresses;
+  });
+  const seen = new Set();
+  return addresses.filter(address => {
+    const key = address.toLowerCase();
+    if (!address || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 };
 
 const normalizePrivateKey = value => {

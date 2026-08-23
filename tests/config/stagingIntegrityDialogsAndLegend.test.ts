@@ -74,6 +74,25 @@ describe('staging integrity dialogs and list legend config', () => {
     });
   });
 
+  test('customer emails use email-list validation and downstream recipient errors name Customer Management', () => {
+    const customerConfig = readConfig('config_distributor.json');
+    const primaryEmail = findQuestion(customerConfig.questions || [], 'DIST_EMAIL');
+    const definitionEmail = findQuestion(customerConfig.definition?.questions || [], 'DIST_EMAIL');
+
+    [primaryEmail, definitionEmail].forEach(field => {
+      expect(field.validationRules).toEqual([
+        expect.objectContaining({
+          then: expect.objectContaining({ fieldId: 'DIST_EMAIL', format: 'emailList' })
+        })
+      ]);
+    });
+
+    const mealProduction = readConfig('config_meal_production.json');
+    const recipientEntries = collectObjects(mealProduction, entry => entry?.valueField === 'DIST_EMAIL');
+    expect(recipientEntries.length).toBeGreaterThan(0);
+    recipientEntries.forEach(entry => expect(entry.sourceLabel).toBe('Customer Management'));
+  });
+
   test('meal production receipt upload settings stay aligned in both config projections', () => {
     const cfg = readConfig('config_meal_production.json');
     const primaryField = findQuestion(cfg.questions || [], 'ING_EVD');

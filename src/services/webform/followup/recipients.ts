@@ -2,6 +2,7 @@ import { EmailRecipientDataSourceConfig, EmailRecipientEntry, TemplateIdMap, Web
 import { DataSourceService } from '../dataSources';
 import { debugLog } from '../debug';
 import { matchesWhen } from '../../../web/rules/visibility';
+import { parseEmailAddressList } from '../../../domain/emailAddresses';
 
 /**
  * Recipient + template selection helpers for follow-up emails/PDFs.
@@ -107,6 +108,41 @@ export const lookupRecipientFromDataSource = (
   return undefined;
 };
 
+export class InvalidEmailRecipientError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidEmailRecipientError';
+  }
+}
+
+const invalidRecipientMessage = (entry?: EmailRecipientDataSourceConfig, lookupValue?: any): string => {
+  const sourceLabel = (entry?.sourceLabel || entry?.dataSource?.id || '').toString().trim();
+  const lookupLabel = lookupValue === undefined || lookupValue === null ? '' : lookupValue.toString().trim();
+  if (sourceLabel) {
+    const recordContext = lookupLabel ? ` for "${lookupLabel}"` : '';
+    return (
+      `Email could not be sent because ${sourceLabel} contains an invalid recipient email${recordContext}. ` +
+      'Update the email there and retry. Separate multiple addresses with commas.'
+    );
+  }
+  return (
+    'Email could not be sent because the recipient configuration contains an invalid email address. ' +
+    'Update the email configuration and retry. Separate multiple addresses with commas.'
+  );
+};
+
+const parseResolvedRecipients = (
+  value: any,
+  entry?: EmailRecipientDataSourceConfig,
+  lookupValue?: any
+): string[] => {
+  const parsed = parseEmailAddressList(value, { allowMultiple: true });
+  if (!parsed.valid) {
+    throw new InvalidEmailRecipientError(invalidRecipientMessage(entry, lookupValue));
+  }
+  return parsed.addresses;
+};
+
 export const resolveRecipients = (
   dataSources: DataSourceService,
   entries: EmailRecipientEntry[] | undefined,
@@ -119,7 +155,7 @@ export const resolveRecipients = (
     if (typeof entry === 'string') {
       const address = (entry || '').toString();
       const expanded = address.replace(/{{[^}]+}}/g, t => placeholders[t] ?? t).trim();
-      if (expanded) resolved.push(expanded);
+      if (expanded) resolved.push(...parseResolvedRecipients(expanded));
       return;
     }
     if (entry && (entry as any).type === 'dataSource') {
@@ -127,13 +163,18 @@ export const resolveRecipients = (
       const lookupValue = (record.values && (record.values as any)[cfg.recordFieldId]) || '';
       const address = lookupRecipientFromDataSource(dataSources, cfg, lookupValue, record.language);
       if (address) {
-        resolved.push(address);
+        resolved.push(...parseResolvedRecipients(address, cfg, lookupValue));
       } else if (cfg.fallbackEmail) {
-        resolved.push(cfg.fallbackEmail);
+        resolved.push(...parseResolvedRecipients(cfg.fallbackEmail, cfg, lookupValue));
       }
     }
   });
-  return resolved.filter(Boolean);
+  const seen = new Set<string>();
+  return resolved.filter(address => {
+    const key = address.toLowerCase();
+    if (!address || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 };
-
 

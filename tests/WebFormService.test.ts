@@ -25,6 +25,7 @@ describe('WebFormService', () => {
           recordFieldId: 'Q4',
           lookupField: 'Distributor',
           valueField: 'email',
+          sourceLabel: 'Customer Management',
           dataSource: { id: 'Distributor Data', projection: ['Distributor', 'email'] }
         }
       ],
@@ -1192,6 +1193,41 @@ describe('WebFormService', () => {
     expect(optionsArg.bcc).toBe('audit@example.com');
     expect(optionsArg.from).toBe('kitchen@example.com');
     expect(optionsArg.name).toBe('Community Kitchen');
+  });
+
+  test('triggerFollowupAction rejects invalid data source recipients before PDF generation', () => {
+    jest.spyOn((service as any).dataSources, 'fetchDataSource').mockReturnValue({
+      items: [{ Distributor: 'ACME', email: 'first@example.com second@example.com', bcc: 'audit@example.com' }]
+    });
+    const followups = (service as any).followups || (service as any);
+    const generateSpy = jest.spyOn(followups, 'generatePdfArtifact' as any).mockReturnValue({
+      success: true,
+      url: 'http://pdf',
+      fileId: 'file-1',
+      blob: null
+    });
+    (global as any).GmailApp.sendEmail.mockClear();
+
+    service.saveSubmissionWithId({
+      formKey: 'Config: Delivery',
+      language: 'EN',
+      id: 'REC-BAD-EMAIL',
+      Q1: 'Alice',
+      Q2_json: JSON.stringify([]),
+      Q3: [],
+      Q4: 'ACME'
+    } as any);
+
+    const result = service.triggerFollowupAction('Config: Delivery', 'REC-BAD-EMAIL', 'SEND_EMAIL');
+
+    expect(result).toMatchObject({
+      success: false,
+      message:
+        'Email could not be sent because Customer Management contains an invalid recipient email for "ACME". ' +
+        'Update the email there and retry. Separate multiple addresses with commas.'
+    });
+    expect(generateSpy).not.toHaveBeenCalled();
+    expect((global as any).GmailApp.sendEmail).not.toHaveBeenCalled();
   });
 
   test('triggerFollowupAction ignores rendered PDF bytes when reading email template docs', () => {

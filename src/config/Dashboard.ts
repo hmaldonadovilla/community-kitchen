@@ -4513,6 +4513,9 @@ export class Dashboard {
     if (entry.fallbackEmail && typeof entry.fallbackEmail === 'string') {
       normalized.fallbackEmail = entry.fallbackEmail.trim();
     }
+    if (entry.sourceLabel && typeof entry.sourceLabel === 'string') {
+      normalized.sourceLabel = entry.sourceLabel.trim();
+    }
     return normalized;
   }
 

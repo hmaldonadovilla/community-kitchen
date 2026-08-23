@@ -103,6 +103,7 @@
           "recordFieldId": "MP_DISTRIBUTOR",
           "lookupField": "NICKNAME",
           "valueField": "DIST_EMAIL",
+          "sourceLabel": "Customer Management",
           "dataSource": {
             "id": "Distributor Data",
             "projection": [
@@ -11478,10 +11479,11 @@
       "emailRecipients": [
         {
           "type": "dataSource",
-          "recordFieldId": "MP_DISTRIBUTOR",
-          "lookupField": "NICKNAME",
-          "valueField": "DIST_EMAIL",
-          "dataSource": {
+            "recordFieldId": "MP_DISTRIBUTOR",
+            "lookupField": "NICKNAME",
+            "valueField": "DIST_EMAIL",
+            "sourceLabel": "Customer Management",
+            "dataSource": {
             "id": "Distributor Data",
             "projection": [
               "NICKNAME",

@@ -2227,6 +2227,12 @@ export interface ValidationRule {
      * Skips empty values and numeric values already parsed by the client.
      */
     noLeadingZeros?: boolean;
+    /**
+     * Optional syntax constraint for email-bearing text values.
+     * - email: exactly one email address
+     * - emailList: one or more comma-separated email addresses
+     */
+    format?: 'email' | 'emailList';
     allowed?: string[];
     disallowed?: string[];
   };
@@ -3369,6 +3375,11 @@ export interface EmailRecipientDataSourceConfig {
   valueField: string;
   dataSource: DataSourceConfig;
   fallbackEmail?: string;
+  /**
+   * Optional user-facing name of the application or source that owns the email value.
+   * Used in downstream validation errors so users know where to correct bad data.
+   */
+  sourceLabel?: string;
 }
 
 export type EmailRecipientEntry = string | EmailRecipientDataSourceConfig;

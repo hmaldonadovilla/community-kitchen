@@ -26,6 +26,19 @@ describe('validation rules', () => {
     expect(checkRule('2.5', { fieldId: 'x', integer: true } as any, 'EN', undefined)).toContain('whole');
   });
 
+  it('validates single and comma-separated email formats', () => {
+    expect(checkRule('person@example.org', { fieldId: 'EMAIL', format: 'email' } as any, 'EN')).toBe('');
+    expect(
+      checkRule('one@example.org, two@example.org', { fieldId: 'EMAILS', format: 'emailList' } as any, 'EN')
+    ).toBe('');
+    expect(
+      checkRule('one@example.org two@example.org', { fieldId: 'EMAILS', format: 'emailList' } as any, 'EN')
+    ).toContain('commas');
+    expect(
+      checkRule('one@example.org, two@example.org', { fieldId: 'EMAIL', format: 'email' } as any, 'EN')
+    ).toContain('valid email address');
+  });
+
   it('treats a bare minus sign as invalid when min is set', () => {
     const msg = checkRule('-', { fieldId: 'x', min: 0 }, 'EN', { en: 'Enter 0 or more' });
     expect(msg).toContain('0 or more');

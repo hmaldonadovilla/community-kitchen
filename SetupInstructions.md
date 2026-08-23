@@ -2217,7 +2217,7 @@ The web app caches form definitions in the browser (localStorage) using a cache-
         { "validationRules": [ { "when": { "fieldId": "Other details", "notEmpty": true }, "then": { "fieldId": "Reason", "required": true } } ] }
         ```
 
-        Supported conditions: `equals` (string/array), `greaterThan`, `lessThan`, `notEmpty`, `isEmpty`, `isToday`, `isInPast`, `isInFuture`. Actions: `required` true/false, `min`, `max`, `minFieldId`, `maxFieldId`, `allowed`, `disallowed`.
+        Supported conditions: `equals` (string/array), `greaterThan`, `lessThan`, `notEmpty`, `isEmpty`, `isToday`, `isInPast`, `isInFuture`. Actions: `required` true/false, `min`, `max`, `minFieldId`, `maxFieldId`, `format` (`email` or `emailList`), `allowed`, `disallowed`. `emailList` accepts comma-separated addresses and rejects whitespace-only separators.
         Date notes: `YYYY-MM-DD` is treated as a local date (not UTC). Empty/invalid dates do not match `isToday`/`isInPast`/`isInFuture`.
       - Warning rules (non-blocking): set `"level": "warning"` to surface a message without blocking submit.
         - You can use normal rules (`when` + `then`) or **message-only** rules (`when` + `message`, omit `then`) to show a warning when the condition matches.
@@ -2884,6 +2884,8 @@ Tip: if you see more than two decimals, confirm you’re on the latest bundle an
      - `lookupField`: column in the data source to match against the submitted value.
      - `valueField`: column containing the email address to use.
      - `fallbackEmail` (optional): used when the lookup fails.
+     - `sourceLabel` (optional): user-facing application or source name shown when the resolved email is invalid, for example `"Customer Management"`.
+     - Resolved values may contain one address or a comma-separated list. Recipient syntax is validated before PDF generation; whitespace alone is not a separator and invalid values stop the action with a source-aware error.
    - `emailCc` / `emailBcc`: same structure as `emailRecipients`, useful for copying chefs/managers automatically.
    - `statusFieldId` (optional): question ID to overwrite when actions run. If omitted we use the auto-generated `Status` column in the response tab.
   - `statusTransitions`: status values written by follow-up actions and used by the web app. Supports localized values.

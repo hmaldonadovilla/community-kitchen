@@ -51,6 +51,21 @@
       "type": "TEXT",
       "qEn": "Email",
       "required": true,
+      "validationRules": [
+        {
+          "when": {
+            "fieldId": "DIST_EMAIL",
+            "notEmpty": true
+          },
+          "then": {
+            "fieldId": "DIST_EMAIL",
+            "format": "emailList"
+          },
+          "message": {
+            "en": "Enter valid email addresses. Separate multiple addresses with commas."
+          }
+        }
+      ],
       "listView": false,
       "options": [],
       "status": "Active"
@@ -197,6 +212,21 @@
           "en": "Email"
         },
         "required": true,
+        "validationRules": [
+          {
+            "when": {
+              "fieldId": "DIST_EMAIL",
+              "notEmpty": true
+            },
+            "then": {
+              "fieldId": "DIST_EMAIL",
+              "format": "emailList"
+            },
+            "message": {
+              "en": "Enter valid email addresses. Separate multiple addresses with commas."
+            }
+          }
+        ],
         "listView": false
       },
       {

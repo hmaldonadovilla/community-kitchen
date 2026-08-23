@@ -5767,6 +5767,9 @@ components:
           $ref: '#/components/schemas/DataSourceConfig'
         fallbackEmail:
           type: string
+        sourceLabel:
+          type: string
+          description: Optional user-facing application or source name included in invalid-recipient errors.
 
     FollowupStatusConfig:
       type: object
@@ -7864,6 +7867,14 @@ components:
             noLeadingZeros:
               type: boolean
               description: When true, reject whole-number text values that contain leading zeros.
+            format:
+              type: string
+              enum: [email, emailList]
+              description: |
+                Optional email syntax validation for text values.
+                - `email`: require exactly one valid email address.
+                - `emailList`: allow one or more comma-separated email addresses.
+                Whitespace alone is not treated as a separator.
             allowed:
               type: array
               items:

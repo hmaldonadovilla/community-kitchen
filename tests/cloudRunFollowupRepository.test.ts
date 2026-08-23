@@ -117,6 +117,60 @@ describe('Cloud Run FollowupRepository', () => {
     );
   });
 
+  test('rejects invalid data source recipients before template or PDF work', async () => {
+    const templateRepository = createTemplateRepository();
+    const sendEmail = jest.fn();
+    const repository = new FollowupRepository({
+      submissionRepository: {
+        fetchSubmissionById: jest.fn().mockResolvedValue(openRecord)
+      },
+      submitEffectsRepository: { saveSubmissionWithId: jest.fn() },
+      templateRepository,
+      dataSourceRepository: {
+        fetchDataSource: jest.fn().mockResolvedValue({
+          items: [{ CUSTOMER: 'Belliard', EMAIL: 'first@example.org second@example.org' }]
+        })
+      },
+      gmailClient: { sendEmail }
+    });
+    const invalidContext = {
+      ...context,
+      form: {
+        ...context.form,
+        followupConfig: {
+          ...followupConfig,
+          emailRecipients: [
+            {
+              type: 'dataSource',
+              recordFieldId: 'CUSTOMER',
+              lookupField: 'CUSTOMER',
+              valueField: 'EMAIL',
+              sourceLabel: 'Customer Management',
+              dataSource: { id: 'Customer Data', projection: ['CUSTOMER', 'EMAIL'] }
+            }
+          ]
+        }
+      }
+    };
+    const invalidRecord = {
+      ...openRecord,
+      values: { ...openRecord.values, CUSTOMER: 'Belliard' }
+    };
+    repository.submissionRepository.fetchSubmissionById.mockResolvedValue(invalidRecord);
+
+    const result = await repository.runSendEmail(invalidContext, 'mp-1', {});
+
+    expect(result).toEqual({
+      success: false,
+      message:
+        'Email could not be sent because Customer Management contains an invalid recipient email for "Belliard". ' +
+        'Update the email there and retry. Separate multiple addresses with commas.'
+    });
+    expect(templateRepository.getTextTemplateBody).not.toHaveBeenCalled();
+    expect(templateRepository.renderPdfArtifactFromTemplate).not.toHaveBeenCalled();
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
   test('keeps Closed terminal when PDF metadata is saved after a close', async () => {
     const saveSubmissionWithId = jest.fn().mockResolvedValue({
       success: true,

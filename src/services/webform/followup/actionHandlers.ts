@@ -258,6 +258,22 @@ export const handleSendEmailAction = (args: {
   const validationWarnings = collectValidationWarnings(questions, ctx.record);
   addPlaceholderVariants(placeholders, 'VALIDATION_WARNINGS', validationWarnings.join('\n'));
 
+  let toRecipients: string[];
+  let ccRecipients: string[];
+  let bccRecipients: string[];
+  try {
+    toRecipients = resolveRecipients(dataSources, followup.emailRecipients, placeholders, ctx.record);
+    ccRecipients = resolveRecipients(dataSources, followup.emailCc, placeholders, ctx.record);
+    bccRecipients = resolveRecipients(dataSources, followup.emailBcc, placeholders, ctx.record);
+  } catch (err: any) {
+    const message = (err?.message || err?.toString?.() || 'Invalid email recipient.').toString();
+    debugLog('followup.email.recipientValidationFailed', { message });
+    return { success: false, message };
+  }
+  if (!toRecipients.length) {
+    return { success: false, message: 'Resolved email recipients are empty.' };
+  }
+
   let pdfArtifact: GeneratedPdfArtifact | null = null;
   const allowReuse = shouldReuseExistingPdf(followup, ctx.record);
   if (followup.pdfTemplateId) {
@@ -297,12 +313,6 @@ export const handleSendEmailAction = (args: {
     ctx.sheet.getRange(ctx.rowIndex, ctx.columns.pdfUrl, 1, 1).setValue(pdfArtifact.url);
   }
 
-  const toRecipients = resolveRecipients(dataSources, followup.emailRecipients, placeholders, ctx.record);
-  if (!toRecipients.length) {
-    return { success: false, message: 'Resolved email recipients are empty.' };
-  }
-  const ccRecipients = resolveRecipients(dataSources, followup.emailCc, placeholders, ctx.record);
-  const bccRecipients = resolveRecipients(dataSources, followup.emailBcc, placeholders, ctx.record);
   const templateId = resolveTemplateId(followup.emailTemplateId, ctx.record);
   if (!templateId) {
     return { success: false, message: 'No email template matched the record values/language.' };

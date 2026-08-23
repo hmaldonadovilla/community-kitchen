@@ -2,6 +2,7 @@ import { ValidationRule } from '../../types';
 import { resolveLocalizedString } from '../i18n';
 import { FieldValue, LangCode, LocalizedString, ThenConfig, ValidationError, VisibilityContext } from '../types';
 import { firstWhenFieldId, matchesWhenClause } from './visibility';
+import { parseEmailAddressList } from '../../domain/emailAddresses';
 
 const validationDebugEnabled = (): boolean => Boolean((globalThis as any)?.__WEB_FORM_DEBUG__);
 
@@ -39,6 +40,12 @@ const defaultRuleMessages = {
     en: 'Enter a valid whole number without leading zeros.',
     fr: 'Enter a valid whole number without leading zeros.',
     nl: 'Enter a valid whole number without leading zeros.'
+  },
+  email: {
+    en: 'Enter a valid email address.'
+  },
+  emailList: {
+    en: 'Enter valid email addresses. Separate multiple addresses with commas.'
   }
 };
 
@@ -222,6 +229,18 @@ export function checkRule(
 
   if (thenCfg?.integer === true && numVals.length && numVals.some(v => !Number.isInteger(v))) {
     return customMessage || resolveLocalizedString(defaultRuleMessages.integer, language, 'Please enter a whole number.');
+  }
+
+  const format = thenCfg?.format;
+  if (format === 'email' || format === 'emailList') {
+    const invalid = stringVals.some(value => !parseEmailAddressList(value, { allowMultiple: format === 'emailList' }).valid);
+    if (invalid) {
+      const fallback = format === 'email'
+        ? 'Enter a valid email address.'
+        : 'Enter valid email addresses. Separate multiple addresses with commas.';
+      const defaultMessage = format === 'email' ? defaultRuleMessages.email : defaultRuleMessages.emailList;
+      return customMessage || resolveLocalizedString(defaultMessage, language, fallback);
+    }
   }
 
   if (thenCfg?.allowed?.length && !values.every(v => thenCfg.allowed?.includes(v as string))) {

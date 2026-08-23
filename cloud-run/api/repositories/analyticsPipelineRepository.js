@@ -4,6 +4,7 @@ const { createGoogleDriveClient } = require('../googleDriveClient');
 const { createGoogleGmailClient } = require('../googleGmailClient');
 const { columnName, createGoogleSheetsClient, escapeSheetName } = require('../googleSheetsClient');
 const { buildRecordVisibilityContext, matchesWhenClause } = require('./updateRecordDependencies');
+const { parseEmailAddressList } = require('../domain/emailAddresses');
 
 const XLSX_MIME_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const QUEUE_SHEET_NAME = '__CK_ANALYTICS_PIPELINE_QUEUE';
@@ -1258,10 +1259,23 @@ class AnalyticsPipelineRepository {
   }
 
   resolveRecipients(value, placeholders) {
-    return normalizeStringList(value)
-      .flatMap(entry => replaceTemplateTokens(entry, placeholders).split(','))
-      .map(toText)
-      .filter(Boolean);
+    const recipients = normalizeStringList(value).flatMap(entry => {
+      const parsed = parseEmailAddressList(replaceTemplateTokens(entry, placeholders), { allowMultiple: true });
+      if (!parsed.valid) {
+        throw new Error(
+          'Email could not be sent because the report recipient configuration contains an invalid email address. ' +
+          'Update the email configuration and retry. Separate multiple addresses with commas.'
+        );
+      }
+      return parsed.addresses;
+    });
+    const seen = new Set();
+    return recipients.filter(address => {
+      const key = address.toLowerCase();
+      if (!address || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }
 
   async sendPipelineEmail(args) {

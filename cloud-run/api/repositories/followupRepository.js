@@ -10,6 +10,7 @@ const {
   isFollowupBatchSuccess
 } = require('../domain/followupActionPlan');
 const { findItemValue } = require('./dataSourceUtils');
+const { parseEmailAddressList } = require('../domain/emailAddresses');
 
 const PDF_MIME_TYPE = 'application/pdf';
 const EMAIL_OUTBOX_SHEET_NAME = '__CK_FOLLOWUP_EMAIL_OUTBOX';
@@ -34,6 +35,28 @@ const cloneJson = value => {
 };
 
 const toText = value => (value === undefined || value === null ? '' : value.toString().trim());
+
+const invalidRecipientMessage = (entry, lookupValue) => {
+  const sourceLabel = toText((entry && entry.sourceLabel) || (entry && entry.dataSource && entry.dataSource.id));
+  const lookupLabel = toText(lookupValue);
+  if (sourceLabel) {
+    const recordContext = lookupLabel ? ` for "${lookupLabel}"` : '';
+    return (
+      `Email could not be sent because ${sourceLabel} contains an invalid recipient email${recordContext}. ` +
+      'Update the email there and retry. Separate multiple addresses with commas.'
+    );
+  }
+  return (
+    'Email could not be sent because the recipient configuration contains an invalid email address. ' +
+    'Update the email configuration and retry. Separate multiple addresses with commas.'
+  );
+};
+
+const parseResolvedRecipients = (value, entry, lookupValue) => {
+  const parsed = parseEmailAddressList(value, { allowMultiple: true });
+  if (!parsed.valid) throw new Error(invalidRecipientMessage(entry, lookupValue));
+  return parsed.addresses;
+};
 
 const isMissingSheetError = err => /Unable to parse range|Google Sheets tab not found|not found|does not exist/i.test(toText(err && err.message));
 
@@ -456,16 +479,22 @@ class FollowupRepository {
     for (const entry of entries) {
       if (typeof entry === 'string') {
         const expanded = this.applyPlaceholders(entry, placeholders).trim();
-        if (expanded) resolved.push(expanded);
+        if (expanded) resolved.push(...parseResolvedRecipients(expanded));
         continue;
       }
       if (entry && entry.type === 'dataSource') {
         const lookupValue = record && record.values ? record.values[entry.recordFieldId] : '';
         const address = await this.lookupRecipientFromDataSource(entry, lookupValue, record && record.language);
-        if (address) resolved.push(address);
+        if (address) resolved.push(...parseResolvedRecipients(address, entry, lookupValue));
       }
     }
-    return resolved.filter(Boolean);
+    const seen = new Set();
+    return resolved.filter(address => {
+      const key = address.toLowerCase();
+      if (!address || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }
 
   resolveTemplateId(templateIdMap, record) {
@@ -623,6 +652,19 @@ class FollowupRepository {
       formKey: context.formKey
     }, { attachRelatedRecords: true });
     const placeholders = this.buildEmailPlaceholders(renderContext);
+
+    let toRecipients;
+    let ccRecipients;
+    let bccRecipients;
+    try {
+      toRecipients = await this.resolveEmailRecipients(followup.emailRecipients, placeholders, renderContext.record);
+      ccRecipients = await this.resolveEmailRecipients(followup.emailCc, placeholders, renderContext.record);
+      bccRecipients = await this.resolveEmailRecipients(followup.emailBcc, placeholders, renderContext.record);
+    } catch (err) {
+      return { success: false, message: err && err.message ? err.message : 'Invalid email recipient.' };
+    }
+    if (!toRecipients.length) return { success: false, message: 'Resolved email recipients are empty.' };
+
     const template = await this.readEmailTemplateBody(followup, renderContext.record);
     if (!template.success) return { success: false, message: template.message || 'Failed to read follow-up email template.' };
 
@@ -631,10 +673,6 @@ class FollowupRepository {
       return { success: false, message: pdfArtifact.message || 'Failed to generate PDF.' };
     }
 
-    const toRecipients = await this.resolveEmailRecipients(followup.emailRecipients, placeholders, renderContext.record);
-    if (!toRecipients.length) return { success: false, message: 'Resolved email recipients are empty.' };
-    const ccRecipients = await this.resolveEmailRecipients(followup.emailCc, placeholders, renderContext.record);
-    const bccRecipients = await this.resolveEmailRecipients(followup.emailBcc, placeholders, renderContext.record);
     const body = this.applyPlaceholders(template.body || '', placeholders);
     const htmlBody = body.replace(/\r\n/g, '\n').replace(/\r/g, '\n').replace(/\n/g, '<br/>');
     const subject =
