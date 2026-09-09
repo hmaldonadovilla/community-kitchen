@@ -4009,7 +4009,8 @@
       "qEn": "Customer",
       "required": true,
       "ui": {
-        "labelLayout": "inline"
+        "labelLayout": "inline",
+        "control": "select"
       },
       "listView": false,
       "options": [],
@@ -4479,6 +4480,12 @@
                 ],
                 "Le Phare": [
                   "Vegetarian"
+                ],
+                "Café": [
+                  "Standard",
+                  "Vegetarian",
+                  "Vegan",
+                  "Diabetic"
                 ]
               }
             }
@@ -5185,7 +5192,7 @@
           "Label EN": "Dietary category",
           "Required?": true,
           "Options (EN)": "REF:PortionTypeOptions",
-          "Config (JSON/REF)": "{\n  \"pair\": \"meal_qty\",\n  \"control\": \"select\",\n  \"optionFilter\": {\n    \"dependsOn\": [\n      \"MP_DISTRIBUTOR\",\n      \"MP_SERVICE\",\n      \"MP_PREP_DATE\"\n    ],\n    \"optionMap\": {\n      \"HUB\": [\n        \"Vegetarian\"\n      ],\n      \"Belliard||Lunch||Sunday\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"Standard\"\n      ],\n      \"Belliard||Lunch\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\"\n      ],\n      \"Belliard||Dinner\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"Standard\"\n      ],\n      \"Le Phare\": [\n        \"Vegetarian\"\n      ]\n    }\n  },\n  \"ui\": {\n    \"hideLabel\": true\n  }\n}",
+          "Config (JSON/REF)": "{\n  \"pair\": \"meal_qty\",\n  \"control\": \"select\",\n  \"optionFilter\": {\n    \"dependsOn\": [\n      \"MP_DISTRIBUTOR\",\n      \"MP_SERVICE\",\n      \"MP_PREP_DATE\"\n    ],\n    \"optionMap\": {\n      \"HUB\": [\n        \"Vegetarian\"\n      ],\n      \"Belliard||Lunch||Sunday\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"Standard\"\n      ],\n      \"Belliard||Lunch\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\"\n      ],\n      \"Belliard||Dinner\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"Standard\"\n      ],\n      \"Le Phare\": [\n        \"Vegetarian\"\n      ],\n      \"Café\": [\n        \"Standard\",\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\"\n      ]\n    }\n  },\n  \"ui\": {\n    \"hideLabel\": true\n  }\n}",
           "Option Filter (JSON)": "",
           "Validation Rules (JSON)": "",
           "List View?": "",
@@ -5387,6 +5394,12 @@
                 ],
                 "Le Phare": [
                   "Vegetarian"
+                ],
+                "Café": [
+                  "Standard",
+                  "Vegetarian",
+                  "Vegan",
+                  "Diabetic"
                 ]
               }
             }
@@ -7302,6 +7315,33 @@
       }
     },
     {
+      "id": "CAFE_BTN",
+      "type": "BUTTON",
+      "qEn": "Café",
+      "required": false,
+      "group": {
+        "id": "issues"
+      },
+      "listView": false,
+      "options": [],
+      "status": "Active",
+      "visibility": {
+        "showWhen": {
+          "fieldId": "status",
+          "equals": "Closed"
+        }
+      },
+      "button": {
+        "action": "createRecordPreset",
+        "presetValues": {
+          "MP_DISTRIBUTOR": "Café"
+        },
+        "placements": [
+          "topBarList"
+        ]
+      }
+    },
+    {
       "id": "MP_PROCEDURE",
       "type": "BUTTON",
       "qEn": "Meal Production Procedure",
@@ -7615,7 +7655,8 @@
         "qEn": "Customer",
         "required": true,
         "ui": {
-          "labelLayout": "inline"
+          "labelLayout": "inline",
+          "control": "select"
         },
         "listView": false,
         "options": [],
@@ -8085,6 +8126,12 @@
                   ],
                   "Le Phare": [
                     "Vegetarian"
+                  ],
+                  "Café": [
+                    "Standard",
+                    "Vegetarian",
+                    "Vegan",
+                    "Diabetic"
                   ]
                 }
               }
@@ -8934,7 +8981,7 @@
             "Label EN": "Dietary category",
             "Required?": true,
             "Options (EN)": "REF:PortionTypeOptions",
-            "Config (JSON/REF)": "{\n  \"pair\": \"meal_qty\",\n  \"control\": \"select\",\n  \"optionFilter\": {\n    \"dependsOn\": [\n      \"MP_DISTRIBUTOR\",\n      \"MP_SERVICE\",\n      \"MP_PREP_DATE\"\n    ],\n    \"optionMap\": {\n      \"HUB\": [\n        \"Vegetarian\"\n      ],\n      \"Belliard||Lunch||Sunday\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"Standard\"\n      ],\n      \"Belliard||Lunch\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\"\n      ],\n      \"Belliard||Dinner\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"Standard\"\n      ],\n      \"Le Phare\": [\n        \"Vegetarian\"\n      ]\n    }\n  },\n  \"ui\": {\n    \"hideLabel\": true\n  }\n}",
+            "Config (JSON/REF)": "{\n  \"pair\": \"meal_qty\",\n  \"control\": \"select\",\n  \"optionFilter\": {\n    \"dependsOn\": [\n      \"MP_DISTRIBUTOR\",\n      \"MP_SERVICE\",\n      \"MP_PREP_DATE\"\n    ],\n    \"optionMap\": {\n      \"HUB\": [\n        \"Vegetarian\"\n      ],\n      \"Belliard||Lunch||Sunday\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"Standard\"\n      ],\n      \"Belliard||Lunch\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\"\n      ],\n      \"Belliard||Dinner\": [\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\",\n        \"Standard\"\n      ],\n      \"Le Phare\": [\n        \"Vegetarian\"\n      ],\n      \"Café\": [\n        \"Standard\",\n        \"Vegetarian\",\n        \"Vegan\",\n        \"Diabetic\"\n      ]\n    }\n  },\n  \"ui\": {\n    \"hideLabel\": true\n  }\n}",
             "Option Filter (JSON)": "",
             "Validation Rules (JSON)": "",
             "List View?": "",
@@ -9110,6 +9157,12 @@
                   ],
                   "Le Phare": [
                     "Vegetarian"
+                  ],
+                  "Café": [
+                    "Standard",
+                    "Vegetarian",
+                    "Vegan",
+                    "Diabetic"
                   ]
                 }
               }
@@ -10985,6 +11038,33 @@
           "action": "createRecordPreset",
           "presetValues": {
             "MP_DISTRIBUTOR": "Le Phare"
+          },
+          "placements": [
+            "topBarList"
+          ]
+        }
+      },
+      {
+        "id": "CAFE_BTN",
+        "type": "BUTTON",
+        "qEn": "Café",
+        "required": false,
+        "group": {
+          "id": "issues"
+        },
+        "listView": false,
+        "options": [],
+        "status": "Active",
+        "visibility": {
+          "showWhen": {
+            "fieldId": "status",
+            "equals": "Closed"
+          }
+        },
+        "button": {
+          "action": "createRecordPreset",
+          "presetValues": {
+            "MP_DISTRIBUTOR": "Café"
           },
           "placements": [
             "topBarList"
