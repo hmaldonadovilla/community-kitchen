@@ -3250,6 +3250,15 @@ Markdown preview buttons with `"cacheScope": "template"` are pre-rendered into t
 }
 ```
 
+#### Meal Production customer onboarding
+
+1. Create an active record in Customer Management in the target environment. Meal Production reads active customers from `Distributor Data`; its stored selection is the exact `NICKNAME` value.
+2. Add a `BUTTON` question to that environment's `config_meal_production.json`, following the existing customer shortcuts. Use `button.action: "createRecordPreset"`, `button.presetValues.MP_DISTRIBUTOR` set to the customer's exact nickname, and `button.placements: ["topBarList"]`. Update both `questions` and `definition.questions` in the export. Creating a customer alone does not add this shortcut.
+3. Add the nickname to the customer-dependent dietary-category `optionMap` entries for ordered meals and leftover capture, including any raw configuration representations. An unmatched customer has no available meal categories. Choose the categories for that customer explicitly.
+4. To keep Customer as a dropdown regardless of customer count, set `ui.control: "select"` on `MP_DISTRIBUTOR` in both question representations. Leave its data source and change guards intact.
+5. Deploy to staging through `DEPLOY_ENV=staging CK_CONFIG_ENV=staging npm run deploy:firebase-web-app`. Refresh the app and verify that the shortcut preselects the customer, the dropdown contains all active customers, and an order can advance to the leftover workflow. If the page's initial definition remains stale while `fetchFormConfig` returns the updated configuration, run the target environment's existing `invalidateWebAppCache` operation and refresh again.
+6. Promote only after the user confirms successful staging testing and requests production deployment. Check for an existing production customer before creating one.
+
 #### Notes
 
 - **Preview mode**:
