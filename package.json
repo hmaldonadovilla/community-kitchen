@@ -42,7 +42,6 @@
     "node": ">=22.19"
   },
   "overrides": {
-    "brace-expansion": "$brace-expansion",
     "yauzl": "^3.2.1"
   },
   "devDependencies": {
@@ -56,7 +55,6 @@
     "@types/react-dom": "^18.3.0",
     "@typescript-eslint/eslint-plugin": "^8.58.0",
     "@typescript-eslint/parser": "^8.58.0",
-    "brace-expansion": "file:vendor/brace-expansion",
     "chrome-launcher": "^1.2.1",
     "esbuild": "^0.28.0",
     "eslint": "^9.39.4",
