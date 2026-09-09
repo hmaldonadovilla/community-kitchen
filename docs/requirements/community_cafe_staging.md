@@ -1,4 +1,4 @@
-# Community Café staging onboarding
+# Community Café onboarding
 
 ## Design and scope
 
@@ -17,7 +17,9 @@ The existing dietary-category filters also require a customer entry: unmatched c
 
 ## Promotion gate
 
-Production configuration and deployment remain unchanged until the user confirms successful staging testing and explicitly requests promotion. The production customer already exists and must not be duplicated during promotion.
+The user confirmed successful end-to-end staging testing and explicitly requested production deployment: a Hub production generated leftovers, the Café draft consumed those leftovers, and the Café production was completed with a correct report. This satisfies the promotion gate. The production customer already exists and must not be duplicated during promotion.
+
+Promote only the tested Café shortcut, Customer dropdown, and dietary-category mappings into the production configuration. Preserve all environment-specific settings. Run production validation gates, deploy through the existing Firebase/Apps Script workflow, refresh the production form cache, and perform a smoke check without submitting an order or generating a report.
 
 ## Deployment and validation
 
@@ -28,6 +30,16 @@ Production configuration and deployment remain unchanged until the user confirms
 - Staging's initial page definition retained the previous dietary filters after deployment even though `fetchFormConfig` returned the updated filters. Called the existing staging `invalidateWebAppCache` operation and verified the refreshed initial definition contains the Café categories.
 - Playwright verified all four shortcuts, Café preselection, a native Customer dropdown containing all four customers, switching before date entry, and cancellation of the guarded customer change after saving. Cancelling preserved Café and the order quantities.
 - Saved and reopened test order `MP-AA001785` (record `e5f88fe1-9ced-4bac-a667-13ccc2c64b67`), Café / Dinner / 2026-09-09, with 10 Standard portions and zero in other categories. The order advanced to Leftover bank. No available leftovers existed, so allocation was not exercised. No report or email was generated.
+
+## Production promotion — September 9, 2026
+
+- After the initial staging checks, the user completed the end-to-end workflow: created a Hub production with leftovers, allocated those leftovers to the Café draft, completed the production, and verified its report. The user explicitly authorized production deployment.
+- Promoted the tested shortcut, Customer dropdown, and both dietary-category mappings into the production export, preserving unrelated environment configuration. Extended the configuration regression checks to cover both environments and both question representations.
+- Production lint and TypeScript checks passed. The full test suite passed: 346 suites and 2,007 tests. Deployment lint, build, bundle-size, and all 11 browser compatibility checks passed. The deployment reused the completed test run with `SKIP_TESTS=1`.
+- Deployed through `DEPLOY_ENV=prod CK_CONFIG_ENV=prod npm run deploy:firebase-web-app`: Firebase assets at `https://community-kitchen-prod-assets.web.app` were released first, followed by version **46** of the existing Apps Script web app. The deployment ID and URL were retained.
+- Invalidated the production web app and template caches with the existing `invalidateWebAppCache` operation, then refreshed the page. Verified the live environment is `prod`, the asset origin is the production Firebase site, and the initial page definition contains the new control, shortcut, and all four Café categories for meal orders and leftover capture.
+- Playwright verified the four homepage customer shortcuts, Café preselection, a native Customer dropdown containing Belliard, Café, HUB, and Le Phare, and switching from Café to HUB and back. Kept date and service empty; no production order was submitted and no report or email was generated.
+- Screenshots: `output/playwright/community-cafe/production-home-final.png` and `output/playwright/community-cafe/production-order-dropdown-final.png`.
 
 ## Separate date-list issue observed during validation
 
