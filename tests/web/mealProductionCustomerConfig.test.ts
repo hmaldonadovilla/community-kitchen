@@ -14,16 +14,19 @@ interface ConfigQuestion {
   lineItemConfig?: { fields: DietaryField[] };
 }
 
-const config = JSON.parse(
-  fs.readFileSync(path.resolve(__dirname, '../../docs/config/exports/staging/config_meal_production.json'), 'utf8')
-) as { questions: ConfigQuestion[]; definition: { questions: ConfigQuestion[] } };
+const configurations = ['staging', 'prod'].flatMap(environment => {
+  const config = JSON.parse(
+    fs.readFileSync(path.resolve(__dirname, `../../docs/config/exports/${environment}/config_meal_production.json`), 'utf8')
+  ) as { questions: ConfigQuestion[]; definition: { questions: ConfigQuestion[] } };
+  return [
+    [`${environment} export`, config.questions],
+    [`${environment} definition`, config.definition.questions]
+  ] as const;
+});
 
 const categories = ['Standard', 'Vegetarian', 'Vegan', 'Diabetic'];
 
-describe.each([
-  ['export', config.questions],
-  ['definition', config.definition.questions]
-] as const)('Meal Production customer dietary rules (%s)', (_label, questions) => {
+describe.each(configurations)('Meal Production customer dietary rules (%s)', (_label, questions) => {
   const fields = questions
     .flatMap(question => question.lineItemConfig?.fields || [])
     .filter(field => field.id === 'MEAL_TYPE' || field.id === 'LEFTOVER_MEAL_TYPE');
