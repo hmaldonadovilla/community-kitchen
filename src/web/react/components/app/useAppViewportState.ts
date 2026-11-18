@@ -14,11 +14,32 @@ export const resolveMobileViewportState = (args: {
   height: number;
   userAgent?: string;
   orientationLandscape?: boolean;
+  screenOrientationType?: string;
+  legacyOrientationAngle?: number;
+  screenWidth?: number;
+  screenHeight?: number;
 }): Omit<AppViewportState, 'blockLandscape'> => {
   const widthBased = args.width <= 900;
   const shortBased = args.height <= 520;
-  const landscapeBased = args.orientationLandscape ?? args.width > args.height;
   const uaBased = /Mobi|Android|iPhone|iPad|iPod/i.test(args.userAgent || '');
+  let deviceLandscape: boolean | undefined;
+  // A keyboard (or the Apps Script iframe) can make a portrait phone's viewport
+  // landscape. Use screen signals on mobile; desktop windows still follow their viewport.
+  if (uaBased) {
+    if (args.screenOrientationType === 'portrait-primary' || args.screenOrientationType === 'portrait-secondary') {
+      deviceLandscape = false;
+    } else if (args.screenOrientationType === 'landscape-primary' || args.screenOrientationType === 'landscape-secondary') {
+      deviceLandscape = true;
+    } else if (args.legacyOrientationAngle === 0 || args.legacyOrientationAngle === 180) {
+      // Older iOS versions expose window.orientation instead of screen.orientation.
+      deviceLandscape = false;
+    } else if (args.legacyOrientationAngle === 90 || args.legacyOrientationAngle === -90) {
+      deviceLandscape = true;
+    } else if ((args.screenWidth || 0) > 0 && (args.screenHeight || 0) > 0) {
+      deviceLandscape = args.screenWidth! > args.screenHeight!;
+    }
+  }
+  const landscapeBased = deviceLandscape ?? args.orientationLandscape ?? args.width > args.height;
   const isMobile = widthBased || uaBased;
   return {
     isMobile,
@@ -42,6 +63,7 @@ export const useAppViewportState = (args: {
   const bottomBarHeightRef = useRef<number>(-1);
 
   useEffect(() => {
+    const screenOrientation = typeof window !== 'undefined' ? window.screen?.orientation : undefined;
     const updateMobile = () => {
       if (typeof window === 'undefined') return;
       const orientationLandscape =
@@ -52,7 +74,11 @@ export const useAppViewportState = (args: {
         width: window.innerWidth,
         height: window.innerHeight,
         userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : '',
-        orientationLandscape
+        orientationLandscape,
+        screenOrientationType: window.screen?.orientation?.type,
+        legacyOrientationAngle: window.orientation,
+        screenWidth: window.screen?.width,
+        screenHeight: window.screen?.height
       });
       setViewportState(prev =>
         prev.isMobile === nextState.isMobile &&
@@ -66,9 +92,11 @@ export const useAppViewportState = (args: {
     if (typeof window !== 'undefined') {
       window.addEventListener('resize', updateMobile);
       window.addEventListener('orientationchange', updateMobile);
+      screenOrientation?.addEventListener?.('change', updateMobile);
       return () => {
         window.removeEventListener('resize', updateMobile);
         window.removeEventListener('orientationchange', updateMobile);
+        screenOrientation?.removeEventListener?.('change', updateMobile);
       };
     }
     return undefined;
